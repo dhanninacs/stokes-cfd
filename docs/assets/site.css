@@ -218,6 +218,7 @@ pre { background: var(--code); border-radius: 14px; padding: 18px 20px; overflow
 .prose p, .prose li { color: var(--ink-2); }
 .prose li { margin: .3em 0; }
 .prose a { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.prose .crumbs a { text-decoration: none; }
 .prose img { border-radius: 14px; margin: 32px 0; }
 .prose table { width: 100%; border-collapse: collapse; margin: 1.4em 0 1.8em; font-size: 15px; }
 .prose th, .prose td { text-align: left; padding: 12px 12px 12px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
