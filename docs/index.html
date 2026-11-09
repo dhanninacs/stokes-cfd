@@ -10,8 +10,8 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
     <p class="sub">A desktop GUI for OpenFOAM&nbsp;14 on Windows and Linux. Import a STEP file, pick faces
     for the boundaries, mesh it, run it and look at the flow, all in one window.</p>
     <div class="cta">
-      <a class="pill" href="#install" data-goatcounter-click="hero-install" data-goatcounter-title="Install (hero)">Install</a>
-      <a class="pill outline" href="https://github.com/dhanninacs/stokes-cfd" data-goatcounter-click="hero-github" data-goatcounter-title="Source on GitHub (hero)">Source on GitHub</a>
+      <a class="pill" href="#install" data-track="hero_install" data-track-label="Install (hero)">Install</a>
+      <a class="pill outline" href="https://github.com/dhanninacs/stokes-cfd" data-track="hero_github" data-track-label="Source on GitHub (hero)">Source on GitHub</a>
     </div>
     <p class="terms">Free for noncommercial use. Pre-alpha, and runs from source for now.</p>
   </div>
@@ -19,7 +19,7 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
     <video controls playsinline preload="metadata" width="1280" height="720" poster="{{ '/images/video-poster.jpg' | relative_url }}">
       <source src="{{ '/video/elbow-walkthrough.mp4' | relative_url }}" type="video/mp4">
       <source src="{{ '/video/elbow-walkthrough.webm' | relative_url }}" type="video/webm">
-      Your browser can’t play this video. <a href="{{ '/video/elbow-walkthrough.mp4' | relative_url }}" data-goatcounter-click="video-download" data-goatcounter-title="Download the video">Download it</a>.
+      Your browser can’t play this video. <a href="{{ '/video/elbow-walkthrough.mp4' | relative_url }}" data-track="video_download" data-track-label="Download the video">Download it</a>.
     </video>
     <figcaption>A mixing elbow set up and solved in the app, in a minute and a half. No sound; meshing and solving are sped&nbsp;up.</figcaption>
   </figure>
@@ -109,7 +109,7 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
     <h2 class="headline" id="specs-title">Tech specs.</h2>
     <dl class="specs">
       <div><dt>OpenFOAM</dt><dd>Foundation 14, from openfoam.org. The openfoam.com line is not supported yet.</dd></div>
-      <div><dt>Windows 10 and 11</dt><dd><span class="yes">Yes</span>, natively, with no WSL. OpenFOAM comes from <a href="https://github.com/dhanninacs/foamWin" data-goatcounter-click="out-foamwin-specs" data-goatcounter-title="FoamWin (specs)">FoamWin</a>. The most tested platform.</dd></div>
+      <div><dt>Windows 10 and 11</dt><dd><span class="yes">Yes</span>, natively, with no WSL. OpenFOAM comes from <a href="https://github.com/dhanninacs/foamWin" data-track="out_foamwin_specs" data-track-label="FoamWin (specs)">FoamWin</a>. The most tested platform.</dd></div>
       <div><dt>Linux</dt><dd><span class="yes">Yes</span>, with the official OpenFOAM&nbsp;14 packages. Less tested than Windows so far.</dd></div>
       <div><dt>macOS</dt><dd><span class="no">Not supported.</span></dd></div>
       <div><dt>Geometry</dt><dd>STEP import through Open CASCADE. IGES and BREP from the command line.</dd></div>
@@ -130,8 +130,8 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
     <p class="intro">You need Python 3.13 or 3.14, Node.js 22.12 or newer, Git, and OpenFOAM&nbsp;14.
     The full guides cover every step and the usual snags.</p>
     <div class="seg" role="tablist" aria-label="Platform" data-seg hidden>
-      <button type="button" role="tab" id="tab-win" aria-controls="pane-win" aria-selected="true" data-goatcounter-click="install-tab-windows" data-goatcounter-title="Install tab: Windows">Windows</button>
-      <button type="button" role="tab" id="tab-linux" aria-controls="pane-linux" aria-selected="false" tabindex="-1" data-goatcounter-click="install-tab-linux" data-goatcounter-title="Install tab: Linux">Linux</button>
+      <button type="button" role="tab" id="tab-win" aria-controls="pane-win" aria-selected="true" data-track="install_tab_windows" data-track-label="Install tab: Windows">Windows</button>
+      <button type="button" role="tab" id="tab-linux" aria-controls="pane-linux" aria-selected="false" tabindex="-1" data-track="install_tab_linux" data-track-label="Install tab: Linux">Linux</button>
     </div>
     <div class="panels">
       <div class="panel" id="pane-win" role="tabpanel" aria-labelledby="tab-win">
@@ -143,7 +143,7 @@ py -3.14 -m venv .venv
 .venv\Scripts\pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
 cd web; npm install; npm run build; cd ..
 .venv\Scripts\python -m stokes.app</code></pre>
-        <p class="more"><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-WINDOWS.md" data-goatcounter-click="out-guide-windows" data-goatcounter-title="Full Windows guide">Read the full Windows guide</a></p>
+        <p class="more"><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-WINDOWS.md" data-track="out_guide_windows" data-track-label="Full Windows guide">Read the full Windows guide</a></p>
       </div>
       <div class="panel" id="pane-linux" role="tabpanel" aria-labelledby="tab-linux">
         <h3>Linux</h3>
@@ -154,7 +154,7 @@ python3.13 -m venv .venv
 .venv/bin/pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
 cd web &amp;&amp; npm install &amp;&amp; npm run build &amp;&amp; cd ..
 source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</code></pre>
-        <p class="more"><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-LINUX.md" data-goatcounter-click="out-guide-linux" data-goatcounter-title="Full Linux guide">Read the full Linux guide</a></p>
+        <p class="more"><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-LINUX.md" data-track="out_guide_linux" data-track-label="Full Linux guide">Read the full Linux guide</a></p>
       </div>
     </div>
   </div>
@@ -167,7 +167,7 @@ source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</cod
       <li><a href="{{ '/guides/openfoam-14-on-windows-without-wsl.html' | relative_url }}"><strong>Run OpenFOAM 14 on Windows without WSL</strong><span>Install FoamWin, point Stokes at it, and run in parallel with MS-MPI.</span></a></li>
       <li><a href="{{ '/guides/mesh-a-step-file.html' | relative_url }}"><strong>Mesh a STEP file with snappyHexMesh or cfMesh</strong><span>Import, tag the boundaries, choose a mesher and a cell size, check the quality.</span></a></li>
       <li><a href="{{ '/guides/residual-targets-and-convergence.html' | relative_url }}"><strong>Residual targets and convergence</strong><span>What converged and not converged mean, and how to read the residual chart.</span></a></li>
-      <li><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/USAGE.md" data-goatcounter-click="out-usage" data-goatcounter-title="Mixing elbow tour (USAGE.md)"><strong>The mixing elbow, step by step</strong><span>The full tour: viewport, results tools, themes, command line and server.</span></a></li>
+      <li><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/USAGE.md" data-track="out_usage" data-track-label="Mixing elbow tour (USAGE.md)"><strong>The mixing elbow, step by step</strong><span>The full tour: viewport, results tools, themes, command line and server.</span></a></li>
     </ul>
   </div>
 </section>
@@ -195,6 +195,6 @@ source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</cod
     <h2 class="headline" id="contact-band-title">Need a hand with CFD?</h2>
     <p class="intro">Questions about Stokes, a commercial licence, or OpenFOAM consultancy for a
     project of your own.</p>
-    <div class="cta"><button class="pill" type="button" data-contact data-goatcounter-click="contact-open-cta" data-goatcounter-title="Get in touch (home)">Get in touch</button></div>
+    <div class="cta"><button class="pill" type="button" data-contact data-track="contact_open_cta" data-track-label="Get in touch (home)">Get in touch</button></div>
   </div>
 </section>

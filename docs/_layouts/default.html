@@ -18,6 +18,7 @@
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="icon" type="image/png" href="{{ '/assets/favicon.png' | relative_url }}">
 <link rel="stylesheet" href="{{ '/assets/site.css' | relative_url }}">
+{% if site.ga4 and site.ga4 != "" %}<meta name="stokes-ga4" content="{{ site.ga4 }}">{% endif %}
 </head>
 <body class="{% if page.url == '/' %}home{% else %}doc{% endif %}">
 <a class="skip" href="#main">Skip to content</a>
@@ -30,17 +31,17 @@
     <nav class="nav" aria-label="Site">
       <a href="{{ '/#guides' | relative_url }}">Guides</a>
       <a href="{{ '/#install' | relative_url }}">Install</a>
-      <a href="https://github.com/dhanninacs/stokes-cfd" data-goatcounter-click="out-github-nav" data-goatcounter-title="GitHub (header)">GitHub</a>
-      <button class="link-btn" type="button" data-contact data-goatcounter-click="contact-open-nav" data-goatcounter-title="Contact (header)">Contact</button>
+      <a href="https://github.com/dhanninacs/stokes-cfd" data-track="out_github_nav" data-track-label="GitHub (header)">GitHub</a>
+      <button class="link-btn" type="button" data-contact data-track="contact_open_nav" data-track-label="Contact (header)">Contact</button>
     </nav>
     <div class="theme" role="radiogroup" aria-label="Colour theme">
-      <button type="button" role="radio" data-theme-set="auto" data-goatcounter-click="theme-auto" data-goatcounter-title="Theme: auto" title="Match the system" aria-label="Auto">
+      <button type="button" role="radio" data-theme-set="auto" data-track="theme_auto" data-track-label="Theme: auto" title="Match the system" aria-label="Auto">
         <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5.5 14h5M8 11.5V14"/></svg>
       </button>
-      <button type="button" role="radio" data-theme-set="light" data-goatcounter-click="theme-light" data-goatcounter-title="Theme: light" title="Light" aria-label="Light">
+      <button type="button" role="radio" data-theme-set="light" data-track="theme_light" data-track-label="Theme: light" title="Light" aria-label="Light">
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9 13 13M3 13l1.1-1.1M11.9 4.1 13 3"/></svg>
       </button>
-      <button type="button" role="radio" data-theme-set="dark" data-goatcounter-click="theme-dark" data-goatcounter-title="Theme: dark" title="Dark" aria-label="Dark">
+      <button type="button" role="radio" data-theme-set="dark" data-track="theme_dark" data-track-label="Theme: dark" title="Dark" aria-label="Dark">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.8A5.6 5.6 0 0 1 6.2 2.5a5.6 5.6 0 1 0 7.3 7.3Z"/></svg>
       </button>
     </div>
@@ -67,14 +68,15 @@
     <p>Stokes is free for noncommercial use under the
     <a href="https://github.com/dhanninacs/stokes-cfd/blob/main/LICENSE">PolyForm Noncommercial licence</a>.
     For commercial use, get in touch.</p>
-    {% if site.goatcounter and site.goatcounter != "" %}<p>Visits are counted with <a href="https://www.goatcounter.com">GoatCounter</a>: no cookies and no personal data.</p>{% endif %}
+    {% if site.ga4 and site.ga4 != "" %}<p>With your permission, this site uses Google Analytics cookies to count visits and clicks. Nothing is used for advertising.</p>{% endif %}
     <ul class="foot-links">
-      <li><a href="https://github.com/dhanninacs/stokes-cfd" data-goatcounter-click="out-github-footer" data-goatcounter-title="GitHub (footer)">Source</a></li>
-      <li><a href="https://github.com/dhanninacs/stokes-cfd/releases" data-goatcounter-click="out-releases" data-goatcounter-title="Releases">Releases</a></li>
-      <li><a href="https://github.com/dhanninacs/foamWin" data-goatcounter-click="out-foamwin-footer" data-goatcounter-title="FoamWin (footer)">FoamWin</a></li>
+      <li><a href="https://github.com/dhanninacs/stokes-cfd" data-track="out_github_footer" data-track-label="GitHub (footer)">Source</a></li>
+      <li><a href="https://github.com/dhanninacs/stokes-cfd/releases" data-track="out_releases" data-track-label="Releases">Releases</a></li>
+      <li><a href="https://github.com/dhanninacs/foamWin" data-track="out_foamwin_footer" data-track-label="FoamWin (footer)">FoamWin</a></li>
       <li><a href="{{ '/llms.txt' | relative_url }}">llms.txt</a></li>
-      <li><button class="link-btn" type="button" data-contact data-goatcounter-click="contact-open-footer" data-goatcounter-title="Contact (footer)">Contact</button></li>
-      <li><a href="https://buymeacoffee.com/csdhan" data-goatcounter-click="out-coffee" data-goatcounter-title="Buy me a coffee">Buy me a coffee</a></li>
+      <li><button class="link-btn" type="button" data-contact data-track="contact_open_footer" data-track-label="Contact (footer)">Contact</button></li>
+      {% if site.ga4 and site.ga4 != "" %}<li><button class="link-btn" type="button" data-consent-open>Cookie settings</button></li>{% endif %}
+      <li><a href="https://buymeacoffee.com/csdhan" data-track="out_coffee" data-track-label="Buy me a coffee">Buy me a coffee</a></li>
     </ul>
   </div>
 </footer>
@@ -84,15 +86,25 @@
     <h2 id="contact-title">Get in touch.</h2>
     <p>Questions about Stokes, a commercial licence, or help with CFD and OpenFOAM on your own project.</p>
     <div class="mailrow">
-      <a class="mail" data-mail href="#" data-goatcounter-click="email-reveal" data-goatcounter-title="Show email address">Show email address</a>
-      <button type="button" class="pill small quiet" data-copy data-goatcounter-click="email-copy" data-goatcounter-title="Copy email address" hidden>Copy</button>
+      <a class="mail" data-mail href="#" data-track="email_reveal" data-track-label="Show email address">Show email address</a>
+      <button type="button" class="pill small quiet" data-copy data-track="email_copy" data-track-label="Copy email address" hidden>Copy</button>
     </div>
     <p class="hint" data-copied hidden aria-live="polite">Copied to the clipboard.</p>
     <div class="actions"><button class="pill small quiet" value="close">Close</button></div>
   </form>
 </dialog>
 
+{% if site.ga4 and site.ga4 != "" %}
+<section class="consent" data-consent aria-labelledby="consent-title" hidden>
+  <h2 id="consent-title">Can we count your visit?</h2>
+  <p>Google Analytics would set cookies to measure which pages and buttons people use, so the site can get better.
+  Nothing is used for advertising, and you can change your mind under Cookie settings at the bottom of any page.</p>
+  <div class="consent-actions">
+    <button type="button" class="pill small" data-consent-choice="granted">Allow</button>
+    <button type="button" class="pill small outline" data-consent-choice="denied">Decline</button>
+  </div>
+</section>
+{% endif %}
 <script src="{{ '/assets/site.js' | relative_url }}" defer></script>
-{% if site.goatcounter and site.goatcounter != "" %}<script data-goatcounter="https://{{ site.goatcounter }}.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>{% endif %}
 </body>
 </html>

@@ -249,6 +249,16 @@ dialog.contact p { color: var(--muted); margin: 0 0 22px; }
 .hint { font-size: 13px !important; color: var(--accent) !important; margin: 10px 0 0 !important; }
 .actions { display: flex; justify-content: flex-end; margin-top: 22px; }
 
+/* Analytics consent: a small card at the foot of the window, both choices equal. */
+.consent { position: fixed; z-index: 40; left: 16px; right: 16px; bottom: 16px; max-width: 460px; margin: 0 auto;
+  padding: 22px 24px 20px; border-radius: 22px; background: var(--page); color: var(--ink);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hair) 60%, transparent), 0 16px 48px rgba(0, 0, 0, .18); }
+.consent[hidden] { display: none; }
+.consent h2 { font-size: 19px; letter-spacing: -.01em; margin: 0 0 6px; }
+.consent p { font-size: 14px; line-height: 1.45; color: var(--muted); margin: 0 0 16px; }
+.consent-actions { display: flex; gap: 10px; }
+.consent-actions .pill { flex: 1; }
+
 /* Grid children may shrink below their content (long code lines scroll inside the panel). */
 .tiles > *, .specs > div > *, .guides > *, .panels > * { min-width: 0; }
 
