@@ -22,6 +22,59 @@
     });
   });
 
+  // Step gallery: previous and next buttons, disabled at either end. Without script it still scrolls.
+  var gallery = document.querySelector("[data-gallery]");
+  var gnav = document.querySelector("[data-gallery-nav]");
+  if (gallery && gnav) {
+    var prev = gnav.querySelector('[data-dir="-1"]');
+    var next = gnav.querySelector('[data-dir="1"]');
+    var step = function () {
+      var s = gallery.querySelector(".slide");
+      return s ? s.getBoundingClientRect().width + 20 : gallery.clientWidth * 0.8;
+    };
+    var sync = function () {
+      var max = gallery.scrollWidth - gallery.clientWidth - 2;
+      prev.disabled = gallery.scrollLeft <= 2;
+      next.disabled = gallery.scrollLeft >= max;
+    };
+    [prev, next].forEach(function (b) {
+      b.addEventListener("click", function () {
+        gallery.scrollBy({ left: Number(b.getAttribute("data-dir")) * step(), behavior: "smooth" });
+      });
+    });
+    gallery.addEventListener("scroll", function () { window.requestAnimationFrame(sync); }, { passive: true });
+    window.addEventListener("resize", sync);
+    gnav.hidden = false;
+    sync();
+  }
+
+  // Install: a segmented control picks the platform. Without script both snippets show.
+  var seg = document.querySelector("[data-seg]");
+  if (seg) {
+    var tabs = Array.prototype.slice.call(seg.querySelectorAll('[role="tab"]'));
+    var select = function (tab, focus) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+      });
+      if (focus) tab.focus();
+    };
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { select(t, false); });
+      t.addEventListener("keydown", function (e) {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        e.preventDefault();
+        select(tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length], true);
+      });
+    });
+    // Open on the visitor's own platform when it is obvious.
+    var linux = /Linux|X11/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+    seg.hidden = false;
+    select(tabs[linux ? 1 : 0], false);
+  }
+
   // The address is assembled only when someone asks for it, so it never sits in the page source.
   var parts = ["dhanninacs", "gmail.com"];
   var dialog = document.getElementById("contact");

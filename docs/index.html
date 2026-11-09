@@ -3,169 +3,198 @@ layout: default
 title: Stokes, an OpenFOAM GUI for Windows and Linux
 description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Import STEP, click faces to set boundaries, mesh with snappyHexMesh or cfMesh, run and view results. Native on Windows without WSL, and on Linux.
 ---
-<div class="wrap">
-
 <section class="hero">
-  <p class="eyebrow">OpenFOAM 14 &nbsp;·&nbsp; Windows and Linux &nbsp;·&nbsp; pre-alpha</p>
-  <h1>An OpenFOAM GUI that goes from <em>CAD to results</em> in one window.</h1>
-  <p class="lede">Stokes imports a STEP file, lets you click faces to set inlets, outlets and walls,
-  meshes with snappyHexMesh or cfMesh, runs the solver and shows the flow. You never have to open a
-  dictionary to get a case running, and every step can also be scripted.</p>
-  <div class="cta">
-    <a class="btn primary" href="#install">Install</a>
-    <a class="btn ghost" href="https://github.com/dhanninacs/stokes-cfd">Source on GitHub</a>
-    <button class="btn ghost" type="button" data-contact>Contact</button>
-  </div>
-
-  <figure class="film">
-    <div class="film-frame">
-      <video controls playsinline preload="metadata" poster="{{ '/images/video-poster.jpg' | relative_url }}">
-        <source src="{{ '/video/elbow-walkthrough.mp4' | relative_url }}" type="video/mp4">
-        <source src="{{ '/video/elbow-walkthrough.webm' | relative_url }}" type="video/webm">
-        Your browser can't play this video. <a href="{{ '/video/elbow-walkthrough.mp4' | relative_url }}">Download it</a>.
-      </video>
+  <div class="wrap">
+    <p class="product" translate="no">Stokes</p>
+    <h1>OpenFOAM, from CAD to&nbsp;results.</h1>
+    <p class="sub">A desktop GUI for OpenFOAM&nbsp;14 on Windows and Linux. Import a STEP file, pick faces
+    for the boundaries, mesh it, run it and look at the flow, all in one window.</p>
+    <div class="cta">
+      <a class="pill" href="#install">Install</a>
+      <a class="pill outline" href="https://github.com/dhanninacs/stokes-cfd">Source on GitHub</a>
     </div>
-    <figcaption>
-      <span>A mixing elbow, from an empty project to streamlines. Recorded in the app.</span>
-      <span>1:29 · no sound · meshing and solving sped up</span>
-    </figcaption>
+    <p class="terms">Free for noncommercial use. Pre-alpha, and runs from source for now.</p>
+  </div>
+  <figure class="film">
+    <video controls playsinline preload="metadata" width="1280" height="720" poster="{{ '/images/video-poster.jpg' | relative_url }}">
+      <source src="{{ '/video/elbow-walkthrough.mp4' | relative_url }}" type="video/mp4">
+      <source src="{{ '/video/elbow-walkthrough.webm' | relative_url }}" type="video/webm">
+      Your browser can’t play this video. <a href="{{ '/video/elbow-walkthrough.mp4' | relative_url }}">Download it</a>.
+    </video>
+    <figcaption>A mixing elbow set up and solved in the app, in a minute and a half. No sound; meshing and solving are sped&nbsp;up.</figcaption>
   </figure>
 </section>
 
-<section>
-  <p class="eyebrow">One case, five steps</p>
-  <h2>What setting up a run looks like</h2>
-  <p class="lede">Two inlets of water at different temperatures meet in a bend. Half the elbow is
-  modelled, with a symmetry plane. These are screenshots of that case.</p>
-  <ol class="steps">
-    <li>
-      <img src="{{ '/images/thumb-geometry.jpg' | relative_url }}" alt="The elbow STEP file imported into Stokes" loading="lazy">
-      <h3>Import</h3>
-      <p>Open a STEP file and mark the body as fluid.</p>
-    </li>
-    <li>
-      <img src="{{ '/images/thumb-boundaries.jpg' | relative_url }}" alt="Assigning inlets and an outlet by picking faces" loading="lazy">
-      <h3>Boundaries</h3>
-      <p>Pick a face, call it an inlet, type <code>0.4 [m/s]</code>.</p>
-    </li>
-    <li>
-      <img src="{{ '/images/thumb-mesh-fine.jpg' | relative_url }}" alt="snappyHexMesh mesh of the elbow with boundary layers" loading="lazy">
-      <h3>Mesh</h3>
-      <p>Pick a mesher and a cell size. 81,749 cells here, quality checked.</p>
-    </li>
-    <li>
-      <img src="{{ '/images/thumb-residuals.jpg' | relative_url }}" alt="Residual history of the solver run" loading="lazy">
-      <h3>Run</h3>
-      <p>Residuals stream in. A run that misses its target says so.</p>
-    </li>
-    <li>
-      <img src="{{ '/images/thumb-temperature.jpg' | relative_url }}" alt="Temperature on a slice through the elbow" loading="lazy">
-      <h3>Results</h3>
-      <p>Slices, streamlines, iso-surfaces, probes and plots.</p>
-    </li>
-  </ol>
+<section class="band alt" aria-labelledby="steps-title">
+  <div class="wrap">
+    <h2 class="headline" id="steps-title">One case, start to finish.</h2>
+    <p class="intro">Two streams of water at different temperatures meet in a bend. Half the elbow is
+    modelled, with a symmetry plane. Every picture here is that case.</p>
+  </div>
+  <div class="gallery" data-gallery tabindex="0" role="region" aria-label="Setting up the elbow, step by step">
+    <ol class="track">
+      <li class="slide">
+        <p><strong>Import.</strong> Open a STEP file and mark the body as fluid.</p>
+        <img src="{{ '/images/thumb-geometry.jpg' | relative_url }}" width="960" height="600" alt="The elbow STEP file imported into Stokes" loading="lazy">
+      </li>
+      <li class="slide">
+        <p><strong>Boundaries.</strong> Pick a face, call it an inlet, type <code>0.4 [m/s]</code>.</p>
+        <img src="{{ '/images/thumb-boundaries.jpg' | relative_url }}" width="960" height="600" alt="Assigning the two inlets and the outlet by picking faces" loading="lazy">
+      </li>
+      <li class="slide">
+        <p><strong>Mesh.</strong> Choose a mesher and a cell size. Quality is checked when it finishes.</p>
+        <img src="{{ '/images/thumb-mesh-fine.jpg' | relative_url }}" width="960" height="600" alt="snappyHexMesh mesh of the elbow" loading="lazy">
+      </li>
+      <li class="slide">
+        <p><strong>Run.</strong> Residuals stream in as it solves. A run that misses its target says&nbsp;so.</p>
+        <img src="{{ '/images/thumb-residuals.jpg' | relative_url }}" width="960" height="600" alt="Residual history of the solver run" loading="lazy">
+      </li>
+      <li class="slide">
+        <p><strong>Results.</strong> Slices, streamlines, iso-surfaces, probes and plots.</p>
+        <img src="{{ '/images/thumb-temperature.jpg' | relative_url }}" width="960" height="600" alt="Temperature on a slice through the elbow" loading="lazy">
+      </li>
+    </ol>
+  </div>
+  <div class="wrap gallery-nav" data-gallery-nav hidden>
+    <button type="button" data-dir="-1" aria-label="Previous step"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
+    <button type="button" data-dir="1" aria-label="Next step"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+  </div>
 </section>
 
-<section>
-  <div class="split">
-    <div>
-      <p class="eyebrow">What it does</p>
-      <h2>A workbench, not a wrapper</h2>
-      <p class="lede">The OpenFOAM case is generated from the model you build, so changing an inlet speed
-      or a mesh size is an edit, not a hunt through dictionaries.</p>
+<section class="band" aria-labelledby="model-title">
+  <div class="wrap">
+    <h2 class="headline" id="model-title">Change a value.<br>The case follows.</h2>
+    <p class="intro">Stokes writes the OpenFOAM case from the model you build. <strong>Raise an inlet
+    speed or shrink a cell size and the dictionaries are written again</strong>, so there is nothing to
+    hunt for in <code>system/</code> and nothing to keep in sync by hand.</p>
+    <div class="tiles">
+      <article class="tile dark wide">
+        <div class="copy">
+          <h3>Boundary layers on every wall.</h3>
+          <p>One switch adds three layers of thin cells along the walls, where the velocity changes fastest.
+          This is the elbow’s symmetry plane, coloured by speed. The inset is where the side inlet meets
+          the bend.</p>
+        </div>
+        <img class="figure" src="{{ '/images/feat-layers.jpg' | relative_url }}" width="1600" height="880" alt="Mesh on the symmetry plane coloured by velocity, with a close-up of the three boundary-layer cells along the wall at the side-inlet junction" loading="lazy">
+      </article>
+      <article class="tile dark">
+        <div class="copy">
+          <h3>Meshes you can check.</h3>
+          <p>snappyHexMesh, cfMesh or blockMesh. This one has 81,749 cells and passed its quality
+          check.</p>
+        </div>
+        <img src="{{ '/images/feat-mesh.jpg' | relative_url }}" width="1200" height="995" alt="The elbow meshed with snappyHexMesh, cell edges drawn" loading="lazy">
+      </article>
+      <article class="tile dark">
+        <div class="copy">
+          <h3>Results in the same window.</h3>
+          <p>Streamlines seeded from the inlets, coloured by speed. Slices, iso-surfaces, probes and
+          line plots sit next to them.</p>
+        </div>
+        <img src="{{ '/images/feat-streamlines.jpg' | relative_url }}" width="1200" height="995" alt="Streamlines through the elbow coloured by velocity" loading="lazy">
+      </article>
+      <article class="tile wide">
+        <div class="copy">
+          <h3>Six looks.</h3>
+          <p>Three styles, each in light and dark. The video above uses Cupertino light.</p>
+        </div>
+        <img src="{{ '/images/feat-themes.jpg' | relative_url }}" width="1440" height="1215" alt="The same result in the Stokes, Cupertino and Ubuntu styles, light and dark" loading="lazy">
+      </article>
     </div>
-    <dl class="facts">
+  </div>
+</section>
+
+<section class="band alt" aria-labelledby="specs-title">
+  <div class="wrap">
+    <h2 class="headline" id="specs-title">Tech specs.</h2>
+    <dl class="specs">
+      <div><dt>OpenFOAM</dt><dd>Foundation 14, from openfoam.org. The openfoam.com line is not supported yet.</dd></div>
+      <div><dt>Windows 10 and 11</dt><dd><span class="yes">Yes</span>, natively, with no WSL. OpenFOAM comes from <a href="https://github.com/dhanninacs/foamWin">FoamWin</a>. The most tested platform.</dd></div>
+      <div><dt>Linux</dt><dd><span class="yes">Yes</span>, with the official OpenFOAM&nbsp;14 packages. Less tested than Windows so far.</dd></div>
+      <div><dt>macOS</dt><dd><span class="no">Not supported.</span></dd></div>
       <div><dt>Geometry</dt><dd>STEP import through Open CASCADE. IGES and BREP from the command line.</dd></div>
-      <div><dt>Meshing</dt><dd>snappyHexMesh, blockMesh, cfMesh hex-dominant, tetrahedral and polyhedral, poly-hexcore. 2D planar and axisymmetric.</dd></div>
+      <div><dt>Meshing</dt><dd>snappyHexMesh, blockMesh, and cfMesh hex-dominant, tetrahedral, polyhedral and poly-hexcore. 2D planar and axisymmetric.</dd></div>
       <div><dt>Physics</dt><dd>Laminar, k-ε and k-ω SST, with the energy equation. Parallel runs over MPI.</dd></div>
-      <div><dt>Results</dt><dd>Slices, clips, iso-surfaces, streamlines, vectors, probes, line plots, reports, picture export.</dd></div>
+      <div><dt>Results</dt><dd>Slices, clips, iso-surfaces, streamlines, vectors, probes, line plots, reports and picture export.</dd></div>
       <div><dt>Units</dt><dd>Every value carries a unit. Type <code>2 [m/s]</code> or <code>U_in * 1.5</code>.</dd></div>
       <div><dt>Automation</dt><dd>The window, the <code>stokes</code> command and a local server share one API, so scripts and LLM agents can drive a case.</dd></div>
+      <div><dt>Installer</dt><dd><span class="no">Not yet.</span> Stokes runs from source with Python 3.13 or 3.14.</dd></div>
+      <div><dt>Licence</dt><dd>Free for noncommercial use under PolyForm Noncommercial. Source-available, not open source. Commercial licences on request.</dd></div>
     </dl>
   </div>
 </section>
 
-<section>
-  <p class="eyebrow">Supported today</p>
-  <h2>What works, and what doesn't yet</h2>
-  <table>
-    <tr><th>OpenFOAM</th><td>Foundation 14 (openfoam.org). The openfoam.com line is not supported yet.</td></tr>
-    <tr><th>Windows 10 / 11</th><td><span class="status-yes">Yes</span>, natively, with no WSL. OpenFOAM comes from <a href="https://github.com/dhanninacs/foamWin">FoamWin</a>. The most tested platform.</td></tr>
-    <tr><th>Linux</th><td><span class="status-yes">Yes</span>, with the official OpenFOAM 14 packages. Less tested than Windows so far.</td></tr>
-    <tr><th>macOS</th><td><span class="status-no">No.</span></td></tr>
-    <tr><th>Installer</th><td><span class="status-no">Not yet.</span> Stokes runs from source with Python 3.13 or 3.14.</td></tr>
-    <tr><th>Licence</th><td>Free for noncommercial use (PolyForm Noncommercial). Source-available, not open source. Commercial licences on request.</td></tr>
-  </table>
-</section>
-
-<section id="guides">
-  <p class="eyebrow">Guides</p>
-  <h2>Task by task</h2>
-  <ul class="rows">
-    <li><a href="{{ '/guides/openfoam-14-on-windows-without-wsl.html' | relative_url }}"><strong>Run OpenFOAM 14 on Windows without WSL</strong><span>Install FoamWin, point Stokes at it, run in parallel with MS-MPI.</span></a></li>
-    <li><a href="{{ '/guides/mesh-a-step-file.html' | relative_url }}"><strong>Mesh a STEP file with snappyHexMesh or cfMesh</strong><span>Import, tag boundaries, choose a mesher and a cell size, check the quality.</span></a></li>
-    <li><a href="{{ '/guides/residual-targets-and-convergence.html' | relative_url }}"><strong>Residual targets and convergence</strong><span>What converged and not converged mean, and how to read the residual chart.</span></a></li>
-    <li><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/USAGE.md"><strong>The mixing elbow, step by step</strong><span>The full tour: viewport, results tools, themes, command line and server.</span></a></li>
-  </ul>
-</section>
-
-<section id="install">
-  <p class="eyebrow">Install</p>
-  <h2>Run it from source</h2>
-  <p class="lede">You need Python 3.13 or 3.14, Node.js 22.12 or newer, Git, and OpenFOAM 14.
-  The guides list every step and the usual snags.</p>
-  <div class="cols">
-    <div class="card">
-      <h3>Windows</h3>
-      <p>OpenFOAM through FoamWin v14.0.0-win.5 or newer. MS-MPI for more than one core.</p>
+<section class="band" id="install" aria-labelledby="install-title">
+  <div class="wrap center">
+    <h2 class="headline" id="install-title">Run it from source.</h2>
+    <p class="intro">You need Python 3.13 or 3.14, Node.js 22.12 or newer, Git, and OpenFOAM&nbsp;14.
+    The full guides cover every step and the usual snags.</p>
+    <div class="seg" role="tablist" aria-label="Platform" data-seg hidden>
+      <button type="button" role="tab" id="tab-win" aria-controls="pane-win" aria-selected="true">Windows</button>
+      <button type="button" role="tab" id="tab-linux" aria-controls="pane-linux" aria-selected="false" tabindex="-1">Linux</button>
+    </div>
+    <div class="panels">
+      <div class="panel" id="pane-win" role="tabpanel" aria-labelledby="tab-win">
+        <h3>Windows</h3>
+        <p>OpenFOAM through FoamWin v14.0.0-win.5 or newer. MS-MPI if you want more than one core.</p>
 <pre><code>git clone -b windows https://github.com/dhanninacs/stokes-cfd.git
 cd stokes-cfd
 py -3.14 -m venv .venv
 .venv\Scripts\pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
 cd web; npm install; npm run build; cd ..
 .venv\Scripts\python -m stokes.app</code></pre>
-      <p><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-WINDOWS.md">Full Windows guide</a></p>
-    </div>
-    <div class="card">
-      <h3>Linux</h3>
-      <p>The official <code>openfoam14</code> package on Ubuntu 22.04 or newer, plus cfMesh if you want it.</p>
+        <p class="more"><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-WINDOWS.md">Read the full Windows guide</a></p>
+      </div>
+      <div class="panel" id="pane-linux" role="tabpanel" aria-labelledby="tab-linux">
+        <h3>Linux</h3>
+        <p>The official <code>openfoam14</code> package on Ubuntu 22.04 or newer, plus cfMesh if you want it.</p>
 <pre><code>git clone -b linux https://github.com/dhanninacs/stokes-cfd.git
 cd stokes-cfd
 python3.13 -m venv .venv
 .venv/bin/pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
 cd web &amp;&amp; npm install &amp;&amp; npm run build &amp;&amp; cd ..
 source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</code></pre>
-      <p><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-LINUX.md">Full Linux guide</a></p>
+        <p class="more"><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-LINUX.md">Read the full Linux guide</a></p>
+      </div>
     </div>
   </div>
 </section>
 
-<section>
-  <p class="eyebrow">Questions</p>
-  <h2>Common questions</h2>
-  <div style="margin-top:24px">
-    <details><summary>Does it need WSL on Windows?</summary>
-      <p>No. It drives FoamWin, a native Windows build of OpenFOAM 14, directly. There is no WSL, virtual machine or Docker layer.</p></details>
-    <details><summary>Does it replace OpenFOAM?</summary>
-      <p>No. You install OpenFOAM separately. Stokes writes the case, runs your OpenFOAM tools as separate processes and reads the results back. It never bundles or links OpenFOAM.</p></details>
-    <details><summary>Can I use my own OpenFOAM cases?</summary>
-      <p>You can import an existing case or one of the OpenFOAM tutorials, edit its files as text inside the app, and run it.</p></details>
-    <details><summary>Can I run it on a remote machine?</summary>
-      <p>Yes. Start <code>python -m stokes.server</code> there and open it through an SSH tunnel. The server only listens on 127.0.0.1 and needs a one-time token.</p></details>
-    <details><summary>Is it free?</summary>
-      <p>For noncommercial use, yes, under the PolyForm Noncommercial licence. For commercial use, get in touch.</p></details>
+<section class="band alt" id="guides" aria-labelledby="guides-title">
+  <div class="wrap">
+    <h2 class="headline" id="guides-title">Guides.</h2>
+    <ul class="guides">
+      <li><a href="{{ '/guides/openfoam-14-on-windows-without-wsl.html' | relative_url }}"><strong>Run OpenFOAM 14 on Windows without WSL</strong><span>Install FoamWin, point Stokes at it, and run in parallel with MS-MPI.</span></a></li>
+      <li><a href="{{ '/guides/mesh-a-step-file.html' | relative_url }}"><strong>Mesh a STEP file with snappyHexMesh or cfMesh</strong><span>Import, tag the boundaries, choose a mesher and a cell size, check the quality.</span></a></li>
+      <li><a href="{{ '/guides/residual-targets-and-convergence.html' | relative_url }}"><strong>Residual targets and convergence</strong><span>What converged and not converged mean, and how to read the residual chart.</span></a></li>
+      <li><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/USAGE.md"><strong>The mixing elbow, step by step</strong><span>The full tour: viewport, results tools, themes, command line and server.</span></a></li>
+    </ul>
   </div>
 </section>
 
-<section>
-  <div class="contact-band">
-    <div>
-      <p class="eyebrow">Contact</p>
-      <h2>Want to know more, or need help with CFD?</h2>
-      <p>Questions about Stokes, a commercial licence, or OpenFOAM and CFD consultancy for your project.</p>
+<section class="band" aria-labelledby="faq-title">
+  <div class="wrap">
+    <h2 class="headline" id="faq-title">Questions.</h2>
+    <div class="faq">
+      <details><summary>Does it need WSL on Windows?</summary>
+        <p>No. It drives FoamWin, a native Windows build of OpenFOAM&nbsp;14, directly. There is no WSL, virtual machine or Docker layer.</p></details>
+      <details><summary>Does it replace OpenFOAM?</summary>
+        <p>No. You install OpenFOAM separately. Stokes writes the case, runs your OpenFOAM tools as separate processes and reads the results back. It never bundles or links OpenFOAM.</p></details>
+      <details><summary>Can I use my own OpenFOAM cases?</summary>
+        <p>Yes. Import an existing case or one of the OpenFOAM tutorials, edit its files as text inside the app, and run it.</p></details>
+      <details><summary>Can I run it on a remote machine?</summary>
+        <p>Yes. Start <code>python -m stokes.server</code> there and open it through an SSH tunnel. The server only listens on 127.0.0.1 and asks for a one-time token.</p></details>
+      <details><summary>Is it free?</summary>
+        <p>For noncommercial use, yes, under the PolyForm Noncommercial licence. For commercial use, get in touch.</p></details>
     </div>
-    <button class="btn primary" type="button" data-contact>Get in touch</button>
   </div>
 </section>
 
-</div>
+<section class="band alt center" aria-labelledby="contact-band-title">
+  <div class="wrap">
+    <h2 class="headline" id="contact-band-title">Need a hand with CFD?</h2>
+    <p class="intro">Questions about Stokes, a commercial licence, or OpenFOAM consultancy for a
+    project of your own.</p>
+    <div class="cta"><button class="pill" type="button" data-contact>Get in touch</button></div>
+  </div>
+</section>

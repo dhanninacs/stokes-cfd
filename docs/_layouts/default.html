@@ -14,17 +14,17 @@
 </script>
 {% seo %}
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="icon" type="image/png" href="{{ '/assets/favicon.png' | relative_url }}">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ '/assets/site.css' | relative_url }}">
 </head>
 <body class="{% if page.url == '/' %}home{% else %}doc{% endif %}">
+<a class="skip" href="#main">Skip to content</a>
 <header class="bar">
   <div class="bar-in">
-    <a class="brand" href="{{ '/' | relative_url }}">
-      <img src="{{ '/assets/logo.png' | relative_url }}" alt="" width="26" height="26">
+    <a class="brand" href="{{ '/' | relative_url }}" translate="no">
+      <img src="{{ '/assets/logo.png' | relative_url }}" alt="" width="24" height="24">
       <span>Stokes</span>
     </a>
     <nav class="nav" aria-label="Site">
@@ -34,7 +34,7 @@
       <button class="link-btn" type="button" data-contact>Contact</button>
     </nav>
     <div class="theme" role="radiogroup" aria-label="Colour theme">
-      <button type="button" role="radio" data-theme-set="auto" title="Follow the system" aria-label="Auto">
+      <button type="button" role="radio" data-theme-set="auto" title="Match the system" aria-label="Auto">
         <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5.5 14h5M8 11.5V14"/></svg>
       </button>
       <button type="button" role="radio" data-theme-set="light" title="Light" aria-label="Light">
@@ -47,12 +47,12 @@
   </div>
 </header>
 
-<main>
+<main id="main">
 {% if page.url == '/' %}
 {{ content }}
 {% else %}
 <article class="prose">
-  <p class="crumbs"><a href="{{ '/' | relative_url }}">Stokes</a>{% if page.url contains '/guides/' %} <span>/</span> <a href="{{ '/#guides' | relative_url }}">Guides</a>{% endif %}</p>
+  <p class="crumbs"><a href="{{ '/' | relative_url }}">Stokes</a>{% if page.url contains '/guides/' %}<span aria-hidden="true">›</span><a href="{{ '/#guides' | relative_url }}">Guides</a>{% endif %}</p>
   {% if page.url contains '/guides/' %}<h1>{{ page.title }}</h1>{% endif %}
   {{ content }}
 </article>
@@ -61,16 +61,16 @@
 
 <footer class="foot">
   <div class="foot-in">
-    <div>
-      <p><strong>Stokes</strong> · an OpenFOAM GUI for Windows and Linux.
-      Free for noncommercial use under the <a href="https://github.com/dhanninacs/stokes-cfd/blob/main/LICENSE">PolyForm Noncommercial licence</a>.</p>
-      <p class="tm">OPENFOAM® is a registered trade mark of OpenCFD Limited, producer and distributor of the
-      OpenFOAM software via www.openfoam.com. Stokes is not approved or endorsed by OpenCFD Limited or the
-      OpenFOAM Foundation.</p>
-    </div>
+    <p>OPENFOAM® is a registered trade mark of OpenCFD Limited, producer and distributor of the OpenFOAM
+    software via www.openfoam.com. Stokes is not approved or endorsed by OpenCFD Limited or the OpenFOAM
+    Foundation.</p>
+    <p>Stokes is free for noncommercial use under the
+    <a href="https://github.com/dhanninacs/stokes-cfd/blob/main/LICENSE">PolyForm Noncommercial licence</a>.
+    For commercial use, get in touch.</p>
     <ul class="foot-links">
       <li><a href="https://github.com/dhanninacs/stokes-cfd">Source</a></li>
       <li><a href="https://github.com/dhanninacs/stokes-cfd/releases">Releases</a></li>
+      <li><a href="https://github.com/dhanninacs/foamWin">FoamWin</a></li>
       <li><a href="{{ '/llms.txt' | relative_url }}">llms.txt</a></li>
       <li><button class="link-btn" type="button" data-contact>Contact</button></li>
       <li><a href="https://buymeacoffee.com/csdhan">Buy me a coffee</a></li>
@@ -80,14 +80,14 @@
 
 <dialog class="contact" id="contact" aria-labelledby="contact-title">
   <form method="dialog">
-    <h2 id="contact-title">Get in touch</h2>
-    <p>For questions about Stokes, commercial licensing, or CFD and OpenFOAM consultancy.</p>
+    <h2 id="contact-title">Get in touch.</h2>
+    <p>Questions about Stokes, a commercial licence, or help with CFD and OpenFOAM on your own project.</p>
     <div class="mailrow">
-      <a class="mail" data-mail href="#">Show the address</a>
-      <button type="button" class="btn small ghost" data-copy hidden>Copy</button>
+      <a class="mail" data-mail href="#">Show email address</a>
+      <button type="button" class="pill small quiet" data-copy hidden>Copy</button>
     </div>
-    <p class="hint" data-copied hidden>Copied.</p>
-    <div class="actions"><button class="btn small ghost" value="close">Close</button></div>
+    <p class="hint" data-copied hidden aria-live="polite">Copied to the clipboard.</p>
+    <div class="actions"><button class="pill small quiet" value="close">Close</button></div>
   </form>
 </dialog>
 
