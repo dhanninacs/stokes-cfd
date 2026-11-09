@@ -3,6 +3,8 @@ description: An OpenFOAM GUI for Windows and Linux. Import STEP, mesh with snapp
 url: https://dhanninacs.github.io
 baseurl: /stokes-cfd
 lang: en
+# GoatCounter site code (the part before .goatcounter.com). Empty turns counting off.
+goatcounter: ""
 plugins:
   - jekyll-sitemap
   - jekyll-seo-tag

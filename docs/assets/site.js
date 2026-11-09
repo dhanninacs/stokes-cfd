@@ -75,6 +75,20 @@
     select(tabs[linux ? 1 : 0], false);
   }
 
+  // Video: count a play and a finish once per page view. GoatCounter loads asynchronously and may
+  // be missing (blocked or switched off), so every call checks for it first.
+  function track(path, title) {
+    if (window.goatcounter && typeof window.goatcounter.count === "function") {
+      window.goatcounter.count({ path: path, title: title, event: true });
+    }
+  }
+  var film = document.querySelector(".film video");
+  if (film) {
+    var played = false, ended = false;
+    film.addEventListener("play", function () { if (!played) { played = true; track("video-play", "Demo video: play"); } });
+    film.addEventListener("ended", function () { if (!ended) { ended = true; track("video-end", "Demo video: watched to the end"); } });
+  }
+
   // The address is assembled only when someone asks for it, so it never sits in the page source.
   var parts = ["dhanninacs", "gmail.com"];
   var dialog = document.getElementById("contact");
