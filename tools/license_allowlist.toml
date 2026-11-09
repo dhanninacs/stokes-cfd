@@ -1,0 +1,48 @@
+# Licence allow-list for tools/audit_licenses.py (CLAUDE.md §1 rule 2).
+# Patterns are case-insensitive substrings matched against the licence string
+# pip-licenses reports. Any package not matched by [allowed] needs an explicit
+# entry under [packages]; anything matching [denied] fails unless listed there.
+
+[allowed]
+patterns = [
+  "MIT",
+  "BSD",
+  "Apache",
+  "PSF",
+  "Python Software Foundation",
+  "ISC",
+  "MPL",
+  "Mozilla Public License",
+  "Zlib",
+  "Unlicense",
+  "CC0",
+  "HPND",
+  "Historical Permission",
+  "Boost",
+  "BSL-1.0",
+  "OFL",
+]
+denied = ["GPL", "AGPL", "SSPL", "Commercial", "Proprietary", "Non-Commercial", "NonCommercial"]
+
+# name = "reason" — explicit decisions. LGPL packages are allowed only here.
+[packages]
+PySide6 = "LGPL-3.0; dynamic linking; notices and source offer (docs/04 §4)"
+PySide6_Essentials = "LGPL-3.0; as PySide6"
+PySide6_Addons = "LGPL-3.0; as PySide6"
+# PySide6 6.12 splits into more wheels than 6.11 did. Their licence string is identical to
+# `PySide6_Essentials` above — "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only" — so these carry the
+# same obligations, not new ones. Added when the audit flagged them on the 6.12 upgrade; the LGPL
+# conditions (unmodified, dynamically linked, notices and source offer, docs/04 section 4) are
+# unchanged. PySide6_WebEngine also bundles Chromium: its notices are THIRD-PARTY-NOTICES.md 4.2.
+PySide6_Pdf = "LGPL-3.0; as PySide6"
+PySide6_WebEngine = "LGPL-3.0; as PySide6"
+shiboken6 = "LGPL-3.0; as PySide6"
+moocore = "LGPL-2.1-or-later; unmodified; CFFI extension (_libmoocore) loaded dynamically and replaceable, C sources ship in the wheel; required by pymoo >= 0.6.1.6 (0.6.1.5 does not need it), so only in the optional explore extra; notices and source offer as PySide6 (docs/04 section 4); verified 2026-10-02 from the package metadata (signed off 2026-10-03 under the conditions of docs/04 section 4; see the explore rows of docs/engineering/dependencies.md)"
+
+# Packages whose metadata reports UNKNOWN or an unparseable string; licence verified by hand.
+[verified]
+# example: some-package = "MIT; verified 2026-10-02 from the repository LICENSE file"
+
+# JavaScript packages whose package.json lacks a parseable licence; verified by hand.
+[verified_js]
+# example: some-package = "MIT; verified 2026-10-02 from the repository LICENSE"

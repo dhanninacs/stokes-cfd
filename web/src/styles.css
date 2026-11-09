@@ -1,0 +1,2925 @@
+@import "tailwindcss";
+
+/*
+ * Tokens live here and only here (DESIGN.md section 2). Components reference variables, never
+ * literals. Rules in this file are unlayered, so they win over Tailwind utilities for the same
+ * property: use the `!` modifier in markup when a utility must override a class below.
+ */
+
+/* Lucide glyphs have intrinsic dimensions. Keep them out of the text baseline
+   and flex shrinking in every host, including QtWebEngine at fractional DPI. */
+svg.lucide {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------ tokens */
+:root {
+  color-scheme: dark;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+
+  --bg: #0b0d10;
+  --bg-elev: #12161c;
+  --panel: rgba(18, 22, 28, 0.84);
+  --panel-solid: #161b22;
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel-border-strong: rgba(255, 255, 255, 0.14);
+  --track: rgba(255, 255, 255, 0.035);
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(255, 255, 255, 0.09);
+  --text: #e8ebf0;
+  --text-muted: #8a93a3;
+  --text-faint: #5c6675;
+
+  --accent: #19c0a8;
+  --accent-strong: #22d6bb;
+  --accent-soft: rgba(25, 192, 168, 0.16);
+  --accent-text: #052a25;
+  --accent-ink: #2fd9c0; /* the accent as text on a panel */
+  --accent-fill: #19c0a8; /* the accent as a solid fill that carries text */
+  --accent-glow: rgba(25, 192, 168, 0.28);
+  --blue: #4f8cff;
+  --warn: #f2b135;
+  --danger: #ff5c5c;
+  --ok: #3ddc84;
+  --blue-soft: rgba(79, 140, 255, 0.16);
+  --warn-soft: rgba(242, 177, 53, 0.16);
+  --danger-soft: rgba(255, 92, 92, 0.16);
+  --ok-soft: rgba(61, 220, 132, 0.18);
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 16px 44px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --highlight: rgba(255, 255, 255, 0.075); /* 1 px lit top edge on glass */
+  --menu-bg: rgba(24, 29, 37, 0.97);
+  --tooltip-bg: #262d39;
+  --tooltip-text: #eef1f6;
+  --tooltip-border: rgba(255, 255, 255, 0.12);
+  --tooltip-kbd-border: rgba(255, 255, 255, 0.22); /* key cap inside a tooltip */
+  --scrim: rgba(0, 0, 0, 0.5);
+  --scroll-thumb: rgba(255, 255, 255, 0.16);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.3);
+  --focus-halo: 0 0 0 5px var(--accent-soft); /* 3 px of soft accent outside a 2 px accent outline */
+  --logo-ink: #06221f;
+
+  --vp-top: #1a2029;
+  --vp-bottom: #07090c;
+  --radius: 12px;
+  --radius-sm: 8px;
+
+  /* effective panel widths, written by App on <main> */
+  --tree-width: 300px;
+  --props-width: 320px;
+  accent-color: var(--accent);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #eef1f5;
+  --bg-elev: #ffffff;
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-solid: #ffffff;
+  --panel-border: rgba(16, 24, 40, 0.1);
+  --panel-border-strong: rgba(16, 24, 40, 0.18);
+  --track: rgba(16, 24, 40, 0.04);
+  --hover: rgba(16, 24, 40, 0.05);
+  --active: rgba(16, 24, 40, 0.09);
+  --text: #141a22;
+  --text-muted: #5b6472;
+  --text-faint: #7b8594;
+
+  --accent: #0f9d8a;
+  --accent-strong: #0b8674;
+  --accent-soft: rgba(15, 157, 138, 0.14);
+  --accent-text: #ffffff;
+  --accent-ink: #0a7a6a;
+  --accent-fill: #0b8674;
+  --accent-glow: rgba(15, 157, 138, 0.32);
+  --blue: #2f6fe0;
+  --warn: #b7791f;
+  --danger: #d8433d;
+  --ok: #2a9d5c;
+  --blue-soft: rgba(47, 111, 224, 0.12);
+  --warn-soft: rgba(183, 121, 31, 0.14);
+  --danger-soft: rgba(216, 67, 61, 0.12);
+  --ok-soft: rgba(42, 157, 92, 0.14);
+
+  --shadow: 0 10px 30px rgba(16, 24, 40, 0.14), 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-pop: 0 16px 44px rgba(16, 24, 40, 0.22), 0 2px 8px rgba(16, 24, 40, 0.1);
+  --highlight: rgba(255, 255, 255, 0.95);
+  --menu-bg: rgba(255, 255, 255, 0.98);
+  --tooltip-bg: #1e252f;
+  --tooltip-text: #f1f4f8;
+  --tooltip-border: rgba(255, 255, 255, 0.1);
+  --scrim: rgba(16, 24, 40, 0.3);
+  --scroll-thumb: rgba(16, 24, 40, 0.22);
+  --scroll-thumb-hover: rgba(16, 24, 40, 0.38);
+  --logo-ink: #ffffff;
+
+  --vp-top: #f6f8fb;
+  --vp-bottom: #cfd7e1;
+}
+
+/* ------------------------------------------------------------------ base */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums; /* every number, in every panel, keeps its column */
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+/* Internal layout constant, not a theme token: the reserve the bottom-right island corner needs
+   (view group + gizmo). The right slot stops above it and the corner keeps clear of it, so one
+   value feeds both. Custom properties inherit, so setting it on body reaches them. */
+body {
+  --corner-br-reserve: 140px;
+}
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+}
+::selection {
+  background: var(--accent-soft);
+}
+::placeholder {
+  color: var(--text-faint);
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Scrollbars: Chromium (the Qt host) ignores ::-webkit-scrollbar once scrollbar-width or
+   scrollbar-color is set, so the two mechanisms are exclusive. */
+@supports selector(::-webkit-scrollbar) {
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 10px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+}
+
+/* Keyboard focus: one accent ring everywhere. Inputs draw their own (see .field:focus). */
+:where(button, a, [role="button"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="switch"], [role="separator"], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  box-shadow: var(--focus-halo);
+}
+:where(button, a, [role="button"], [tabindex]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ------------------------------------------------------------------ surfaces */
+.glass {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 var(--highlight);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+/* The studio backdrop under the (transparent) canvas: the theme's radial floor, a soft vignette that keeps the
+   eye on the model, and a fine static grain so large dark areas do not band. All three are CSS behind the
+   canvas, so the render and its exports are untouched and nothing redraws. */
+.viewport-bg {
+  --vp-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background:
+    var(--vp-grain),
+    radial-gradient(140% 110% at 50% 38%, transparent 55%, var(--vp-vignette, rgba(0, 0, 0, 0.28)) 100%),
+    radial-gradient(120% 90% at 50% 0%, var(--vp-top) 0%, var(--vp-bottom) 100%);
+}
+:root[data-theme="light"] .viewport-bg,
+:root[data-theme="cupertino"] .viewport-bg,
+:root[data-theme="ubuntu"] .viewport-bg {
+  --vp-vignette: rgba(16, 24, 40, 0.08);
+}
+.section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.muted {
+  color: var(--text-muted);
+}
+.faint {
+  color: var(--text-faint);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------------ controls */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  /* 8 px like every control (DESIGN.md 3b); only the primary action stays a pill. */
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--track);
+  color: var(--text);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 120ms ease;
+}
+.btn:hover {
+  background: var(--hover);
+  border-color: var(--panel-border-strong);
+}
+.btn:active {
+  transform: translateY(0.5px);
+}
+.btn[aria-disabled="true"],
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn.primary {
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-fill));
+  color: var(--accent-text);
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow:
+    0 4px 14px var(--accent-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.btn.primary:hover {
+  filter: brightness(1.06);
+}
+.btn.primary:focus-visible {
+  box-shadow:
+    var(--focus-halo),
+    0 6px 18px var(--accent-glow);
+}
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+}
+.btn.ghost:hover {
+  border-color: transparent;
+  background: var(--hover);
+}
+.btn.icon {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+.btn.active,
+.btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+.chip:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.chip.active {
+  background: var(--accent-fill);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.field {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--bg-elev);
+  color: var(--text);
+  outline: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.field:hover {
+  border-color: var(--panel-border-strong);
+}
+.field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.field.error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+.field.flash {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft);
+}
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--panel-border-strong);
+  background: var(--bg-elev);
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.pill-group {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+}
+.pill-group .btn {
+  height: 28px;
+  border-color: transparent;
+}
+.pill-group .btn.icon {
+  width: 28px;
+}
+.pill-group .divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--panel-border-strong);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.dot.ok {
+  background: var(--ok);
+}
+.dot.warning {
+  background: var(--warn);
+}
+.dot.stale {
+  background: var(--warn);
+}
+.dot.failed {
+  background: var(--danger);
+}
+.dot.new {
+  background: var(--text-faint);
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding-right: 10px;
+  border-radius: 7px;
+  cursor: default;
+  color: var(--text);
+  position: relative;
+}
+.tree-row:hover {
+  background: var(--hover);
+}
+.tree-row.selected {
+  background: var(--accent-soft);
+}
+.tree-row.selected::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.tree-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.tab {
+  height: 34px;
+  padding: 0 12px;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  white-space: nowrap; /* "Design table" wrapped onto two lines at 800 px */
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.fade-in {
+  animation: fade-in 160ms ease-out;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Marks controls that handle their own pointer. The Qt host moves the window from script (TopBar
+   skips anything inside a control), because -webkit-app-region only exists in Electron. */
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ------------------------------------------------------------------ top bar */
+.topbar {
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+  display: grid;
+  /* equal outer tracks keep the stage chips exactly centred; a long project name shrinks (and is
+     truncated) instead of pushing the bar wider */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  height: 48px;
+  background: var(--panel-solid);
+  border-bottom: 1px solid var(--panel-border);
+}
+/* The two outer cells take what the chips leave and clip what does not fit. TopBar's fit() measures
+   them and lists in data-compact on the bar what had to give way (the rules below); the project
+   name is the last thing to shrink. Stretched to the full bar height, so a focus ring on a control
+   is not cut off by the clip. Menus and tooltips are portalled to the body and never clipped. */
+.topbar-left,
+.topbar-right {
+  align-self: stretch;
+}
+/* **Each cluster has its own column, whatever the middle holds.** The start screen hides the stage chips with
+   `display: none`, which takes the middle item out of the grid, and the right cluster then slid into the middle
+   column: measured 2026-11-03, the search and theme buttons sat at the centre of the bar. */
+.topbar-left {
+  grid-column: 1;
+}
+.topbar-right {
+  grid-column: 3;
+}
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 16px; /* counted as overflow: the cluster keeps a gap before the chips */
+  overflow: hidden;
+}
+.topbar-left > * {
+  flex: none;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding-left: 16px;
+  padding-right: 8px;
+  overflow-x: clip; /* hidden would also cut the vertical spill of the Run button's glow */
+}
+/* Nothing squeezes: a button that shrank to fit would hide the overflow fit() has to see. */
+.topbar-right > * {
+  flex: none;
+}
+/* The app icon draws its own tile and colours in every theme: the box gives it a place and a size,
+   with no background or shadow that would double the tile. */
+.logo-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+}
+.wordmark {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+}
+.topbar-left > .project-btn {
+  flex: none; /* never squeezed by the cluster: fit() shortens the name by characters instead */
+}
+.project-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.project-btn:hover,
+.project-btn[aria-expanded="true"] {
+  background: var(--hover);
+  border-color: var(--panel-border);
+}
+.project-btn > .truncate {
+  max-width: 24ch;
+}
+.topbar[data-compact~="name"] .project-btn > .truncate {
+  max-width: 12ch;
+}
+.stage-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--track);
+  border: 1px solid var(--panel-border);
+}
+.status-cluster {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--track);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+.status-pill.accent {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent-ink);
+}
+.conn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  cursor: default;
+}
+.conn::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft);
+}
+.conn[data-state="down"]::before {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+.win-controls {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--panel-border);
+}
+.win-controls .btn.icon {
+  width: 28px;
+}
+.btn.win-close:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Compaction, lowest-value content first. TopBar's fit() measures the two outer cells and writes in
+   data-compact, in this order, each step it needed until both cells hold their cluster: licence,
+   engine, commands (the label), wordmark, units, chips (labels of the idle ones), kbd (the Ctrl K
+   hint), name (12 instead of 24 characters). The widths of engine names and licence labels vary,
+   so nothing here is a breakpoint. Keep the chains short: a third compound (.stage-chips between
+   the bar and the chip) makes the engine restyle most of the bar on every write of the attribute
+   and fit() three times slower. */
+.topbar[data-compact~="licence"] .tb-licence,
+.topbar[data-compact~="engine"] .tb-engine,
+.topbar[data-compact~="commands"] .tb-commands-label,
+.topbar[data-compact~="wordmark"] .wordmark,
+.topbar[data-compact~="units"] .tb-units,
+.topbar[data-compact~="tree"] .tb-tree-label,
+.topbar[data-compact~="kbd"] .tb-commands-kbd {
+  display: none;
+}
+.topbar[data-compact~="chips"] .chip:not(.active) .chip-label {
+  display: none;
+}
+.topbar[data-compact~="chips"] .chip:not(.active) {
+  padding: 0 9px;
+}
+
+/* ------------------------------------------------------------------ panel slots */
+/* A slot owns the placement of its panels (workspace/Layout.tsx): 12 px from the edges, a width from
+   the workspace, and a resize handle in the gutter. One panel sits straight in the slot body as it
+   always did; the panels still carry their own glass and absolute/width classes, and the rules on
+   .slot-body > .glass neutralise the placement. A slot with a growing panel (the tree, the output)
+   reaches from the top to the bottom of its area; one that fits its content (properties) does not. */
+.slot {
+  position: absolute;
+  z-index: 10;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+/*
+  **The edge handle for a hidden panel** (claude-win2's GUI review item 5). A 12 px chevron on the
+  screen edge, drawn only while the panel it restores is not on screen - small because it must not cost
+  the width it exists to free, and present because an empty window with no hint is a dead end.
+*/
+/*
+  **A card's own hide button**, in its top-right corner (claude-win2's GUI review item 5). Small and
+  absent until the card is hovered or the button focused, so a busy tree does not carry a control in
+  every corner - and always reachable by keyboard.
+*/
+/*
+  **The wrapper that gives a lone card's Hide button its corner**: `.cell-hide` is absolutely placed,
+  so it needs a positioned ancestor - and `display: contents` is NOT one, which is why the button
+  stretched to the card's width on the first attempt.
+*/
+.single-card {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+/*
+  **No `glass` on this button**, and that is the fix for the "malformed 320x20 strip" (measured: the
+  browser reported TWO matching rules, `.cell-hide -> absolute` and `.slot-cell > .glass -> relative`,
+  and the second won on source order). `.slot-cell > .glass` styles the CARD: full width, `position:
+  relative`. A button inside the card that also carries `glass` inherits that, so it stretched to the
+  card's width and sat at its top - which is what a user saw as a strip rather than a corner button.
+*/
+.cell-hide {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.slot-cell:hover .cell-hide,
+.cell-hide:focus-visible {
+  opacity: 1;
+}
+.cell-hide:hover {
+  color: var(--text);
+  background: var(--panel-bg-hover);
+}
+/*
+  **The restore handle, and the owner could not find it** (claude-win2's 1300: *"I closed the tree
+  once on thinkyboy and cannot restore it"*; their 1330 adds *"restore buttons nearly invisible"*).
+
+  Measured against their own `workspace-old.json`: after hiding the tree and reloading, the handle was a
+  **1-pixel sliver at the very left edge** - `width: 12px` on a element whose parent has no size is not
+  the reason; the reason is that 12 px of panel border is the same colour as the window frame, at the
+  same height as the model, with no label.
+
+  It is a **28 px tab with the panel's name on it** now, and it carries the accent colour so it reads as
+  a control rather than as a seam. It still costs the viewport nothing when the panel is open, because
+  it is not rendered then.
+*/
+/*
+  **The "Reset layout" pill**, shown only while both panels are hidden (the owner, via Claude 1330).
+  Placed at the top of where the dock was, so it reads as an answer to the empty space rather than as
+  another permanent button.
+*/
+.reset-pill {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 14;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: var(--panel-bg);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.reset-pill:hover {
+  background: var(--accent);
+  color: var(--panel-bg);
+}
+.edge-handle {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 28px;
+  height: 64px;
+  margin-top: -32px;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  background: var(--panel-bg);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 2px 0 8px rgb(0 0 0 / 12%);
+}
+.edge-handle:hover,
+.edge-handle:focus-visible {
+  background: var(--accent);
+  color: var(--panel-bg);
+  outline: none;
+}
+.edge-handle:hover {
+  color: var(--text);
+  background: var(--panel-bg-hover);
+}
+.slot-left {
+  left: 12px;
+  bottom: 12px;
+}
+.slot-right {
+  right: 12px;
+  bottom: var(--corner-br-reserve); /* INSET + the bottom-right island corner stays free */
+}
+.slot-frame {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+/*
+  **A side card is only as tall as what it shows** (the owner, via Claude 1930: *"the tree card and
+  the Details pane card are only as tall as what they show, with a minimum... and a maximum"*).
+
+  The slot used to stretch from the top bar to the drawer whatever its content, so a Next-step card
+  with six lines was 900 px tall and mostly empty. `height: 100%` became `max-height: 100%`: the
+  frame takes its content's height up to the slot's own limit, and `overflow` inside the body gives a
+  scrollbar instead of growth past it.
+
+  **`data-grow` still matters for the BOTTOM slot**, where the output pane genuinely fills the drawer
+  and its `height: 100%` is the right behaviour - so the rule is scoped to the side slots.
+*/
+/*
+  **`max-height: 100%` needs a parent with a DEFINITE height**, and `auto` is not one: the percentage
+  resolved to `none`, so the frame grew to its content (measured: frame 412 px, its cell 637 px) and the
+  card spilled out of the dock instead of scrolling inside it. `height: 100%` here plus `overflow:
+  hidden` on the body is what makes the chain slot -> frame -> cell -> card body all definite, so the
+  card's own `overflow-y: auto` has something to scroll within.
+*/
+.slot-left[data-grow="true"] .slot-frame,
+.slot-right[data-grow="true"] .slot-frame {
+  height: 100%;
+  max-height: 100%;
+}
+/*
+  **THE SLOT DOES NOT SCROLL; EACH CARD DOES** (the owner, via Claude 1430: *"the tree card and the
+  Details card each scroll on their own"*).
+
+  This body is the container the cards sit IN. `overflow: auto` here made it one scroll region for the
+  whole dock, so the tree and the pane scrolled together - which is the bug rather than the feature.
+  `overflow: hidden` keeps a card from spilling out of the dock, and the scrolling happens inside each
+  card's own body.
+*/
+.slot-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/*
+  **One scroll region per card** (claude-win2's 1430): the tree's rows and the pane's content each scroll
+  inside their own card, with the card's header, the tree's filter box and the pane's title staying put.
+
+  `overscroll-behavior: contain` is the half that is easy to omit and easy to notice: without it a wheel
+  at the end of a card CHAINS to the next scroll container - the other card, or the viewport, where it
+  zooms the model. The brief names that explicitly.
+*/
+.slot-cell .scroll-region,
+.single-card .scroll-region {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.slot[data-collapsed="true"] .slot-body {
+  display: none;
+}
+.slot-body > .glass {
+  position: relative;
+  inset: auto;
+  flex: 0 1 auto;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  pointer-events: auto;
+}
+/*
+  **A panel that IS the slot body needs `pointer-events: auto` too** (G-301's step 4).
+
+  `.slot` is `pointer-events: none` so clicks pass through the dock's empty space to the viewport, and
+  each panel re-enables them on its own `.glass` card. A stage panel - Results is the one measured -
+  renders `[data-ws-panel]` directly on a `.slot-body` and has no `.glass` child, so it inherited
+  `none`. **Measured**: `elementFromPoint` at the centre of the "Mid-plane slice" switch returned the
+  element UNDER the panel, and Playwright's click timed out - the panel was visible and inert, and the
+  canvas behind it received every press.
+
+  The canvas does not need the dock's space back: it already spans the full width and is covered by the
+  panel, which is why the click went `CANVAS`.
+*/
+.slot-body[data-ws-panel] {
+  pointer-events: auto;
+}
+.slot[data-grow="true"] .slot-body > .glass {
+  flex: 1 1 auto;
+}
+
+/* Several panels as tabs: one glass card, a tab strip, the active panel (its own glass flattened). */
+.slot-tabs {
+  position: relative;
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.slot[data-grow="true"] .slot-tabs {
+  flex: 1 1 auto;
+}
+.slot-tablist {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--panel-border);
+  overflow-x: auto;
+}
+.slot-tablist .tab {
+  height: 35px;
+  font-size: 12.5px;
+}
+.slot-tabpanel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.slot-tabpanel > .glass,
+.drawer-panel > .glass,
+.drawer-cell > .glass,
+.float-body > .glass {
+  position: relative;
+  inset: auto;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: none;
+}
+
+/* Several panels as a split: stacked glass cards 12 px apart, a handle in each gap. */
+.slot-split {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+/*
+  **A side dock splits ACROSS, a bottom dock splits DOWN** (the layout decision 2026-10-18). The tree
+  and the Details pane have to sit side by side in the left dock, which a column-direction flex cannot
+  do - measured: the pane landed under the tree.
+
+  The min-width/min-height pair is the part that is easy to get wrong: a horizontal flex child needs
+  `min-width: 0` to shrink, exactly as a vertical one needs `min-height: 0`, and without it a wide
+  panel pushes the other out of the dock instead of sharing it.
+*/
+.slot-split[data-axis="across"] {
+  flex-direction: row;
+  /*
+    **Each card keeps its own height** (claude-win2's GUI review item 4: *"the Next-step card is 637 px
+    tall for five lines (equal to the tree's 637): the two cards in the row are stretched to the same
+    height"*). A row's default is `stretch`, which is right for columns of equal rows and wrong here:
+    the tree and the pane hold unrelated amounts of content, so aligning them to the top is what lets
+    each be as tall as what it shows - which is the rule the card height change was for.
+
+    `stretch` stays for the vertical case, where two stacked cards sharing a height is what a reader
+    expects.
+  */
+  align-items: flex-start;
+}
+.slot-split[data-axis="across"] > .slot-cell {
+  min-width: 0;
+  min-height: 0;
+  /*
+    **`align-items: flex-start` sizes a cell to its CONTENT, which is what the card-height rule wants -
+    and it also lets a tall card grow past the dock instead of scrolling.** Measured: the split was
+    412 px and the tree's cell 637, so the card's own `overflow-y: auto` had nothing to scroll within.
+
+    `max-height: 100%` is the answer that keeps both: a short card is still only as tall as its
+    content, and a tall one stops at the dock and scrolls inside. The percentage resolves here because
+    `.slot-split` has a definite height (412 px, from the slot).
+  */
+  max-height: 100%;
+}
+.slot-cell {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+.slot-cell[data-folded="true"] {
+  flex: 0 0 auto;
+}
+.slot-cell > .glass {
+  position: relative;
+  inset: auto;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  pointer-events: auto;
+}
+.slot-cell[data-folded="true"] > .glass:not(.cell-head) {
+  display: none;
+}
+.cell-head,
+.float-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 6px 0 12px;
+  pointer-events: auto;
+}
+.cell-title,
+.float-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-strip {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 140ms ease;
+}
+.slot-strip:hover {
+  color: var(--text);
+}
+/* Several folded panels: one glass strip with an icon each. */
+.slot-strip-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 40px;
+  padding: 3px;
+  pointer-events: auto;
+}
+.slot-strip-group .slot-strip {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.slot-strip-group .slot-strip:hover {
+  background: var(--hover);
+}
+.slot-collapse {
+  position: absolute;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.slot-left .slot-collapse {
+  right: -36px;
+}
+.slot-right .slot-collapse {
+  left: -36px;
+}
+.slot-collapse:hover {
+  color: var(--text);
+}
+/* Nothing to show (a panel that renders null): no strip, no handle, no collapse button. */
+.slot-body:empty ~ .slot-strip,
+.slot-body:empty ~ .resize-handle,
+.slot-body:empty ~ .slot-collapse {
+  display: none;
+}
+
+/* Float cards over the viewport (anchor, x and y from the workspace). */
+.float-card {
+  position: absolute;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.float-head.float-bar {
+  position: relative;
+  justify-content: center;
+  height: 20px;
+  padding: 0;
+}
+.float-grip {
+  width: 28px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--panel-border-strong);
+}
+.float-fold {
+  position: absolute;
+  top: 1px;
+  right: 4px;
+}
+.float-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  z-index: 2;
+  width: 12px;
+  cursor: col-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+.slot-left .resize-handle {
+  right: -12px;
+}
+.slot-right .resize-handle {
+  left: -12px;
+}
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.resize-handle:hover::after,
+.resize-handle.active::after,
+.resize-handle:focus-visible::after {
+  opacity: 0.85;
+}
+.resize-handle:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+body.is-resizing,
+body.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+body.is-resizing-rows,
+body.is-resizing-rows * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
+/* The handle between two panels of a split (components/SplitHandle.tsx), in the gap before the second. */
+.split-handle {
+  position: absolute;
+  z-index: 2;
+  pointer-events: auto;
+  touch-action: none;
+}
+.split-handle-h {
+  top: -12px;
+  right: 8px;
+  left: 8px;
+  height: 12px;
+  cursor: row-resize;
+}
+.split-handle-v {
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  cursor: col-resize;
+}
+.split-handle::after {
+  content: "";
+  position: absolute;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.split-handle-h::after {
+  top: 5px;
+  right: 0;
+  left: 0;
+  height: 2px;
+}
+.split-handle-v::after {
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+}
+.split-handle:hover::after,
+.split-handle.active::after,
+.split-handle:focus-visible::after {
+  opacity: 0.85;
+}
+.split-handle:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------------ islands, context toolbar */
+/* The island corners (workspace/IslandLayer.tsx): each corner holds its groups left to right, 8 px
+   apart, clear of the side slots; the offsets are the layout's outputs on <main>. The bottom-right
+   corner keeps clear of the right slot's reserve (--corner-br-reserve), leaving room for the view
+   group + gizmo, and falls back to that same value before the layout writes its offsets. */
+.island-corner {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  align-items: flex-end;
+}
+.island-corner[data-corner="bl"] {
+  left: var(--corner-bl-x, 324px);
+  bottom: var(--corner-bl-y, 12px);
+}
+.island-corner[data-corner="br"] {
+  right: var(--corner-br-x, var(--corner-br-reserve));
+  bottom: var(--corner-br-y, 12px);
+}
+.island-corner[data-corner="tl"] {
+  top: var(--corner-tl-y, 12px);
+  left: var(--corner-tl-x, 324px);
+  align-items: flex-start;
+}
+.island-corner[data-corner="tr"] {
+  top: var(--corner-tr-y, 12px);
+  right: var(--corner-tr-x, 344px);
+  align-items: flex-start;
+}
+.island {
+  position: relative;
+}
+/* Groups that do not fit their edge: icons only (the island layer decides, the tooltips carry the names). */
+.island[data-compact="true"] .island-label {
+  display: none;
+}
+.island[data-compact="true"] .btn:not(.icon) {
+  padding: 0 9px;
+}
+.ctx-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  opacity: 0;
+  visibility: hidden;
+  translate: 0 4px;
+  pointer-events: none;
+  will-change: transform;
+  transition:
+    opacity 160ms ease-out,
+    translate 160ms ease-out,
+    visibility 0s linear 160ms;
+}
+.ctx-toolbar[data-visible="true"] {
+  opacity: 1;
+  visibility: visible;
+  translate: 0 0;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+.ctx-toolbar .btn {
+  height: 28px;
+  padding: 0 10px;
+  border-color: transparent;
+  font-size: 12.5px;
+}
+.ctx-toolbar .btn.lead {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+/* What the pick holds ("3 faces on 2 parts"): the toolbar's own words, kept in the compact layout,
+   where the buttons drop to their icons (T-061). */
+.ctx-toolbar .ctx-pick {
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+/* Faces of the pick a boundary already holds (G10): a 7 px amber status dot and muted words beside
+   the pick, never a filled badge (§3b); the full sentence is the tooltip. */
+.ctx-toolbar .ctx-overlap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 0;
+}
+/* Not enough free width between the panels: icons only, the tooltips carry the names. */
+.ctx-toolbar[data-compact="true"] .btn {
+  padding: 0 9px;
+}
+.ctx-toolbar[data-compact="true"] .ctx-label {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ popovers, menus, tooltips */
+.popover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  visibility: hidden;
+  min-width: 200px;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  border-radius: var(--radius); /* concentric with the 8 px items inside its 4 px padding */
+  border: 1px solid var(--panel-border-strong);
+  background: var(--menu-bg);
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 1px 0 var(--highlight);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+.popover[data-placed="true"] {
+  visibility: visible;
+  animation: pop-in 160ms ease-out;
+}
+.popover[data-side="top"] {
+  --pop-from: 4px;
+}
+.popover[data-side="bottom"] {
+  --pop-from: -4px;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--pop-from, 4px)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+.menu-item:hover,
+.menu-item:focus {
+  background: var(--hover);
+}
+.menu-item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.menu-item[aria-checked="true"] {
+  color: var(--accent-ink);
+}
+.menu-item[aria-disabled="true"] {
+  opacity: 0.6;
+}
+.menu-item .menu-icon {
+  height: 16px;
+  line-height: 0;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  flex: none;
+  color: var(--text-muted);
+}
+.menu-item .menu-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+.menu-item > .kbd {
+  flex: none;
+}
+.menu-item[aria-checked="true"] .menu-icon {
+  color: var(--accent-ink);
+}
+.menu-item .menu-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--panel-border);
+}
+.menu-heading {
+  padding: 6px 8px 4px;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.popover-section {
+  padding: 8px;
+}
+.popover-section + .popover-section {
+  border-top: 1px solid var(--panel-border);
+}
+.popover-title {
+  margin-bottom: 8px;
+}
+
+.tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--tooltip-border);
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  font-size: 11.5px;
+  line-height: 1.3;
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+}
+.tooltip[data-placed="true"] {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 120ms ease-out;
+}
+.tooltip .kbd {
+  height: 16px;
+  padding: 0 4px;
+  border-color: var(--tooltip-kbd-border);
+  background: transparent;
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* ------------------------------------------------------------------ switch, segmented control */
+.switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 999px;
+  background: var(--track);
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  transition:
+    transform 140ms ease,
+    background 140ms ease;
+}
+.switch[aria-checked="true"] {
+  background: var(--accent-fill);
+  border-color: transparent;
+}
+.switch[aria-checked="true"]::after {
+  transform: translateX(14px);
+  background: var(--accent-text);
+}
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--track);
+  border: 1px solid var(--panel-border);
+}
+.segmented button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+.segmented button:hover {
+  color: var(--text);
+}
+.segmented button[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.55;
+}
+.segmented button[aria-checked="true"] {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 1px var(--panel-border-strong);
+}
+
+/* ------------------------------------------------------------------ dialog, toasts, hint */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: start center;
+  padding-top: 16vh;
+  background: var(--scrim);
+  animation: scrim-in 160ms ease-out;
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 16px;
+  background: var(--menu-bg);
+  border-color: var(--panel-border-strong);
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 1px 0 var(--highlight);
+  animation: fade-in 160ms ease-out;
+}
+.bottom-stack {
+  position: absolute;
+  right: 0;
+  bottom: 56px;
+  left: 0;
+  /* Centre in the free band between the docks, so a card never lands on the tree or Details. */
+  padding-left: calc(var(--slot-left, 0px) + 12px);
+  padding-right: calc(var(--slot-right, 0px) + 12px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast-region {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.toast {
+  --toast-accent: var(--blue);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  max-width: 520px;
+  padding: 8px 8px 8px 14px;
+  font-size: 12.5px;
+  pointer-events: auto;
+  animation: fade-in 160ms ease-out;
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 var(--highlight),
+    inset 3px 0 0 var(--toast-accent);
+}
+.toast[data-kind="ok"] {
+  --toast-accent: var(--ok);
+}
+.toast[data-kind="error"] {
+  --toast-accent: var(--danger);
+}
+.toast .toast-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px 0 7px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+.toast-link:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.hint-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  pointer-events: auto;
+  animation: fade-in 160ms ease-out;
+}
+.hint-card .kbd {
+  vertical-align: 1px;
+}
+.hint-card b {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ the bottom slot */
+/* Panels of the drawer other than the output: a tab each (their glass flattened above), or side by side. */
+.drawer-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.drawer-split {
+  display: flex;
+  min-height: 0;
+}
+.drawer-cell {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  border-left: 1px solid var(--panel-border);
+}
+.drawer-cell:first-child {
+  border-left: 0;
+}
+
+/* ------------------------------------------------------------------ ribbon */
+/* The stage control as a ribbon (topbar.stages.style "ribbon"): the stages as tabs over a task strip. */
+.ribbon {
+  position: relative;
+  z-index: 19;
+  flex-shrink: 0;
+  background: var(--panel-solid);
+  border-bottom: 1px solid var(--panel-border);
+}
+.ribbon-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+  padding: 0 10px;
+}
+.ribbon-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+.ribbon-tab:hover {
+  color: var(--text);
+}
+.ribbon-tab.active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.ribbon-tasks {
+  display: flex;
+  align-items: center;
+  height: 42px;
+  padding: 0 8px;
+  border-top: 1px solid var(--panel-border);
+}
+.ribbon-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+}
+.ribbon-task.btn {
+  height: 30px;
+  padding: 0 10px;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+.ribbon-divider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--panel-border-strong);
+}
+
+/* ------------------------------------------------------------------ display settings, dialogs */
+.display-anchor {
+  position: fixed;
+  right: 16px;
+  bottom: 56px;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.display-settings {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.preset-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.preset-row:hover {
+  background: var(--hover);
+}
+.preset-title {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.preset-description {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preset-heading {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.btn.ws-small {
+  height: 28px;
+  gap: 5px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.btn.ws-wide {
+  width: 100%;
+  height: 30px;
+  justify-content: flex-start;
+  border-radius: var(--radius-sm);
+}
+.dialog.dialog-wide {
+  width: min(600px, calc(100vw - 32px));
+}
+
+/* ------------------------------------------------------------------ settings dialog (T-178) */
+.scrim.scrim-settings {
+  padding-top: 32px;
+}
+.dialog.dialog-settings {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  padding: 0;
+  overflow: hidden;
+}
+/* Title bar, sidebar | page, footer: hairlines separate the three instead of a box around the page. */
+.dialog.dialog-settings > h2 {
+  margin: 0;
+  padding: 14px 18px 13px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.dialog.dialog-settings > :last-child {
+  margin: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--panel-border);
+}
+.settings-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 176px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--panel-border);
+  background: var(--track);
+}
+.settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.settings-tab[aria-selected="true"] {
+  background: var(--active);
+  color: var(--text);
+  font-weight: 600;
+}
+.settings-tab[aria-selected="true"] svg {
+  color: var(--accent-ink);
+}
+.settings-tab:focus-visible {
+  outline-offset: -2px;
+  box-shadow: none;
+}
+.settings-page {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* One height for every section, so the dialog does not jump when the tab changes. */
+  height: min(460px, calc(100vh - 190px));
+  padding: 12px 8px 12px 10px;
+  overflow-y: auto;
+}
+.settings-page > p:first-child {
+  margin: 0 8px 4px;
+}
+.settings-row + .settings-row {
+  border-top: 1px solid var(--panel-border);
+}
+.settings-help {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.settings-error {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--danger);
+}
+.settings-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-choice:hover {
+  background: var(--hover);
+}
+.settings-choice[aria-checked="true"] {
+  background: var(--accent-soft);
+}
+.settings-choice[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.55;
+}
+.settings-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 999px;
+}
+.settings-choice[aria-checked="true"] .settings-dot {
+  border: 4px solid var(--accent-fill);
+}
+.settings-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.settings-facts dt {
+  color: var(--text-muted);
+}
+.settings-facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+@media (max-width: 640px) {
+  .settings-body {
+    flex-direction: column;
+  }
+  .settings-nav {
+    flex-direction: row;
+    width: auto;
+    overflow-x: auto;
+  }
+}
+.field.ws-json {
+  height: 260px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre;
+  resize: vertical;
+}
+
+/* ------------------------------------------------------------------ theme editor */
+.theme-editor {
+  position: fixed;
+  z-index: 70;
+  top: 60px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  width: 344px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 76px);
+  overflow: hidden;
+  /* Opaque: the menu fill laid over the window background, so busy panels never show through. */
+  background:
+    linear-gradient(var(--menu-bg), var(--menu-bg)),
+    var(--bg);
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 1px 0 var(--highlight);
+}
+.theme-editor-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.theme-editor-body {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 14px;
+  overflow-y: auto;
+}
+.theme-editor-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--panel-border);
+}
+.te-row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+.te-label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.te-colour,
+.te-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.swatch {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.swatch:focus-within {
+  outline: 2px solid var(--accent);
+  box-shadow: var(--focus-halo);
+}
+.te-slider input[type="range"] {
+  flex: 1;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.te-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: var(--track);
+  box-shadow: inset 0 0 0 1px var(--panel-border-strong);
+}
+.te-slider input[type="range"]::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background: var(--accent-fill);
+  -webkit-appearance: none;
+}
+.te-slider input[type="range"]:focus-visible {
+  outline: none;
+}
+.te-slider input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--focus-halo);
+}
+
+/* ------------------------------------------------------------------ customise mode */
+/* The overlay of Customise mode (workspace/Customise.tsx): it takes no pointer itself, only its
+   handles, its toolbar and, while dragging, the handle that holds the pointer capture. */
+.cz-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+.cz-layer[data-dragging="true"],
+.cz-layer[data-dragging="true"] * {
+  cursor: grabbing !important;
+}
+.cz-toolbar {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 6px 8px 6px 12px;
+  translate: -50% 0;
+  background:
+    linear-gradient(var(--menu-bg), var(--menu-bg)),
+    var(--bg);
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 1px 0 var(--highlight);
+  pointer-events: auto;
+  animation: fade-in 160ms ease-out;
+}
+.cz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.cz-row-2 {
+  padding-top: 6px;
+  border-top: 1px solid var(--panel-border);
+}
+.cz-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 4px;
+  font-weight: 600;
+  cursor: default;
+}
+.cz-note {
+  font-size: 12px;
+}
+.cz-scope .segmented button {
+  height: 24px;
+  padding: 0 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.cz-hide {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px dashed var(--panel-border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12px;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.cz-hide[data-active="true"] {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.cz-hidden {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.cz-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px 0 9px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cz-chip:hover {
+  background: var(--hover);
+}
+.cz-problems {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 12px;
+  cursor: pointer;
+}
+.cz-problem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 160px;
+  margin: 0;
+  padding: 2px 4px 4px;
+  overflow-y: auto;
+  font-size: 12px;
+  list-style: none;
+  user-select: text;
+}
+.cz-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cz-target {
+  position: absolute;
+  border-radius: var(--radius);
+  outline: 1.5px dashed var(--accent);
+  outline-offset: 2px;
+  pointer-events: none;
+}
+.cz-target[data-kind="topbar"] {
+  border-radius: var(--radius-sm);
+}
+.cz-target[data-dragging="true"] {
+  opacity: 0.35;
+}
+.cz-handle {
+  pointer-events: auto;
+}
+.cz-handle.chip-top {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: calc(100% - 12px);
+  height: 26px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent-fill);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  translate: -50% 0;
+  box-shadow: var(--shadow);
+  cursor: grab;
+}
+.cz-target[data-kind="island"] .cz-handle.chip-top {
+  top: -34px;
+}
+.cz-handle.cover {
+  position: absolute;
+  inset: -2px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: grab;
+}
+.cz-handle.cover:hover,
+.cz-handle.cover:focus-visible {
+  background: var(--accent-soft);
+}
+.cz-zone {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  pointer-events: none;
+  transition: background 100ms ease-out;
+}
+.cz-zone[data-active="true"] {
+  background: var(--accent-soft);
+}
+.cz-zone-label {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--menu-bg);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.cz-caret {
+  position: fixed;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.cz-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 61;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ motion */
+/* Both the OS preference and the Display settings switch (data-motion on <html>) end motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 1ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* The Next step button at the end of the stage bar (T-219 C): the accent as text on the bar's track, a hairline
+   from the stages, and a quieter look while the step is blocked (its tooltip says why). Compaction hides its
+   words with the other chips' (`.chip-label`) and keeps the arrow. */
+.chip.next-step {
+  margin-left: 2px;
+  border-left: 1px solid var(--panel-border);
+  border-radius: 0 999px 999px 0;
+  padding-left: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.chip.next-step[aria-disabled="true"] {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.75;
+}
+.chip.next-step[aria-disabled="true"]:hover {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------- the Details pane (2026-10-18)
+   The pane that shows the full page for the tree's selection. Its classes had NO styling at all -
+   which is what claude-win2 saw as an unstyled "Properties" heading floating above the card - so
+   everything here is new rather than a recolour. It borrows the card chrome (padding, border, the
+   `.section-title` type) so it reads as one of the panels beside it. */
+.details-pane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.details-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.details-head-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+/* The panel title, in the same type as the other cards' section headings. */
+.details-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* What is being shown: name and type, truncated rather than wrapped (the path is the tooltip). */
+.details-sub {
+  font-size: 12.5px;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* **The body scrolls**, like the Properties panel: a page longer than the dock must stay reachable. */
+.details-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* **Contained** (claude-win2's 1430): a wheel at the end of the pane must not chain to the tree
+     beside it or to the viewport, where it would zoom the model. */
+  overscroll-behavior: contain;
+  padding: 10px 12px 12px;
+}
+.details-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+/* A folder's rows: the name takes the space, the type and the actions sit at the end. */
+.details-pane [data-ws="folder-item"] {
+  border-bottom: 1px solid var(--panel-border);
+}
+.details-pane [data-ws="folder-item"]:last-child {
+  border-bottom: none;
+}
+
+/* ------------------------------------------------- the left dock in overlay mode (2026-10-18)
+   Below the decision's boundary the tree and the Details pane take turns rather than sharing a dock
+   too narrow for either. The strip is the way between them; the panels stay mounted, so the tree keeps
+   its scroll position and the pane keeps its state. */
+.slot-split[data-overlay] {
+  display: flex;
+  flex-direction: column;
+}
+.slot-overlay-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--panel-border);
+  /*
+    **`pointer-events: auto`, and it is not optional.** `.slot` sets `pointer-events: none` so the
+    viewport stays clickable through the dock's empty space, and each panel re-enables it on its own
+    `.glass` card. This strip is not a card, so without this line the CANVAS received every click -
+    measured: `document.elementFromPoint(centre of the Details tab)` returned `CANVAS`, and the tab was
+    unclickable.
+  */
+  pointer-events: auto;
+}
+.slot-split[data-overlay] > .slot-cell {
+  /* One panel fills the dock, so it takes the whole height rather than a measured basis. */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The "in simulation" toggle on a part's row (T-221). It sits beside the eye because they are the two
+   ways a body can be "not there" - and it is dimmed when the body is LEFT OUT, which is the state a
+   user needs to spot at a glance in a long tree. */
+.tree-simulate {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+.tree-simulate:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.tree-simulate.out {
+  /* Faint rather than hidden: a body left out is still in the model, and a missing icon would read as
+     a missing part. */
+  color: var(--text-faint);
+  opacity: 0.75;
+}
+
+
+/* --------------------------------------------------------------------------------- */
+/* The guided-meshing stepper (brief M-502): the nine tasks at the top of the Details pane.  */
+/* The one-line form sits in the pane's FIXED header; the full block is the first block of   */
+/* the scrolling body — the independent-scroll rule (1430), so a long stepper never pushes   */
+/* the page off-screen and a wheel at the end never chains to the tree beside it.            */
+/* --------------------------------------------------------------------------------- */
+
+/* The collapsed line, in the fixed header: dot, "Step N of 9 · <title>", and the preference's
+   own Hide/Show toggle. Compact on purpose — it is one row of the header, not a card. */
+.stepper-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 4px;
+}
+.stepper-line-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.stepper-line-main[disabled], span.stepper-line-main {
+  cursor: default;
+}
+.stepper-line-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stepper-line-toggle {
+  flex: none;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.stepper-line-toggle:hover {
+  background: var(--bg-elev);
+}
+
+/* The full block, first in the scrolling body. Rows are buttons: a click selects the task. */
+.mesh-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 10px;
+}
+.stepper-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.stepper-head-meta {
+  font-size: 11px;
+}
+.stepper-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.stepper-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, auto) 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.stepper-row:hover {
+  background: var(--bg-elev);
+}
+.stepper-row-current {
+  background: var(--bg-elev);
+  font-weight: 500;
+}
+.stepper-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+.stepper-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stepper-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 11.5px;
+}
+.stepper-spin {
+  animation: stepper-turn 1s linear infinite;
+}
+@keyframes stepper-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stepper-spin {
+    animation-duration: 0.01s;
+    animation-iteration-count: 1;
+  }
+}
+.stepper-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stepper-buttons {
+  display: flex;
+  gap: 6px;
+}
+.stepper-why,
+.stepper-progress {
+  font-size: 11.5px;
+}
+
+/* The task pages (Geometry check, Bodies, Boundaries): a purpose line, then the content. */
+.task-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.task-purpose {
+  font-size: 11.5px;
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 6px;
+}
+.task-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.task-finding {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.task-finding-block {
+  color: var(--text-strong);
+}
+.task-finding-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.task-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.task-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 8px;
+}
+.task-row-name {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.task-choices {
+  display: flex;
+  gap: 1px;
+}
+.task-choice {
+  padding: 2px 8px;
+  border: 1px solid var(--panel-border);
+  background: none;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.task-choice:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.task-choice:last-child {
+  border-radius: 0 6px 6px 0;
+}
+.task-choice + .task-choice {
+  border-left: none;
+}
+.task-choice:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.task-choice-on {
+  background: var(--bg-elev);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.task-row-note {
+  flex-basis: 100%;
+  font-size: 11px;
+}
+.task-note {
+  font-size: 11.5px;
+}
+.task-clear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.task-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.task-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--panel-border);
+  padding: 2px 6px 4px 0;
+  font-size: 11px;
+}
+.task-table td {
+  border-bottom: 1px solid var(--panel-border);
+  padding: 4px 6px 4px 0;
+}
+.task-table .num,
+.task-table th.num {
+  text-align: right;
+  padding-right: 0;
+}
+.task-unassigned {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+
+/* The Surface page (brief M-515): a bar per staged surface against the staging limit, the
+   over-limit row in warning tone, and the feature-angle field. */
+.surface-bar {
+  display: inline-block;
+  width: 120px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: var(--bg-elev);
+  overflow: hidden;
+  vertical-align: middle;
+}
+.surface-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent, #3b82c4);
+}
+.task-warning-row td {
+  color: var(--text-strong);
+}
+.task-warning-row .surface-bar-fill {
+  background: #c47f3b;
+}
+.task-warning-text {
+  color: #c47f3b;
+  font-size: 11.5px;
+}
+.task-warning {
+  color: #c47f3b;
+}
+.task-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.task-input {
+  width: 110px;
+  padding: 2px 6px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: inherit;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------------ the live Run pill */
+/* While a run is going, Run (now Stop) is the run's readout: the accent fills it from the left as the run
+   advances, a sparkline shows the worst residual falling, and the iteration count ticks in tabular figures. */
+.btn.run-live {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 999px;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--track);
+  color: var(--text);
+}
+.btn.run-live::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background: var(--accent-soft);
+  transform-origin: left center;
+  transform: scaleX(0.0001);
+  transition: transform 400ms ease-out;
+}
+.btn.run-live[data-progress]::before {
+  width: var(--run-progress);
+  transform: none;
+}
+/* No fraction to show (the solver reports none and no limit is set): a soft band sweeps instead. */
+.btn.run-live:not([data-progress])::before {
+  width: 40%;
+  transform: none;
+  background: linear-gradient(90deg, transparent, var(--accent-soft), transparent);
+  animation: run-sweep 1.6s ease-in-out infinite;
+}
+@keyframes run-sweep {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 250% 0;
+  }
+}
+.btn.run-live:hover {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+.run-spark {
+  flex: none;
+  overflow: visible;
+}
+.run-spark path {
+  fill: none;
+  stroke: var(--accent-ink);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.run-iter {
+  min-width: 3ch;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

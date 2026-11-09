@@ -1,0 +1,66 @@
+/*---------------------------------------------------------------------------*\
+  Synthetic log, written by hand for the Stokes parser tests (ADR-0027 step 4).
+  It mirrors the line forms OpenFOAM 14 `foamRun -solver fluid` prints for a
+  steady laminar constant-density (rhoConst) liquid with the energy equation.
+  It is NOT output of a real run; every number is invented.
+\*---------------------------------------------------------------------------*/
+Create time
+
+Create mesh for time = 0
+
+Selecting solver fluid
+Selecting thermodynamics package
+{
+    type            heRhoThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          eConst;
+    equationOfState rhoConst;
+    specie          specie;
+    energy          sensibleInternalEnergy;
+}
+
+Reading field p_rgh
+
+Reading field U
+
+Starting time loop
+
+Time = 1s
+
+diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 0
+smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.0421, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 1, Final residual = 0.0388, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 1, Final residual = 0.0402, No Iterations 2
+smoothSolver:  Solving for e, Initial residual = 1, Final residual = 0.0217, No Iterations 3
+GAMG:  Solving for p_rgh, Initial residual = 1, Final residual = 0.00873, No Iterations 12
+time step continuity errors : sum local = 0.000412, global = 1.3e-05, cumulative = 1.3e-05
+diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 0
+ExecutionTime = 0.41 s  ClockTime = 1 s
+
+Time = 2s
+
+diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 0
+smoothSolver:  Solving for Ux, Initial residual = 0.312, Final residual = 0.0119, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.287, Final residual = 0.0104, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.301, Final residual = 0.0111, No Iterations 2
+smoothSolver:  Solving for e, Initial residual = 0.226, Final residual = 0.00641, No Iterations 3
+GAMG:  Solving for p_rgh, Initial residual = 0.154, Final residual = 0.00132, No Iterations 10
+time step continuity errors : sum local = 0.000198, global = 6.1e-06, cumulative = 1.91e-05
+diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 0
+ExecutionTime = 0.78 s  ClockTime = 1 s
+
+Time = 3s
+
+diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 0
+smoothSolver:  Solving for Ux, Initial residual = 0.0874, Final residual = 0.00312, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.0791, Final residual = 0.00287, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.0823, Final residual = 0.00295, No Iterations 2
+smoothSolver:  Solving for e, Initial residual = 0.0462, Final residual = 0.00151, No Iterations 3
+GAMG:  Solving for p_rgh, Initial residual = 0.0318, Final residual = 0.000284, No Iterations 9
+time step continuity errors : sum local = 8.7e-05, global = 2.4e-06, cumulative = 2.15e-05
+diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 0
+ExecutionTime = 1.14 s  ClockTime = 2 s
+
+End
+

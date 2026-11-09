@@ -1,0 +1,125 @@
+/* The Analyse block of the Results card: report table, plots, functions. Theme tokens only. */
+.analyse {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--panel-border);
+}
+.analyse-surfaces {
+  flex-wrap: wrap;
+}
+.analyse-select {
+  flex: 1;
+  min-width: 0;
+}
+.analyse-select select {
+  width: 100%;
+}
+.analyse-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--track);
+}
+.analyse-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.analyse-table td {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.analyse-table th,
+.analyse-table td {
+  padding: 3px 5px;
+  border-bottom: 1px solid var(--panel-border);
+  text-align: right;
+  white-space: nowrap;
+}
+.analyse-table thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.analyse-table tbody th {
+  font-weight: 400;
+  text-align: left;
+}
+.analyse-unit {
+  display: block;
+  font-size: 9.5px;
+  line-height: 1.1;
+}
+.analyse-table tr:last-child th,
+.analyse-table tr:last-child td {
+  border-bottom: none;
+}
+.analyse-dots {
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.analyse-bar {
+  opacity: 0.85;
+}
+.analyse-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.analyse-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-radius: 50%;
+}
+.analyse-function {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+.analyse-function > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.analyse-new-function {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.analyse-new-function input:first-child {
+  width: 30%;
+}
+.analyse-new-function input:last-child {
+  flex: 1;
+  min-width: 0;
+}
+.analyse-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.analyse-tabs {
+  flex-wrap: wrap;
+}
+.analyse-tabs .guided-chip {
+  flex: 1 0 auto;
+}
+.analyse-time {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.analyse-time-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

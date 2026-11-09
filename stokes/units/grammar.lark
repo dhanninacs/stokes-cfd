@@ -1,0 +1,38 @@
+// Stokes expression grammar (ADR-0012).
+// Units are written in square brackets so they never collide with operators:
+//   2 [m/s] * 1.5        0.5 * rho * U_in**2        sqrt(area(inlet)) / 2 [mm]
+
+?start: sum
+
+?sum: product
+    | sum "+" product   -> add
+    | sum "-" product   -> sub
+
+?product: power
+    | product "*" power -> mul
+    | product "/" power -> div
+
+?power: unary
+    | unary POW power   -> pow
+
+?unary: atom
+    | "-" unary         -> neg
+    | "+" unary         -> pos
+
+?atom: quantity
+     | NUMBER                 -> number
+     | NAME "(" [args] ")"    -> call
+     | path                   -> ref
+     | "(" sum ")"
+
+quantity: NUMBER "[" UNIT "]"
+path: NAME ("." NAME)*
+args: sum ("," sum)*
+
+POW: "**" | "^"
+UNIT: /[^\[\]]+/
+NAME: /[A-Za-z_][A-Za-z0-9_]*/
+NUMBER: /(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?/
+
+%import common.WS
+%ignore WS

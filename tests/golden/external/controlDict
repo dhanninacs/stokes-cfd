@@ -1,0 +1,26 @@
+/* a synthetic banner, kept byte for byte */
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application     foamRun;   // the solver driver
+solver          incompressibleFluid;
+
+startTime       0;
+endTime         1;
+deltaT          0.005;
+
+PISO
+{
+    nCorrectors     3;
+    momentumPredictor false;
+}
+
+functions
+{
+}
+// end
+writeControl timeStep;

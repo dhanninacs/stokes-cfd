@@ -1,0 +1,49 @@
+
+Usage: foamToVTK [OPTIONS]
+options:
+  -allPatches       combine all patches into a single file
+  -ascii            write in ASCII format instead of binary
+  -case <dir>       specify alternate case directory, default is the cwd
+  -cellSet <name>   convert a mesh subset corresponding to the specified cellSet
+  -constant         include the 'constant/' dir in the times list
+  -excludePatches <wordReList>
+                    a list of patches to exclude - eg '( inlet ".*Wall" )' 
+  -faceSet <name>   restrict conversion to the specified faceSet
+  -fields <wordList>
+                    only convert the specified fields - eg '(p T U)'
+  -fileHandler <handler>
+                    override the fileHandler
+  -hostRoots <((host1 dir1) .. (hostN dirN))>
+                    slave root directories (per host) for distributed running
+  -latestTime       select the latest time
+  -libs '("lib1.so" ... "libN.so")'
+                    pre-load libraries
+  -nearCellValue    use cell value on patches instead of patch value itself
+  -noFaceZones      no faceZones
+  -noFunctionObjects
+                    do not execute functionObjects
+  -noInternal       do not generate file for mesh, only for patches
+  -noLinks          don't link processor VTK files - parallel only
+  -noPointValues    no pointFields
+  -noZero           exclude the '0/' dir from the times list
+  -parallel         run in parallel
+  -pointSet <name>  restrict conversion to the specified pointSet
+  -polyhedra <types>
+                    cell types to write as polyhedra - 'none', 'polyhedra', or
+                    'all'
+  -region <name>    specify alternative mesh region
+  -roots <(dir1 .. dirN)>
+                    slave root directories for distributed running
+  -surfaceFields    write surfaceScalarFields (e.g., phi)
+  -time <ranges>    comma-separated time ranges - eg, ':10,20,40:70,1000:'
+  -useTimeName      use the time name instead of the time index when naming the
+                    files
+  -srcDoc           display source code in browser
+  -doc              display application documentation in browser
+  -help             print the usage
+
+legacy VTK file format writer
+
+Using: OpenFOAM-14 (see https://openfoam.org)
+Build: 14-a4867fc914c1
+

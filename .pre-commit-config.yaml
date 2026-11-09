@@ -1,0 +1,19 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: forbidden-imports
+        name: forbidden imports and layering
+        entry: python tools/check_forbidden_imports.py
+        language: system
+        pass_filenames: false
+      - id: ip-gate
+        name: no employer identifiers
+        entry: python tools/check_ip.py
+        language: system
+        pass_filenames: false

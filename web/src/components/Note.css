@@ -1,0 +1,7 @@
+/* A short muted line; the sentence it stands for is its tooltip (`Note.tsx`). Theme tokens only. */
+:where(.note-line) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}

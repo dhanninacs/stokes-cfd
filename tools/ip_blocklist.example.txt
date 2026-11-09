@@ -1,0 +1,4 @@
+# One term per line, matched case-insensitively; lines starting with # are comments.
+# The real list (employer names, internal project, product and customer names, machine names)
+# lives in tools/ip_blocklist.txt, which is private and never committed.
+# Copy this file to tools/ip_blocklist.txt and add the terms.

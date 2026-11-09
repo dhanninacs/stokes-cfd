@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "preset": {
+    "title": "Stokes",
+    "description": "The default: tree on the left, properties on the right, output drawer below, stage chips in the top bar."
+  },
+  "layout": {
+    "left": {
+      "mode": "split",
+      "size": 300,
+      "collapsed": false,
+      "panels": [
+        {
+          "id": "tree",
+          "order": 0
+        },
+        {
+          "id": "details",
+          "order": 1
+        }
+      ]
+    },
+    "right": {
+      "mode": "tabs",
+      "size": 320,
+      "collapsed": true,
+      "panels": []
+    },
+    "bottom": {
+      "mode": "tabs",
+      "size": 240,
+      "collapsed": true,
+      "panels": [
+        {
+          "id": "output",
+          "order": 0,
+          "tabs": [
+            "console",
+            "log",
+            "residuals",
+            "reports"
+          ]
+        },
+        {
+          "id": "design-table",
+          "order": 1
+        }
+      ]
+    },
+    "float": {
+      "mode": "tabs",
+      "size": 320,
+      "collapsed": false,
+      "panels": []
+    },
+    "hidden": [
+      "properties",
+      "mesh",
+      "conditions",
+      "solve",
+      "results",
+      "plots"
+    ]
+  },
+  "islands": {
+    "bl": [
+      "modes"
+    ],
+    "br": [
+      "view",
+      "gizmo"
+    ],
+    "tl": [],
+    "tr": [],
+    "hidden": []
+  },
+  "topbar": {
+    "items": [
+      {
+        "id": "logo",
+        "visible": true
+      },
+      {
+        "id": "project",
+        "visible": true
+      },
+      {
+        "id": "status.connection",
+        "visible": true
+      },
+      {
+        "id": "status.units",
+        "visible": true
+      },
+      {
+        "id": "status.engine",
+        "visible": true
+      },
+      {
+        "id": "status.licence",
+        "visible": true
+      },
+      {
+        "id": "stages",
+        "visible": true
+      },
+      {
+        "id": "commands",
+        "visible": true
+      },
+      {
+        "id": "appearance",
+        "visible": true
+      },
+      {
+        "id": "run",
+        "visible": true
+      },
+      {
+        "id": "window",
+        "visible": true
+      }
+    ],
+    "stages": {
+      "style": "chips"
+    }
+  },
+  "tree": {
+    "groupOrder": [
+      "geometry",
+      "mesh",
+      "physics",
+      "regions",
+      "solver",
+      "scenes",
+      "runs",
+      "studies"
+    ],
+    "hidden": [],
+    "stages": {
+      "Geometry": [
+        "/geometry"
+      ],
+      "Mesh": [
+        "/mesh"
+      ],
+      "Physics": [
+        "/physics",
+        "/regions"
+      ],
+      "Solve": [
+        "/solver",
+        "/runs"
+      ],
+      "Results": [
+        "/scenes",
+        "/runs"
+      ],
+      "Explore": [
+        "/studies"
+      ]
+    },
+    "linkStage": true,
+    "defaultExpanded": 2,
+    "layout": "outline"
+  }
+}

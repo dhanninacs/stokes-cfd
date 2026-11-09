@@ -1,0 +1,2741 @@
+{
+ "format": 1,
+ "generated": "2026-10-03",
+ "description": "Stokes built-in material catalogue (ADR-0018, decisions log F5 (c)): fluid records fitted to CoolProp at the stated state; solid records cited to two public sources each. Nothing is copied from textbook or handbook tables.",
+ "records": [
+  {
+   "id": "water_liquid",
+   "name": "Water (liquid)",
+   "kind": "fluid",
+   "phase": "liquid",
+   "formula": "H2O",
+   "cas": "7732-18-5",
+   "aliases": [
+    "water",
+    "H2O",
+    "R718",
+    "liquid water"
+   ],
+   "description": "Water (liquid), 101325 Pa, 275 K to 370 K; fitted to CoolProp 8.0.0 (HEOS::Water) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 275.0,
+    "T_max": 370.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "rational_polynomial",
+     "coefficients": [
+      0.0012677764461263414,
+      -2.0305538835460154e-06,
+      3.834629162224294e-09,
+      0.0,
+      0.0
+     ],
+     "valid_min": 275.0,
+     "valid_max": 370.0
+    },
+    "viscosity": {
+     "method": "log_polynomial",
+     "coefficients": [
+      2940.587780412595,
+      -1477.4719685557204,
+      247.4319353833875,
+      -13.850961213977062
+     ],
+     "valid_min": 275.0,
+     "valid_max": 370.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 4180.640059246223,
+     "valid_min": 275.0,
+     "valid_max": 370.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      -0.7391411317922525,
+      0.007372058370333284,
+      -9.597651209426493e-06
+     ],
+     "valid_min": 275.0,
+     "valid_max": 370.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.018015268
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Water",
+    "phase": "liquid",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Wagner-JPCRD-2002",
+     "viscosity": "Huber-JPCRD-2009",
+     "conductivity": "Huber-JPCRD-2012"
+    },
+    "fits": {
+     "density": {
+      "method": "rational_polynomial",
+      "degree": 2,
+      "max_rel_err": 0.0006945582648523649,
+      "rms_rel_err": 0.00020875002464094443
+     },
+     "viscosity": {
+      "method": "log_polynomial",
+      "degree": 3,
+      "max_rel_err": 0.004779016893470656,
+      "rms_rel_err": 0.0013480077410657897
+     },
+     "specific_heat": {
+      "method": "constant",
+      "degree": 0,
+      "max_rel_err": 0.007792425782381,
+      "rms_rel_err": 0.0032158472038928006
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 2,
+      "max_rel_err": 0.0036741436666963105,
+      "rms_rel_err": 0.0010566735184094627
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Water) at 101325.0 Pa",
+    "T": [
+     275.0,
+     294.0,
+     313.0,
+     332.0,
+     351.0,
+     370.0
+    ],
+    "density": [
+     999.9379260337814,
+     998.0278950241506,
+     992.2736408092692,
+     983.7835332726647,
+     973.1186896494871,
+     960.5920609328156
+    ],
+    "viscosity": [
+     0.0016819447295272345,
+     0.000981086317231019,
+     0.0006545734974170844,
+     0.0004742582301105546,
+     0.00036378432517490076,
+     0.00029117505278506307
+    ],
+    "specific_heat": [
+     4213.473236729486,
+     4183.481561582523,
+     4179.40119775324,
+     4184.460974748537,
+     4195.174498192785,
+     4212.142596704427
+    ],
+    "thermal_conductivity": [
+     0.5602939468801043,
+     0.5995053820875363,
+     0.6282893832413065,
+     0.6498913260451307,
+     0.6655627638562914,
+     0.6759617312080678
+    ]
+   }
+  },
+  {
+   "id": "steam",
+   "name": "Steam (water vapour)",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "H2O",
+   "cas": "7732-18-5",
+   "aliases": [
+    "steam",
+    "water vapour",
+    "water vapor",
+    "H2O"
+   ],
+   "description": "Steam (water vapour), 101325 Pa, 400 K to 1000 K; fitted to CoolProp 8.0.0 (HEOS::Water) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 500.0,
+    "p_ref": 101325.0,
+    "T_min": 400.0,
+    "T_max": 1000.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "polynomial",
+     "coefficients": [
+      1.786503226102287,
+      -0.005574947955264713,
+      8.415555305946481e-06,
+      -6.176752287340836e-09,
+      1.7696855755804592e-12
+     ],
+     "valid_min": 400.0,
+     "valid_max": 1000.0
+    },
+    "viscosity": {
+     "method": "sutherland",
+     "sutherland_coefficient": 2.5527566752405053e-06,
+     "sutherland_temperature": 1148.0634593996133,
+     "valid_min": 400.0,
+     "valid_max": 1000.0
+    },
+    "specific_heat": {
+     "method": "janaf",
+     "coefficients": [
+      8.396940602723138,
+      -0.024257420693054796,
+      5.048858588152757e-05,
+      -4.385633682455076e-08,
+      1.4204500109714277e-11,
+      -1791.4824270132228,
+      -42.49469406310795,
+      8.396940602723138,
+      -0.024257420693054796,
+      5.048858588152757e-05,
+      -4.385633682455076e-08,
+      1.4204500109714277e-11,
+      -1791.4824270132228,
+      -42.49469406310795
+     ],
+     "breakpoints": [
+      400.0,
+      700.0,
+      1000.0
+     ],
+     "formation_entropy": 0.0,
+     "valid_min": 400.0,
+     "valid_max": 1000.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      -0.00280785792944533,
+      5.663061788817721e-05,
+      4.2546159995867115e-08
+     ],
+     "valid_min": 400.0,
+     "valid_max": 1000.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.018015268
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Water",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Wagner-JPCRD-2002",
+     "viscosity": "Huber-JPCRD-2009",
+     "conductivity": "Huber-JPCRD-2012"
+    },
+    "fits": {
+     "density": {
+      "method": "polynomial",
+      "degree": 4,
+      "max_rel_err": 0.0034944184185399844,
+      "rms_rel_err": 0.000897979662923354
+     },
+     "viscosity": {
+      "method": "sutherland",
+      "degree": 0,
+      "max_rel_err": 0.006369626792902444,
+      "rms_rel_err": 0.0015246139911097311
+     },
+     "specific_heat": {
+      "method": "janaf",
+      "degree": 4,
+      "max_rel_err": 0.00565766396878979,
+      "rms_rel_err": 0.0011499607552017028
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 2,
+      "max_rel_err": 0.0066534839148865675,
+      "rms_rel_err": 0.002353279573853231
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Water) at 101325.0 Pa",
+    "T": [
+     400.0,
+     520.0,
+     640.0,
+     760.0,
+     880.0,
+     1000.0
+    ],
+    "density": [
+     0.5549439034904987,
+     0.4237138439917911,
+     0.34358886420021095,
+     0.28911452468011783,
+     0.2495984608761949,
+     0.2196038883370611
+    ],
+    "viscosity": [
+     1.3276566935068329e-05,
+     1.8119271397626737e-05,
+     2.3081649455565175e-05,
+     2.8026262463467436e-05,
+     3.2882419667086484e-05,
+     3.7615186052287907e-05
+    ],
+    "specific_heat": [
+     2009.2902478486988,
+     1988.403761198048,
+     2049.8482270740233,
+     2125.7320410064913,
+     2207.6840970899807,
+     2292.1071702559916
+    ],
+    "thermal_conductivity": [
+     0.02683028972628991,
+     0.03802503591558351,
+     0.05086491949557805,
+     0.06497698462775103,
+     0.08005699402016334,
+     0.09587793929575789
+    ]
+   }
+  },
+  {
+   "id": "air",
+   "name": "Air (dry)",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "N2/O2/Ar",
+   "cas": "132259-10-0",
+   "aliases": [
+    "air",
+    "dry air",
+    "R729"
+   ],
+   "description": "Air (dry), 101325 Pa, 200 K to 1000 K; fitted to CoolProp 8.0.0 (HEOS::Air) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 200.0,
+    "T_max": 1000.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "ideal_gas"
+    },
+    "viscosity": {
+     "method": "log_polynomial",
+     "coefficients": [
+      -17.291455966909943,
+      1.4659681417443535,
+      -0.060465990109324436
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "specific_heat": {
+     "method": "janaf",
+     "coefficients": [
+      3.4486509042094493,
+      4.496317280801868e-05,
+      5.125483276952452e-07,
+      0.0,
+      0.0,
+      -1034.741853078666,
+      -19.68520892246367,
+      3.4486509042094493,
+      4.496317280801868e-05,
+      5.125483276952452e-07,
+      0.0,
+      0.0,
+      -1034.741853078666,
+      -19.68520892246367
+     ],
+     "breakpoints": [
+      200.0,
+      600.0,
+      1000.0
+     ],
+     "formation_entropy": 0.0,
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      0.0004703810422299684,
+      9.987188456219578e-05,
+      -5.0852353869890556e-08,
+      1.8311196371437953e-11
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.02896546
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Air",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Lemmon-JPCRD-2000",
+     "viscosity": "Lemmon-IJT-2004",
+     "conductivity": "Lemmon-IJT-2004"
+    },
+    "fits": {
+     "density": {
+      "method": "ideal_gas",
+      "degree": 0,
+      "max_rel_err": 0.0023845857754639507,
+      "rms_rel_err": 0.0005421527428302926
+     },
+     "viscosity": {
+      "method": "log_polynomial",
+      "degree": 2,
+      "max_rel_err": 0.003530962353146784,
+      "rms_rel_err": 0.0011064375130125693
+     },
+     "specific_heat": {
+      "method": "janaf",
+      "degree": 2,
+      "max_rel_err": 0.008355068831441392,
+      "rms_rel_err": 0.0035009275680944097
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 3,
+      "max_rel_err": 0.0029398024708315357,
+      "rms_rel_err": 0.0008326059198063984
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Air) at 101325.0 Pa",
+    "T": [
+     200.0,
+     360.0,
+     520.0,
+     680.0,
+     840.0,
+     1000.0
+    ],
+    "density": [
+     1.7691705881570885,
+     0.9804682003317772,
+     0.678590411488169,
+     0.5189083689631615,
+     0.4200785182250378,
+     0.352877243550102
+    ],
+    "viscosity": [
+     1.3333543728957001e-05,
+     2.1315353641268303e-05,
+     2.7851163136340284e-05,
+     3.351291677298038e-05,
+     3.8598041601018554e-05,
+     4.327984201577027e-05
+    ],
+    "specific_heat": [
+     1006.8048548368755,
+     1010.0286041549156,
+     1033.7901206293907,
+     1070.1579989806326,
+     1107.8082225114108,
+     1140.9999893726915
+    ],
+    "thermal_conductivity": [
+     0.018502758914471045,
+     0.030705864968547054,
+     0.041188091974518455,
+     0.050628640998567315,
+     0.05938802975073927,
+     0.0676771187675638
+    ]
+   }
+  },
+  {
+   "id": "nitrogen",
+   "name": "Nitrogen",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "N2",
+   "cas": "7727-37-9",
+   "aliases": [
+    "nitrogen",
+    "N2",
+    "R728"
+   ],
+   "description": "Nitrogen, 101325 Pa, 200 K to 1000 K; fitted to CoolProp 8.0.0 (HEOS::Nitrogen) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 200.0,
+    "T_max": 1000.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "ideal_gas"
+    },
+    "viscosity": {
+     "method": "log_polynomial",
+     "coefficients": [
+      -17.21108546634813,
+      1.4326049028099699,
+      -0.058179569930843555
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "specific_heat": {
+     "method": "janaf",
+     "coefficients": [
+      3.5130281343502787,
+      -0.00021830595213247417,
+      6.69027419830867e-07,
+      0.0,
+      0.0,
+      -1043.616895862916,
+      -19.980465708895302,
+      3.5130281343502787,
+      -0.00021830595213247417,
+      6.69027419830867e-07,
+      0.0,
+      0.0,
+      -1043.616895862916,
+      -19.980465708895302
+     ],
+     "breakpoints": [
+      200.0,
+      600.0,
+      1000.0
+     ],
+     "formation_entropy": 0.0,
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      0.0005420343493251628,
+      9.884316360373015e-05,
+      -5.3151723188252146e-08,
+      1.926005789215466e-11
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.02801348
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Nitrogen",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Span-JPCRD-2000",
+     "viscosity": "Lemmon-IJT-2004",
+     "conductivity": "Lemmon-IJT-2004"
+    },
+    "fits": {
+     "density": {
+      "method": "ideal_gas",
+      "degree": 0,
+      "max_rel_err": 0.0021693576508332985,
+      "rms_rel_err": 0.0005274272432443881
+     },
+     "viscosity": {
+      "method": "log_polynomial",
+      "degree": 2,
+      "max_rel_err": 0.0035207655507394305,
+      "rms_rel_err": 0.0011192423543444335
+     },
+     "specific_heat": {
+      "method": "janaf",
+      "degree": 2,
+      "max_rel_err": 0.007758623186329213,
+      "rms_rel_err": 0.00308336369854287
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 3,
+      "max_rel_err": 0.003199284173828783,
+      "rms_rel_err": 0.0009056195465170452
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Nitrogen) at 101325.0 Pa",
+    "T": [
+     200.0,
+     360.0,
+     520.0,
+     680.0,
+     840.0,
+     1000.0
+    ],
+    "density": [
+     1.710655893504763,
+     0.9481446799138916,
+     0.6562422192228139,
+     0.5018276468095765,
+     0.40625509660710835,
+     0.3412675419750205
+    ],
+    "viscosity": [
+     1.2910995945690124e-05,
+     2.0545731029304738e-05,
+     2.6789893945308952e-05,
+     3.2199263932375515e-05,
+     3.7061468460297846e-05,
+     4.154317049812437e-05
+    ],
+    "specific_heat": [
+     1043.5023189932951,
+     1042.676490995106,
+     1059.6689755911075,
+     1093.3065115321915,
+     1131.8295553018597,
+     1167.3922630730085
+    ],
+    "thermal_conductivity": [
+     0.01828019506690629,
+     0.030154983357086093,
+     0.04023403282526588,
+     0.0492355235292997,
+     0.057538464827223954,
+     0.06536333163565669
+    ]
+   }
+  },
+  {
+   "id": "oxygen",
+   "name": "Oxygen",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "O2",
+   "cas": "7782-44-7",
+   "aliases": [
+    "oxygen",
+    "O2",
+    "R732"
+   ],
+   "description": "Oxygen, 101325 Pa, 200 K to 1000 K; fitted to CoolProp 8.0.0 (HEOS::Oxygen) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 200.0,
+    "T_max": 1000.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "ideal_gas"
+    },
+    "viscosity": {
+     "method": "log_polynomial",
+     "coefficients": [
+      -17.49329770836444,
+      1.552499554592888,
+      -0.06610613140848938
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "specific_heat": {
+     "method": "janaf",
+     "coefficients": [
+      3.5661732670994883,
+      -0.00096612306959317,
+      3.645927115932539e-06,
+      -2.0707081300747043e-09,
+      0.0,
+      -1048.4328945090251,
+      -20.174323248341345,
+      3.5661732670994883,
+      -0.00096612306959317,
+      3.645927115932539e-06,
+      -2.0707081300747043e-09,
+      0.0,
+      -1048.4328945090251,
+      -20.174323248341345
+     ],
+     "breakpoints": [
+      200.0,
+      600.0,
+      1000.0
+     ],
+     "formation_entropy": 0.0,
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      -0.00030802474733963164,
+      0.00010122258576060594,
+      -4.4561342938918957e-08,
+      1.5289894609177895e-11
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0319988
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Oxygen",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Schmidt-FPE-1985,Stewart-JPCRD-1991",
+     "viscosity": "Lemmon-IJT-2004",
+     "conductivity": "Lemmon-IJT-2004"
+    },
+    "fits": {
+     "density": {
+      "method": "ideal_gas",
+      "degree": 0,
+      "max_rel_err": 0.0030421889720373065,
+      "rms_rel_err": 0.0006550967316707646
+     },
+     "viscosity": {
+      "method": "log_polynomial",
+      "degree": 2,
+      "max_rel_err": 0.00305687034313537,
+      "rms_rel_err": 0.0009713995782139784
+     },
+     "specific_heat": {
+      "method": "janaf",
+      "degree": 3,
+      "max_rel_err": 0.005069108091381978,
+      "rms_rel_err": 0.0020174116292083154
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 3,
+      "max_rel_err": 0.0020445695266294354,
+      "rms_rel_err": 0.0006021931123878202
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Oxygen) at 101325.0 Pa",
+    "T": [
+     200.0,
+     360.0,
+     520.0,
+     680.0,
+     840.0,
+     1000.0
+    ],
+    "density": [
+     1.9557320067175228,
+     1.0834240773372368,
+     0.7497738242447589,
+     0.5733166054239693,
+     0.4641129083692672,
+     0.3898610768271958
+    ],
+    "viscosity": [
+     1.4717741024705664e-05,
+     2.3839160759558446e-05,
+     3.1363329004196206e-05,
+     3.788975617812106e-05,
+     4.374283183970224e-05,
+     4.911612003972584e-05
+    ],
+    "specific_heat": [
+     914.6417265902712,
+     931.3472755672215,
+     978.5141409760965,
+     1025.8215987356025,
+     1062.7299678453662,
+     1090.0416333082878
+    ],
+    "thermal_conductivity": [
+     0.018239066803916775,
+     0.031083190590891367,
+     0.042398263374541396,
+     0.052727432595895615,
+     0.06238041691056356,
+     0.07154577369359473
+    ]
+   }
+  },
+  {
+   "id": "carbon_dioxide",
+   "name": "Carbon dioxide",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "CO2",
+   "cas": "124-38-9",
+   "aliases": [
+    "carbon dioxide",
+    "CO2",
+    "R744"
+   ],
+   "description": "Carbon dioxide, 101325 Pa, 250 K to 1000 K; fitted to CoolProp 8.0.0 (HEOS::CarbonDioxide) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 250.0,
+    "T_max": 1000.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "ideal_gas"
+    },
+    "viscosity": {
+     "method": "sutherland",
+     "sutherland_coefficient": 1.659394286649448e-06,
+     "sutherland_temperature": 274.88807663813157,
+     "valid_min": 250.0,
+     "valid_max": 1000.0
+    },
+    "specific_heat": {
+     "method": "janaf",
+     "coefficients": [
+      2.8567469483213115,
+      0.006376870526989033,
+      -2.737686218940473e-06,
+      0.0,
+      0.0,
+      -1110.9838692773806,
+      -18.056174828723023,
+      2.8567469483213115,
+      0.006376870526989033,
+      -2.737686218940473e-06,
+      0.0,
+      0.0,
+      -1110.9838692773806,
+      -18.056174828723023
+     ],
+     "breakpoints": [
+      250.0,
+      625.0,
+      1000.0
+     ],
+     "formation_entropy": 0.0,
+     "valid_min": 250.0,
+     "valid_max": 1000.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      -0.004553098638558538,
+      6.240146365099314e-05,
+      3.6631695193396335e-08,
+      -2.3963395248894173e-11
+     ],
+     "valid_min": 250.0,
+     "valid_max": 1000.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0440098
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "CarbonDioxide",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Span-JPCRD-1996",
+     "viscosity": "Laesecke-JPCRD-2017-CO2",
+     "conductivity": "Huber-JPCRD-2016-CO2"
+    },
+    "fits": {
+     "density": {
+      "method": "ideal_gas",
+      "degree": 0,
+      "max_rel_err": 0.009032973500126312,
+      "rms_rel_err": 0.002214396191638924
+     },
+     "viscosity": {
+      "method": "sutherland",
+      "degree": 0,
+      "max_rel_err": 0.0067165474454235164,
+      "rms_rel_err": 0.0012386542715913636
+     },
+     "specific_heat": {
+      "method": "janaf",
+      "degree": 2,
+      "max_rel_err": 0.0057446543376847075,
+      "rms_rel_err": 0.0025029309145908336
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 3,
+      "max_rel_err": 0.006871567635139362,
+      "rms_rel_err": 0.0018211987384085142
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::CarbonDioxide) at 101325.0 Pa",
+    "T": [
+     250.0,
+     400.0,
+     550.0,
+     700.0,
+     850.0,
+     1000.0
+    ],
+    "density": [
+     2.1648739253244003,
+     1.3432834679863863,
+     0.9755932629179271,
+     0.7662071406715824,
+     0.6308893875702962,
+     0.536219030187406
+    ],
+    "viscosity": [
+     1.2581131322387308e-05,
+     1.9635186634826667e-05,
+     2.5939278081910726e-05,
+     3.153285487008706e-05,
+     3.6569006223750114e-05,
+     4.1182309825685174e-05
+    ],
+    "specific_heat": [
+     805.1927788394298,
+     941.7672551769016,
+     1047.2629624949593,
+     1126.8749632744962,
+     1187.7072162957454,
+     1234.3214487083696
+    ],
+    "thermal_conductivity": [
+     0.013052007928266506,
+     0.024718384888128244,
+     0.03693879853591927,
+     0.04883337325810562,
+     0.06013079018958824,
+     0.0707799043505145
+    ]
+   }
+  },
+  {
+   "id": "argon",
+   "name": "Argon",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "Ar",
+   "cas": "7440-37-1",
+   "aliases": [
+    "argon",
+    "Ar",
+    "R740"
+   ],
+   "description": "Argon, 101325 Pa, 200 K to 1000 K; fitted to CoolProp 8.0.0 (HEOS::Argon) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 200.0,
+    "T_max": 1000.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "ideal_gas"
+    },
+    "viscosity": {
+     "method": "log_polynomial",
+     "coefficients": [
+      -17.786968740102022,
+      1.6573310644046861,
+      -0.07248820631230336
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 521.5389966139983,
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      0.00013574469114547433,
+      6.945794248185684e-05,
+      -3.8992323759053153e-08,
+      1.3055730815501556e-11
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.039948
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Argon",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Tegeler-JPCRD-1999",
+     "viscosity": "Lemmon-IJT-2004",
+     "conductivity": "Lemmon-IJT-2004"
+    },
+    "fits": {
+     "density": {
+      "method": "ideal_gas",
+      "degree": 0,
+      "max_rel_err": 0.0029193874496199323,
+      "rms_rel_err": 0.0006321655543715088
+     },
+     "viscosity": {
+      "method": "log_polynomial",
+      "degree": 2,
+      "max_rel_err": 0.0022372815324601105,
+      "rms_rel_err": 0.0007561304470276526
+     },
+     "specific_heat": {
+      "method": "constant",
+      "degree": 0,
+      "max_rel_err": 0.00409811719697316,
+      "rms_rel_err": 0.0018269918969559672
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 3,
+      "max_rel_err": 0.0025551899645408775,
+      "rms_rel_err": 0.0007599151925796225
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Argon) at 101325.0 Pa",
+    "T": [
+     200.0,
+     360.0,
+     520.0,
+     680.0,
+     840.0,
+     1000.0
+    ],
+    "density": [
+     2.4412777956410503,
+     1.3525470454784798,
+     0.9360271179288872,
+     0.715735601621629,
+     0.5794037483130174,
+     0.4867065581433252
+    ],
+    "viscosity": [
+     1.5998132055351105e-05,
+     2.639850596725599e-05,
+     3.509427256662924e-05,
+     4.26691869695113e-05,
+     4.9462835666278074e-05,
+     5.568580633472955e-05
+    ],
+    "specific_heat": [
+     523.6851196084647,
+     521.1111474689186,
+     520.6629419988652,
+     520.5111537851762,
+     520.4426214449873,
+     520.406205840729
+    ],
+    "thermal_conductivity": [
+     0.012540043889377689,
+     0.020708234503066678,
+     0.027521753611187926,
+     0.03344172465994527,
+     0.03873880873728615,
+     0.04358128643331923
+    ]
+   }
+  },
+  {
+   "id": "helium",
+   "name": "Helium",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "He",
+   "cas": "7440-59-7",
+   "aliases": [
+    "helium",
+    "He",
+    "R704"
+   ],
+   "description": "Helium, 101325 Pa, 200 K to 1000 K; fitted to CoolProp 8.0.0 (HEOS::Helium) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 200.0,
+    "T_max": 1000.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "ideal_gas"
+    },
+    "viscosity": {
+     "method": "log_polynomial",
+     "coefficients": [
+      -14.37321556939758,
+      0.5603112579521462,
+      0.01089138374102456
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 5193.196392326043,
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      0.032847685686293066,
+      0.00046657053830647353,
+      -2.1097891919391816e-07,
+      7.269122140755907e-11
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.004002602
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Helium",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "OrtizVega-JPCRD-2019",
+     "viscosity": "Arp-NIST-1998",
+     "conductivity": "Hands-CRYO-1981"
+    },
+    "fits": {
+     "density": {
+      "method": "ideal_gas",
+      "degree": 0,
+      "max_rel_err": 0.0007417650322878037,
+      "rms_rel_err": 0.00031373823391182896
+     },
+     "viscosity": {
+      "method": "log_polynomial",
+      "degree": 2,
+      "max_rel_err": 0.0007492406912104299,
+      "rms_rel_err": 0.00021006024837692887
+     },
+     "specific_heat": {
+      "method": "constant",
+      "degree": 0,
+      "max_rel_err": 4.7333716181342355e-05,
+      "rms_rel_err": 1.7633275408948518e-05
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 3,
+      "max_rel_err": 0.002720859932385047,
+      "rms_rel_err": 0.0007087941110475225
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Helium) at 101325.0 Pa",
+    "T": [
+     200.0,
+     360.0,
+     520.0,
+     680.0,
+     840.0,
+     1000.0
+    ],
+    "density": [
+     0.2437096997795934,
+     0.1354416521395674,
+     0.09378000919985151,
+     0.07171914439092536,
+     0.05806079690132036,
+     0.04877242380129576
+    ],
+    "viscosity": [
+     1.5142360102385926e-05,
+     2.2587806029064378e-05,
+     2.9149264661050882e-05,
+     3.51705084859312e-05,
+     4.08104733451656e-05,
+     4.6159780629922184e-05
+    ],
+    "specific_heat": [
+     5193.442217245958,
+     5193.147182078439,
+     5193.105308954086,
+     5193.1001279909015,
+     5193.102915849903,
+     5193.107428187461
+    ],
+    "thermal_conductivity": [
+     0.11798315072359115,
+     0.17695205640128533,
+     0.2284528135566831,
+     0.27542280271341013,
+     0.31921664572321173,
+     0.36060295071694914
+    ]
+   }
+  },
+  {
+   "id": "hydrogen",
+   "name": "Hydrogen",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "H2",
+   "cas": "1333-74-0",
+   "aliases": [
+    "hydrogen",
+    "H2",
+    "R702",
+    "normal hydrogen"
+   ],
+   "description": "Hydrogen, 101325 Pa, 200 K to 1000 K; fitted to CoolProp 8.0.0 (HEOS::Hydrogen) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 200.0,
+    "T_max": 1000.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "ideal_gas"
+    },
+    "viscosity": {
+     "method": "log_polynomial",
+     "coefficients": [
+      -15.381106865063332,
+      0.6252154214014707,
+      0.005822419464825144
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "specific_heat": {
+     "method": "janaf",
+     "coefficients": [
+      2.410000817614664,
+      0.007314751750136353,
+      -1.7513101026470975e-05,
+      1.7964190274451482e-08,
+      -6.5537595431251184e-12,
+      -921.338797366838,
+      -15.27946429601654,
+      2.410000817614664,
+      0.007314751750136353,
+      -1.7513101026470975e-05,
+      1.7964190274451482e-08,
+      -6.5537595431251184e-12,
+      -921.338797366838,
+      -15.27946429601654
+     ],
+     "breakpoints": [
+      200.0,
+      600.0,
+      1000.0
+     ],
+     "formation_entropy": 0.0,
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      -0.017727141210867714,
+      0.0009607477091242799,
+      -1.2409884092634347e-06,
+      1.142591446579071e-09,
+      -3.8496227835824374e-13
+     ],
+     "valid_min": 200.0,
+     "valid_max": 1000.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.00201588
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Hydrogen",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Leachman-JPCRD-2009",
+     "viscosity": "Muzny-JCED-2013",
+     "conductivity": "Assael-JPCRD-2011-Hydrogen"
+    },
+    "fits": {
+     "density": {
+      "method": "ideal_gas",
+      "degree": 0,
+      "max_rel_err": 0.0006828981984169813,
+      "rms_rel_err": 0.0004050531003135446
+     },
+     "viscosity": {
+      "method": "log_polynomial",
+      "degree": 2,
+      "max_rel_err": 0.0011999415392856313,
+      "rms_rel_err": 0.00025995468148587046
+     },
+     "specific_heat": {
+      "method": "janaf",
+      "degree": 4,
+      "max_rel_err": 0.007070642341257869,
+      "rms_rel_err": 0.0017780647389210793
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 4,
+      "max_rel_err": 0.002275298308927819,
+      "rms_rel_err": 0.0006851728428788717
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Hydrogen) at 101325.0 Pa",
+    "T": [
+     200.0,
+     360.0,
+     520.0,
+     680.0,
+     840.0,
+     1000.0
+    ],
+    "density": [
+     0.1227497539133901,
+     0.06820506731186815,
+     0.04722545285845328,
+     0.03611675974924733,
+     0.029239085036389504,
+     0.024561837963520933
+    ],
+    "viscosity": [
+     6.747972752662477e-06,
+     1.0140527028287249e-05,
+     1.3091280021178753e-05,
+     1.5793131861509558e-05,
+     1.8324256302474323e-05,
+     2.0725536710106445e-05
+    ],
+    "specific_heat": [
+     13538.39093772409,
+     14444.207084306987,
+     14518.528147827421,
+     14598.556480864896,
+     14756.799330010423,
+     14991.855835683164
+    ],
+    "thermal_conductivity": [
+     0.13300503005075687,
+     0.21407841988653767,
+     0.278737959390464,
+     0.3389522404432719,
+     0.39897451286866,
+     0.46038730633793423
+    ]
+   }
+  },
+  {
+   "id": "methane",
+   "name": "Methane",
+   "kind": "fluid",
+   "phase": "gas",
+   "formula": "CH4",
+   "cas": "74-82-8",
+   "aliases": [
+    "methane",
+    "CH4",
+    "R50"
+   ],
+   "description": "Methane, 101325 Pa, 200 K to 600 K; fitted to CoolProp 8.0.0 (HEOS::Methane) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 200.0,
+    "T_max": 600.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "ideal_gas"
+    },
+    "viscosity": {
+     "method": "sutherland",
+     "sutherland_coefficient": 1.0110677135145795e-06,
+     "sutherland_temperature": 165.97560655058433,
+     "valid_min": 200.0,
+     "valid_max": 600.0
+    },
+    "specific_heat": {
+     "method": "janaf",
+     "coefficients": [
+      5.137777633001662,
+      -0.012307070529348044,
+      4.007212870038277e-05,
+      -2.721159602773989e-08,
+      0.0,
+      -1285.0810155832182,
+      -27.144304706722302,
+      5.137777633001662,
+      -0.012307070529348044,
+      4.007212870038277e-05,
+      -2.721159602773989e-08,
+      0.0,
+      -1285.0810155832182,
+      -27.144304706722302
+     ],
+     "breakpoints": [
+      200.0,
+      400.0,
+      600.0
+     ],
+     "formation_entropy": 0.0,
+     "valid_min": 200.0,
+     "valid_max": 600.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      0.004929967330284078,
+      5.602059568371303e-05,
+      1.4150366869786267e-07
+     ],
+     "valid_min": 200.0,
+     "valid_max": 600.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0160428
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "HEOS",
+    "fluid": "Methane",
+    "phase": "gas",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "eos": "Setzmann-JPCRD-1991",
+     "viscosity": "QuinonesCisneros-JPCB-2006",
+     "conductivity": "Friend-JPCRD-1989"
+    },
+    "fits": {
+     "density": {
+      "method": "ideal_gas",
+      "degree": 0,
+      "max_rel_err": 0.006391528746154551,
+      "rms_rel_err": 0.001953233949985016
+     },
+     "viscosity": {
+      "method": "sutherland",
+      "degree": 0,
+      "max_rel_err": 0.005532948590132597,
+      "rms_rel_err": 0.0025133546931954214
+     },
+     "specific_heat": {
+      "method": "janaf",
+      "degree": 3,
+      "max_rel_err": 0.0021500150032862974,
+      "rms_rel_err": 0.0006981512192302591
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 2,
+      "max_rel_err": 0.006167865652441753,
+      "rms_rel_err": 0.0021679061363372738
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (HEOS::Methane) at 101325.0 Pa",
+    "T": [
+     200.0,
+     280.0,
+     360.0,
+     440.0,
+     520.0,
+     600.0
+    ],
+    "density": [
+     0.9838237795687883,
+     0.6997697121062936,
+     0.5435147435589404,
+     0.44443933258352897,
+     0.3759623625283847,
+     0.32578927388653905
+    ],
+    "viscosity": [
+     7.8574693898582e-06,
+     1.0613292280934493e-05,
+     1.3091816244944337e-05,
+     1.5371003239555162e-05,
+     1.7496399956983222e-05,
+     1.949795241066514e-05
+    ],
+    "specific_heat": [
+     2106.0676091748905,
+     2193.6967913952076,
+     2401.1295302366175,
+     2677.172270423071,
+     2975.692352811693,
+     3273.0539449618354
+    ],
+    "thermal_conductivity": [
+     0.021783129429863064,
+     0.031670272449540286,
+     0.043366461709351885,
+     0.05711071242859021,
+     0.07245979789926202,
+     0.08893510568807271
+    ]
+   }
+  },
+  {
+   "id": "ethylene_glycol_50",
+   "name": "Ethylene glycol and water, 50 % by mass",
+   "kind": "fluid",
+   "phase": "liquid",
+   "formula": "C2H6O2 + H2O",
+   "cas": "107-21-1",
+   "aliases": [
+    "MEG",
+    "ethylene glycol",
+    "glycol",
+    "MEG 50%",
+    "coolant"
+   ],
+   "description": "Ethylene glycol and water, 50 % by mass, 101325 Pa, 250 K to 360 K; fitted to CoolProp 8.0.0 (INCOMP::MEG[0.5]) at 101325.0 Pa.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 250.0,
+    "T_max": 360.0,
+    "tolerance": 0.01,
+    "max_degree": 4
+   },
+   "properties": {
+    "density": {
+     "method": "rational_polynomial",
+     "coefficients": [
+      0.0009809412223094841,
+      -7.489679677560204e-07,
+      2.068130881475507e-09,
+      0.0,
+      0.0
+     ],
+     "valid_min": 250.0,
+     "valid_max": 360.0
+    },
+    "viscosity": {
+     "method": "log_polynomial",
+     "coefficients": [
+      -41958.48748000929,
+      30224.643222927472,
+      -8139.501444350195,
+      971.5546422679342,
+      -43.388093548457675
+     ],
+     "valid_min": 250.0,
+     "valid_max": 360.0
+    },
+    "specific_heat": {
+     "method": "polynomial",
+     "coefficients": [
+      1849.4117392739001,
+      4.954480209697653
+     ],
+     "valid_min": 250.0,
+     "valid_max": 360.0
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      0.2096971018412191,
+      0.0006121988017377809
+     ],
+     "valid_min": 250.0,
+     "valid_max": 360.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0
+    },
+    "formation_enthalpy": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "generated": {
+    "provider": "coolprop_incomp",
+    "library": "CoolProp",
+    "version": "8.0.0",
+    "revision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+    "backend": "INCOMP",
+    "fluid": "MEG[0.5]",
+    "phase": "liquid",
+    "p": 101325.0,
+    "points": 101,
+    "verification_points": 201,
+    "date": "2026-10-03",
+    "references": {
+     "data": "CoolProp INCOMP MEG (aqueous ethylene glycol, mass-based)"
+    },
+    "fits": {
+     "density": {
+      "method": "rational_polynomial",
+      "degree": 2,
+      "max_rel_err": 0.00028234416749945877,
+      "rms_rel_err": 0.00011025598918639505
+     },
+     "viscosity": {
+      "method": "log_polynomial",
+      "degree": 4,
+      "max_rel_err": 0.0009323662323696156,
+      "rms_rel_err": 0.00031905328316622373
+     },
+     "specific_heat": {
+      "method": "polynomial",
+      "degree": 1,
+      "max_rel_err": 0.0076698291242937675,
+      "rms_rel_err": 0.003229847523745946
+     },
+     "thermal_conductivity": {
+      "method": "polynomial",
+      "degree": 1,
+      "max_rel_err": 0.0009872247505339881,
+      "rms_rel_err": 0.00030440802599025735
+     }
+    }
+   },
+   "check": {
+    "source": "CoolProp 8.0.0 (INCOMP::MEG[0.5]) at 101325.0 Pa",
+    "T": [
+     250.0,
+     272.0,
+     294.0,
+     316.0,
+     338.0,
+     360.0
+    ],
+    "density": [
+     1083.1729639974112,
+     1075.11967649748,
+     1064.47457438929,
+     1051.676979407526,
+     1037.1662132868732,
+     1021.3815977620164
+    ],
+    "viscosity": [
+     0.026825422919420135,
+     0.00834777816803991,
+     0.003592770806848261,
+     0.0019659343328426743,
+     0.0012572914749940745,
+     0.0008639268929139089
+    ],
+    "specific_heat": [
+     3068.221214288898,
+     3196.377902188777,
+     3316.5057524742915,
+     3426.2703401195263,
+     3523.337240098567,
+     3605.3720273854997
+    ],
+    "thermal_conductivity": [
+     0.3628718514608045,
+     0.37611286153272333,
+     0.38967512889485784,
+     0.40329615557924126,
+     0.41671344361790696,
+     0.4296644950428882
+    ]
+   }
+  },
+  {
+   "id": "aluminium",
+   "name": "Aluminium (pure)",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "Al",
+   "cas": "7429-90-5",
+   "aliases": [
+    "aluminum",
+    "Al",
+    "pure aluminium"
+   ],
+   "description": "High-purity aluminium near room temperature; constant properties at 300 K.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 273.15,
+    "T_max": 373.15
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 2699.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 898.6515016504767
+    },
+    "thermal_conductivity": {
+     "method": "constant",
+     "value": 237.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0269815384
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 2.699,
+      "unit": "g/cm**3",
+      "T": 293.15,
+      "source": "NIST Standard Reference Database 126 (J. H. Hubbell and S. M. Seltzer), X-Ray Mass Attenuation Coefficients, Table 1: material constants for the elements",
+      "url": "https://physics.nist.gov/PhysRefData/XrayMassCoef/tab1.html",
+      "note": "room temperature"
+     },
+     "secondary": {
+      "value": 2.699,
+      "unit": "g/cm**3",
+      "T": 293.15,
+      "source": "Wikipedia, Aluminium (element infobox)",
+      "url": "https://en.wikipedia.org/wiki/Aluminium",
+      "accessed": "2026-10-03"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 24.247,
+      "unit": "J/(mol*K)",
+      "T": 300.0,
+      "source": "NIST-JANAF Thermochemical Tables (M. W. Chase, NIST SRD 13), Aluminum (Al), Al1(ref)",
+      "url": "https://janaf.nist.gov/tables/Al-001.txt",
+      "molar_mass": 0.0269815384
+     },
+     "secondary": {
+      "value": 24.2,
+      "unit": "J/(mol*K)",
+      "T": 298.15,
+      "source": "Wikipedia, Aluminium (element infobox)",
+      "url": "https://en.wikipedia.org/wiki/Aluminium",
+      "accessed": "2026-10-03",
+      "molar_mass": 0.0269815384
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 2.37,
+      "unit": "W/(cm*K)",
+      "T": 300.0,
+      "source": "C. Y. Ho, R. W. Powell and P. E. Liley, Thermal Conductivity of the Elements, J. Phys. Chem. Ref. Data 1, 279 (1972), recommended values (NIST-hosted reprint)",
+      "url": "https://srd.nist.gov/JPCRD/jpcrd7.pdf",
+      "note": "well-annealed high-purity aluminium"
+     },
+     "secondary": {
+      "value": 237.0,
+      "unit": "W/(m*K)",
+      "T": 293.15,
+      "source": "Wikipedia, Aluminium (element infobox)",
+      "url": "https://en.wikipedia.org/wiki/Aluminium",
+      "accessed": "2026-10-03"
+     }
+    },
+    "molar_mass": {
+     "primary": {
+      "value": 26.9815384,
+      "unit": "g/mol",
+      "T": 293.15,
+      "source": "IUPAC Commission on Isotopic Abundances and Atomic Weights, standard atomic weights (2021)",
+      "url": "https://www.ciaaw.org/atomic-weights.htm"
+     }
+    }
+   }
+  },
+  {
+   "id": "copper",
+   "name": "Copper (pure)",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "Cu",
+   "cas": "7440-50-8",
+   "aliases": [
+    "copper",
+    "Cu",
+    "OFHC copper",
+    "pure copper"
+   ],
+   "description": "High-purity copper near room temperature; constant properties at 300 K.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 273.15,
+    "T_max": 373.15
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 8960.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 384.94948541214234
+    },
+    "thermal_conductivity": {
+     "method": "constant",
+     "value": 401.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.063546
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 8.96,
+      "unit": "g/cm**3",
+      "T": 293.15,
+      "source": "NIST Standard Reference Database 126 (J. H. Hubbell and S. M. Seltzer), X-Ray Mass Attenuation Coefficients, Table 1: material constants for the elements",
+      "url": "https://physics.nist.gov/PhysRefData/XrayMassCoef/tab1.html",
+      "note": "room temperature"
+     },
+     "secondary": {
+      "value": 8.935,
+      "unit": "g/cm**3",
+      "T": 293.15,
+      "source": "Wikipedia, Copper (element infobox)",
+      "url": "https://en.wikipedia.org/wiki/Copper",
+      "accessed": "2026-10-03"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 24.462,
+      "unit": "J/(mol*K)",
+      "T": 300.0,
+      "source": "NIST-JANAF Thermochemical Tables (M. W. Chase, NIST SRD 13), Copper (Cu), Cu1(ref)",
+      "url": "https://janaf.nist.gov/tables/Cu-001.txt",
+      "molar_mass": 0.063546
+     },
+     "secondary": {
+      "value": 389.4,
+      "unit": "J/(kg*K)",
+      "T": 300.0,
+      "source": "NIST Cryogenic Material Properties, OFHC copper, specific heat fit (log10 polynomial, 4 K to 300 K) evaluated at 300 K",
+      "url": "https://trc.nist.gov/cryogenics/materials/OFHC%20Copper/OFHC_Copper_rev1.htm",
+      "accessed": "2026-10-03"
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 4.01,
+      "unit": "W/(cm*K)",
+      "T": 300.0,
+      "source": "C. Y. Ho, R. W. Powell and P. E. Liley, Thermal Conductivity of the Elements, J. Phys. Chem. Ref. Data 1, 279 (1972), recommended values (NIST-hosted reprint)",
+      "url": "https://srd.nist.gov/JPCRD/jpcrd7.pdf",
+      "note": "well-annealed high-purity copper"
+     },
+     "secondary": {
+      "value": 396.3,
+      "unit": "W/(m*K)",
+      "T": 300.0,
+      "source": "NIST Cryogenic Material Properties, OFHC copper, thermal conductivity fit for RRR = 100 evaluated at 300 K",
+      "url": "https://trc.nist.gov/cryogenics/materials/OFHC%20Copper/OFHC_Copper_rev1.htm",
+      "accessed": "2026-10-03"
+     }
+    },
+    "molar_mass": {
+     "primary": {
+      "value": 63.546,
+      "unit": "g/mol",
+      "T": 293.15,
+      "source": "IUPAC Commission on Isotopic Abundances and Atomic Weights, standard atomic weights (2021)",
+      "url": "https://www.ciaaw.org/atomic-weights.htm"
+     }
+    }
+   }
+  },
+  {
+   "id": "titanium",
+   "name": "Titanium (pure)",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "Ti",
+   "cas": "7440-32-6",
+   "aliases": [
+    "titanium",
+    "Ti",
+    "commercially pure titanium"
+   ],
+   "description": "Polycrystalline high-purity titanium near room temperature; constant properties at 300 K.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 273.15,
+    "T_max": 373.15
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 4540.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 528.0464620719912
+    },
+    "thermal_conductivity": {
+     "method": "constant",
+     "value": 21.9
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.047867
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 4.54,
+      "unit": "g/cm**3",
+      "T": 293.15,
+      "source": "NIST Standard Reference Database 126 (J. H. Hubbell and S. M. Seltzer), X-Ray Mass Attenuation Coefficients, Table 1: material constants for the elements",
+      "url": "https://physics.nist.gov/PhysRefData/XrayMassCoef/tab1.html",
+      "note": "room temperature"
+     },
+     "secondary": {
+      "value": 4.502,
+      "unit": "g/cm**3",
+      "T": 293.15,
+      "source": "Wikipedia, Titanium (element infobox)",
+      "url": "https://en.wikipedia.org/wiki/Titanium",
+      "accessed": "2026-10-03"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 25.276,
+      "unit": "J/(mol*K)",
+      "T": 300.0,
+      "source": "NIST-JANAF Thermochemical Tables (M. W. Chase, NIST SRD 13), Titanium (Ti), Ti1(ref)",
+      "url": "https://janaf.nist.gov/tables/Ti-001.txt",
+      "molar_mass": 0.047867
+     },
+     "secondary": {
+      "value": 25.06,
+      "unit": "J/(mol*K)",
+      "T": 298.15,
+      "source": "Wikipedia, Titanium (element infobox)",
+      "url": "https://en.wikipedia.org/wiki/Titanium",
+      "accessed": "2026-10-03",
+      "molar_mass": 0.047867
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 0.219,
+      "unit": "W/(cm*K)",
+      "T": 300.0,
+      "source": "C. Y. Ho, R. W. Powell and P. E. Liley, Thermal Conductivity of the Elements, J. Phys. Chem. Ref. Data 1, 279 (1972), recommended values (NIST-hosted reprint)",
+      "url": "https://srd.nist.gov/JPCRD/jpcrd7.pdf",
+      "note": "polycrystalline titanium"
+     },
+     "secondary": {
+      "value": 21.9,
+      "unit": "W/(m*K)",
+      "T": 293.15,
+      "source": "Wikipedia, Titanium (element infobox)",
+      "url": "https://en.wikipedia.org/wiki/Titanium",
+      "accessed": "2026-10-03"
+     }
+    },
+    "molar_mass": {
+     "primary": {
+      "value": 47.867,
+      "unit": "g/mol",
+      "T": 293.15,
+      "source": "IUPAC Commission on Isotopic Abundances and Atomic Weights, standard atomic weights (2021)",
+      "url": "https://www.ciaaw.org/atomic-weights.htm"
+     }
+    }
+   }
+  },
+  {
+   "id": "carbon_steel",
+   "name": "Carbon steel (structural)",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "Fe-C",
+   "cas": "",
+   "aliases": [
+    "steel",
+    "carbon steel",
+    "mild steel",
+    "structural steel",
+    "S235",
+    "S355"
+   ],
+   "description": "Structural carbon steel with the temperature-dependent conductivity and specific heat of EN 1993-1-2 as given in NIST TN 1681; density constant.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 293.15,
+    "T_max": 873.15
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 7850.0
+    },
+    "specific_heat": {
+     "method": "polynomial",
+     "coefficients": [
+      42.51904984745755,
+      2.19315574385,
+      -0.0035091789999999994,
+      2.22e-06
+     ],
+     "valid_min": 293.15,
+     "valid_max": 873.15
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      63.095895,
+      -0.0333
+     ],
+     "valid_min": 293.15,
+     "valid_max": 1073.15
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 7850.0,
+      "unit": "kg/m**3",
+      "T": 293.15,
+      "source": "L. T. Phan, J. L. Gross et al., Best Practice Guidelines for Structural Fire Resistance Design of Concrete and Steel Buildings, NIST Technical Note 1681 (2010), section 5.2.1.1 (after EN 1993-1-2)",
+      "url": "https://nvlpubs.nist.gov/nistpubs/TechnicalNotes/NIST.TN.1681.pdf",
+      "note": "constant for heat transfer calculations"
+     },
+     "secondary": {
+      "value": 7850.0,
+      "unit": "kg/m**3",
+      "T": 293.15,
+      "source": "B. Zhao, Fire resistance assessment of steel structures, JRC Eurocodes workshop Structural Fire Design of Buildings according to the Eurocodes (Brussels 2012), slide 17",
+      "url": "https://eurocodes.jrc.ec.europa.eu/sites/default/files/2022-06/04-ZHAO-EC-FireDesign-WS.pdf",
+      "accessed": "2026-10-03"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 439.80176,
+      "unit": "J/(kg*K)",
+      "T": 293.15,
+      "source": "L. T. Phan, J. L. Gross et al., Best Practice Guidelines for Structural Fire Resistance Design of Concrete and Steel Buildings, NIST Technical Note 1681 (2010), section 5.2.1.1 (after EN 1993-1-2)",
+      "url": "https://nvlpubs.nist.gov/nistpubs/TechnicalNotes/NIST.TN.1681.pdf",
+      "equation": "c = 425 + 7.73e-1 t - 1.69e-3 t^2 + 2.22e-6 t^3 J/(kg K), t in degC, 20 to 600 degC (eq. 5.6a)"
+     },
+     "secondary": {
+      "value": 439.80176,
+      "unit": "J/(kg*K)",
+      "T": 293.15,
+      "source": "Dlubal Software knowledge base 001496, Structural Fire Design According to DIN EN 1993-1-2 (Thermal Material Properties)",
+      "url": "https://www.dlubal.com/en/support-and-learning/support/knowledge-base/001496",
+      "accessed": "2026-10-03",
+      "equation": "c_a = 425 + 7.73e-1 t - 1.69e-3 t^2 + 2.22e-6 t^3, 20 to 600 degC"
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 53.334,
+      "unit": "W/(m*K)",
+      "T": 293.15,
+      "source": "L. T. Phan, J. L. Gross et al., Best Practice Guidelines for Structural Fire Resistance Design of Concrete and Steel Buildings, NIST Technical Note 1681 (2010), section 5.2.1.1 (after EN 1993-1-2)",
+      "url": "https://nvlpubs.nist.gov/nistpubs/TechnicalNotes/NIST.TN.1681.pdf",
+      "equation": "k = 54 - 3.33e-2 t W/(m K), t in degC, 20 to 800 degC (eq. 5.7a)"
+     },
+     "secondary": {
+      "value": 53.34,
+      "unit": "W/(m*K)",
+      "T": 293.15,
+      "source": "Dlubal Software knowledge base 001496, Structural Fire Design According to DIN EN 1993-1-2 (Thermal Material Properties)",
+      "url": "https://www.dlubal.com/en/support-and-learning/support/knowledge-base/001496",
+      "accessed": "2026-10-03",
+      "equation": "lambda_a = 54 - 3.3e-2 t, 20 to 800 degC"
+     }
+    }
+   }
+  },
+  {
+   "id": "stainless_304",
+   "name": "Stainless steel 304 / 304L",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "Fe-Cr-Ni",
+   "cas": "",
+   "aliases": [
+    "304",
+    "304L",
+    "1.4301",
+    "1.4307",
+    "AISI 304",
+    "UNS S30400",
+    "18/8 stainless"
+   ],
+   "description": "Austenitic stainless steel 304L near room temperature; constant properties at 300 K.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 273.15,
+    "T_max": 373.15
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 7894.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 510.02959999999996
+    },
+    "thermal_conductivity": {
+     "method": "constant",
+     "value": 15.31
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 7.894,
+      "unit": "g/cm**3",
+      "T": 300.0,
+      "source": "C. S. Kim, Thermophysical Properties of Stainless Steels, ANL-75-55, Argonne National Laboratory (1975), OSTI 4152287",
+      "url": "https://www.osti.gov/servlets/purl/4152287",
+      "note": "Table 7, type 304L"
+     },
+     "secondary": {
+      "value": 7.9,
+      "unit": "kg/dm**3",
+      "T": 293.15,
+      "source": "Euro Inox, Stainless Steel: Tables of Technical Properties, 2nd edition (2007), physical properties at 20 C",
+      "url": "https://filame.com/pdfs/Tables_TechnicalProperties_EN.pdf",
+      "accessed": "2026-10-03",
+      "note": "EN 1.4301 (304)"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 0.1219,
+      "unit": "cal/(g*K)",
+      "T": 300.0,
+      "source": "C. S. Kim, Thermophysical Properties of Stainless Steels, ANL-75-55, Argonne National Laboratory (1975), OSTI 4152287",
+      "url": "https://www.osti.gov/servlets/purl/4152287",
+      "note": "Table 2, type 304L; thermochemical calorie"
+     },
+     "secondary": {
+      "value": 500.0,
+      "unit": "J/(kg*K)",
+      "T": 293.15,
+      "source": "Euro Inox, Stainless Steel: Tables of Technical Properties, 2nd edition (2007), physical properties at 20 C",
+      "url": "https://filame.com/pdfs/Tables_TechnicalProperties_EN.pdf",
+      "accessed": "2026-10-03",
+      "note": "EN 1.4301 (304)"
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 15.31,
+      "unit": "W/(m*K)",
+      "T": 300.0,
+      "source": "NIST Cryogenic Material Properties, 304 stainless steel, thermal conductivity fit (log10 polynomial, 1 K to 300 K) evaluated at 300 K",
+      "url": "https://trc.nist.gov/cryogenics/materials/304Stainless/304Stainless_rev.htm",
+      "accessed": "2026-10-03"
+     },
+     "secondary": {
+      "value": 15.0,
+      "unit": "W/(m*K)",
+      "T": 293.15,
+      "source": "Euro Inox, Stainless Steel: Tables of Technical Properties, 2nd edition (2007), physical properties at 20 C",
+      "url": "https://filame.com/pdfs/Tables_TechnicalProperties_EN.pdf",
+      "accessed": "2026-10-03",
+      "note": "EN 1.4301 (304)"
+     }
+    }
+   }
+  },
+  {
+   "id": "stainless_316",
+   "name": "Stainless steel 316 / 316L",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "Fe-Cr-Ni-Mo",
+   "cas": "",
+   "aliases": [
+    "316",
+    "316L",
+    "1.4401",
+    "1.4404",
+    "AISI 316",
+    "UNS S31600"
+   ],
+   "description": "Austenitic stainless steel 316L near room temperature; constant properties at 300 K.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 273.15,
+    "T_max": 373.15
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 7954.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 498.73280000000005
+    },
+    "thermal_conductivity": {
+     "method": "constant",
+     "value": 15.31
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 7.954,
+      "unit": "g/cm**3",
+      "T": 300.0,
+      "source": "C. S. Kim, Thermophysical Properties of Stainless Steels, ANL-75-55, Argonne National Laboratory (1975), OSTI 4152287",
+      "url": "https://www.osti.gov/servlets/purl/4152287",
+      "note": "Table 7, type 316L"
+     },
+     "secondary": {
+      "value": 8.0,
+      "unit": "kg/dm**3",
+      "T": 293.15,
+      "source": "Euro Inox, Stainless Steel: Tables of Technical Properties, 2nd edition (2007), physical properties at 20 C",
+      "url": "https://filame.com/pdfs/Tables_TechnicalProperties_EN.pdf",
+      "accessed": "2026-10-03",
+      "note": "EN 1.4401 (316)"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 0.1192,
+      "unit": "cal/(g*K)",
+      "T": 300.0,
+      "source": "C. S. Kim, Thermophysical Properties of Stainless Steels, ANL-75-55, Argonne National Laboratory (1975), OSTI 4152287",
+      "url": "https://www.osti.gov/servlets/purl/4152287",
+      "note": "Table 2, type 316L; thermochemical calorie"
+     },
+     "secondary": {
+      "value": 500.0,
+      "unit": "J/(kg*K)",
+      "T": 293.15,
+      "source": "Euro Inox, Stainless Steel: Tables of Technical Properties, 2nd edition (2007), physical properties at 20 C",
+      "url": "https://filame.com/pdfs/Tables_TechnicalProperties_EN.pdf",
+      "accessed": "2026-10-03",
+      "note": "EN 1.4401 (316)"
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 15.31,
+      "unit": "W/(m*K)",
+      "T": 300.0,
+      "source": "NIST Cryogenic Material Properties, 316 stainless steel, thermal conductivity fit (log10 polynomial, 1 K to 300 K) evaluated at 300 K",
+      "url": "https://trc.nist.gov/cryogenics/materials/316Stainless/316Stainless_rev.htm",
+      "accessed": "2026-10-03"
+     },
+     "secondary": {
+      "value": 15.0,
+      "unit": "W/(m*K)",
+      "T": 293.15,
+      "source": "Euro Inox, Stainless Steel: Tables of Technical Properties, 2nd edition (2007), physical properties at 20 C",
+      "url": "https://filame.com/pdfs/Tables_TechnicalProperties_EN.pdf",
+      "accessed": "2026-10-03",
+      "note": "EN 1.4401 (316)"
+     }
+    }
+   }
+  },
+  {
+   "id": "soda_lime_glass",
+   "name": "Glass (soda-lime float)",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "SiO2-Na2O-CaO",
+   "cas": "65997-17-3",
+   "aliases": [
+    "glass",
+    "float glass",
+    "window glass",
+    "soda-lime glass"
+   ],
+   "description": "Soda-lime silica float glass near room temperature; constant properties at 75 F.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 273.15,
+    "T_max": 373.15
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 2500.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 880.0
+    },
+    "thermal_conductivity": {
+     "method": "constant",
+     "value": 0.937
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 2500.0,
+      "unit": "kg/m**3",
+      "T": 297.04,
+      "source": "Pilkington North America, Technical Bulletin ATS-129, Properties of Soda-Lime Silica Float Glass (04/2025)",
+      "url": "https://www.pilkington.com/-/media/pilkington/site-content/usa/window-manufacturers/technical-bulletins/ats-129---properties-of-soda-lime-silica-float-glass.pdf",
+      "accessed": "2026-10-03"
+     },
+     "secondary": {
+      "value": 2.53,
+      "unit": "g/cm**3",
+      "T": 298.15,
+      "source": "Industrial Glass Technologies, Soda-Lime-Silica Float Glass Selected Properties",
+      "url": "https://www.industrialglasstech.com/wp-content/uploads/2018/07/sodalimeproperties.pdf",
+      "accessed": "2026-10-03"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 0.88,
+      "unit": "kJ/(kg*K)",
+      "T": 297.04,
+      "source": "Pilkington North America, Technical Bulletin ATS-129, Properties of Soda-Lime Silica Float Glass (04/2025)",
+      "url": "https://www.pilkington.com/-/media/pilkington/site-content/usa/window-manufacturers/technical-bulletins/ats-129---properties-of-soda-lime-silica-float-glass.pdf",
+      "accessed": "2026-10-03",
+      "note": "at 75 F"
+     },
+     "secondary": {
+      "value": 0.88,
+      "unit": "kJ/(kg*K)",
+      "T": 298.15,
+      "source": "Industrial Glass Technologies, Soda-Lime-Silica Float Glass Selected Properties",
+      "url": "https://www.industrialglasstech.com/wp-content/uploads/2018/07/sodalimeproperties.pdf",
+      "accessed": "2026-10-03",
+      "note": "at 25 C"
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 0.937,
+      "unit": "W/(m*K)",
+      "T": 297.04,
+      "source": "Pilkington North America, Technical Bulletin ATS-129, Properties of Soda-Lime Silica Float Glass (04/2025)",
+      "url": "https://www.pilkington.com/-/media/pilkington/site-content/usa/window-manufacturers/technical-bulletins/ats-129---properties-of-soda-lime-silica-float-glass.pdf",
+      "accessed": "2026-10-03",
+      "note": "at 75 F"
+     },
+     "secondary": {
+      "value": 0.937,
+      "unit": "W/(m*K)",
+      "T": 298.15,
+      "source": "Industrial Glass Technologies, Soda-Lime-Silica Float Glass Selected Properties",
+      "url": "https://www.industrialglasstech.com/wp-content/uploads/2018/07/sodalimeproperties.pdf",
+      "accessed": "2026-10-03",
+      "note": "at 25 C"
+     }
+    }
+   }
+  },
+  {
+   "id": "pmma",
+   "name": "PMMA (cast acrylic)",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "(C5H8O2)n",
+   "cas": "9011-14-7",
+   "aliases": [
+    "acrylic",
+    "PMMA",
+    "polymethyl methacrylate",
+    "acrylic glass"
+   ],
+   "description": "Cast polymethyl methacrylate sheet near room temperature; constant properties.",
+   "state": {
+    "T_ref": 300.0,
+    "p_ref": 101325.0,
+    "T_min": 273.15,
+    "T_max": 373.15
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 1190.0
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 1470.0
+    },
+    "thermal_conductivity": {
+     "method": "constant",
+     "value": 0.19
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 1.19,
+      "unit": "g/cm**3",
+      "T": 293.15,
+      "source": "NIST Standard Reference Database 126 (J. H. Hubbell and S. M. Seltzer), X-Ray Mass Attenuation Coefficients, Table 2: material constants for compounds and mixtures",
+      "url": "https://physics.nist.gov/PhysRefData/XrayMassCoef/tab2.html",
+      "note": "Polymethyl Methacrylate"
+     },
+     "secondary": {
+      "value": 1.19,
+      "unit": "g/cm**3",
+      "T": 296.15,
+      "source": "Arkema, Plexiglas G acrylic sheet, average physical properties (2002)",
+      "url": "https://www.alro.com/dataPDF/Plastics/PlasticsBrochures/Brochure_PlexiglasG.pdf",
+      "accessed": "2026-10-03",
+      "note": "specific gravity, ASTM D792"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 1.47,
+      "unit": "J/(g*K)",
+      "T": 293.15,
+      "source": "Roehm, PLEXIGLAS GS and XT, Technical Information 211-1, physical properties",
+      "url": "https://www.plexiglas.de/files/plexiglas-content/pdf/technische-informationen/211-1-PLEXIGLAS-GS-XT-EN.pdf",
+      "accessed": "2026-10-03"
+     },
+     "secondary": {
+      "value": 0.35,
+      "unit": "BTU/(lb*delta_degF)",
+      "T": 298.15,
+      "source": "Arkema, Plexiglas G acrylic sheet, average physical properties (2002)",
+      "url": "https://www.alro.com/dataPDF/Plastics/PlasticsBrochures/Brochure_PlexiglasG.pdf",
+      "accessed": "2026-10-03",
+      "note": "at 77 F"
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 0.19,
+      "unit": "W/(m*K)",
+      "T": 293.15,
+      "source": "Roehm, PLEXIGLAS GS and XT, Technical Information 211-1, physical properties",
+      "url": "https://www.plexiglas.de/files/plexiglas-content/pdf/technische-informationen/211-1-PLEXIGLAS-GS-XT-EN.pdf",
+      "accessed": "2026-10-03",
+      "note": "DIN 52612"
+     },
+     "secondary": {
+      "value": 1.3,
+      "unit": "BTU*in/(h*ft**2*delta_degF)",
+      "T": 296.15,
+      "source": "Arkema, Plexiglas G acrylic sheet, average physical properties (2002)",
+      "url": "https://www.alro.com/dataPDF/Plastics/PlasticsBrochures/Brochure_PlexiglasG.pdf",
+      "accessed": "2026-10-03",
+      "note": "Cenco-Fitch"
+     }
+    }
+   }
+  },
+  {
+   "id": "eps_insulation",
+   "name": "Expanded polystyrene board (NIST SRM 1453)",
+   "kind": "solid",
+   "phase": "auto",
+   "formula": "(C8H8)n",
+   "cas": "9003-53-6",
+   "aliases": [
+    "EPS",
+    "expanded polystyrene",
+    "polystyrene foam",
+    "foam insulation",
+    "insulation board"
+   ],
+   "description": "Expanded polystyrene insulation board of NIST SRM 1453 (bulk density 40.6 kg/m3): conductivity from the certified equation, 281 K to 313 K.",
+   "state": {
+    "T_ref": 297.15,
+    "p_ref": 101325.0,
+    "T_min": 281.0,
+    "T_max": 313.0
+   },
+   "properties": {
+    "density": {
+     "method": "constant",
+     "value": 40.6
+    },
+    "specific_heat": {
+     "method": "constant",
+     "value": 1249.1598655784924
+    },
+    "thermal_conductivity": {
+     "method": "polynomial",
+     "coefficients": [
+      -0.00061144,
+      0.000115
+     ],
+     "valid_min": 281.0,
+     "valid_max": 313.0
+    },
+    "molar_mass": {
+     "method": "constant",
+     "value": 0.0
+    }
+   },
+   "references": {
+    "density": {
+     "primary": {
+      "value": 40.6,
+      "unit": "kg/m**3",
+      "T": 297.15,
+      "source": "R. R. Zarr et al., Standard Reference Materials: SRM 1453, Expanded Polystyrene Board, for Thermal Conductivity from 281 K to 313 K, NIST Special Publication 260-175 (2012)",
+      "url": "https://www.nist.gov/system/files/documents/srm/SP260-175-2.pdf",
+      "note": "mean bulk density of the material lot (n = 300)"
+     },
+     "secondary": {
+      "value": 41.5,
+      "unit": "kg/m**3",
+      "T": 297.15,
+      "source": "NIST SRM 1453 certificate: bulk density 37 kg/m3 to 46 kg/m3 (midpoint)",
+      "url": "https://www.nist.gov/publications/standard-reference-materials-srm-1453-expanded-polystyrene-board-thermal-conductivity"
+     }
+    },
+    "specific_heat": {
+     "primary": {
+      "value": 130.1,
+      "unit": "J/(mol*K)",
+      "T": 300.0,
+      "source": "B. S. Hemingway and R. A. Robie, Heat capacity of polystyrene from 275 to 315 K, U.S. Geological Survey Open-File Report 94-671 (1994)",
+      "url": "https://pubs.usgs.gov/of/1994/0671/report.pdf",
+      "note": "per mole of styrene repeat unit (104.15 g/mol)",
+      "molar_mass": 0.10415
+     },
+     "secondary": {
+      "value": 126.5,
+      "unit": "J/(mol*K)",
+      "T": 298.15,
+      "source": "U. Gaur and B. Wunderlich, J. Phys. Chem. Ref. Data 11, 313 (1982), recommended value at 298.15 K, as quoted in USGS Open-File Report 94-671",
+      "url": "https://pubs.usgs.gov/of/1994/0671/report.pdf",
+      "note": "per mole of styrene repeat unit",
+      "molar_mass": 0.10415
+     }
+    },
+    "thermal_conductivity": {
+     "primary": {
+      "value": 0.03356081,
+      "unit": "W/(m*K)",
+      "T": 297.15,
+      "source": "R. R. Zarr et al., Standard Reference Materials: SRM 1453, Expanded Polystyrene Board, for Thermal Conductivity from 281 K to 313 K, NIST Special Publication 260-175 (2012)",
+      "url": "https://www.nist.gov/system/files/documents/srm/SP260-175-2.pdf",
+      "equation": "lambda = 0.00111 - 0.0000424 rho + 0.000115 T, rho in kg/m3, T in K; 37 to 46 kg/m3, 281 K to 313 K; taken at rho = 40.6 kg/m3"
+     },
+     "secondary": {
+      "value": 0.23809523809523808,
+      "unit": "BTU*in/(h*ft**2*delta_degF)",
+      "T": 297.0388888888889,
+      "source": "EPS Industry Alliance, ASTM C578 EPS thermal insulation performance requirements (Type XIV)",
+      "url": "https://www.quadlock.com/technical_library/third_party/ASTM-C578-EPS-Types.pdf",
+      "accessed": "2026-10-03",
+      "note": "Type XIV: R = 4.20 per inch at 75 F"
+     }
+    }
+   }
+  }
+ ]
+}

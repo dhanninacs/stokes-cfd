@@ -1,0 +1,20 @@
+
+Usage: surfaceFeatures [OPTIONS]
+options:
+  -case <dir>       specify alternate case directory, default is the cwd
+  -dict <file>      read control dictionary from specified location
+  -fileHandler <handler>
+                    override the fileHandler
+  -libs '("lib1.so" ... "libN.so")'
+                    pre-load libraries
+  -noFunctionObjects
+                    do not execute functionObjects
+  -srcDoc           display source code in browser
+  -doc              display application documentation in browser
+  -help             print the usage
+
+extract and write surface features to file
+
+Using: OpenFOAM-14 (see https://openfoam.org)
+Build: 14-a4867fc914c1
+

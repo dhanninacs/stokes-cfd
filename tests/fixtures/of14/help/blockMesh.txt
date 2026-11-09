@@ -1,0 +1,42 @@
+
+Usage: blockMesh [OPTIONS]
+options:
+  -blockTopology    write block edges and centres as .obj files
+  -case <dir>       specify alternate case directory, default is the cwd
+  -dict <file>      read control dictionary from specified location
+  -fileHandler <handler>
+                    override the fileHandler
+  -libs '("lib1.so" ... "libN.so")'
+                    pre-load libraries
+  -mesh <name>      specify alternative mesh
+  -noClean          keep the existing files in the polyMesh
+  -region <name>    specify alternative mesh region
+  -srcDoc           display source code in browser
+  -doc              display application documentation in browser
+  -help             print the usage
+
+Block description
+
+  For a given block, the correspondence between the ordering of
+  vertex labels and face labels is shown below.
+  For vertex numbering in the sequence 0 to 7 (block, centre):
+    faces 0 (f0) and 1 are left and right, respectively;
+    faces 2 and 3 are front and back; 
+    and faces 4 and 5 are bottom and top::
+
+                 7 ---- 6
+            f5   |\     |\   f3
+            |    | 4 ---- 5   \
+            |    3 |--- 2 |    \
+            |     \|     \|    f2
+            f4     0 ---- 1
+
+       Z         f0 ----- f1
+       |  Y
+       | /
+       O --- X
+
+
+Using: OpenFOAM-14 (see https://openfoam.org)
+Build: 14-a4867fc914c1
+

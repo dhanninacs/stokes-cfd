@@ -1,0 +1,42 @@
+/* The Advanced disclosure under a page's Basic fields. Theme tokens only. */
+.basic-advanced__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  user-select: none;
+}
+
+.basic-advanced__summary::-webkit-details-marker {
+  display: none;
+}
+
+.basic-advanced__summary::before {
+  content: "▸";
+  font-size: 11px;
+}
+
+.basic-advanced[open] > .basic-advanced__summary::before {
+  content: "▾";
+}
+
+.basic-advanced__summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.basic-advanced__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.basic-advanced__body {
+  margin-top: 6px;
+}

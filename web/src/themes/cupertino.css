@@ -1,0 +1,458 @@
+/*
+ * Cupertino: the macOS-inspired style family (DESIGN.md §2), in a light and a dark appearance.
+ * Inspired by Apple's site and macOS without any Apple name or asset. Imported after styles.css
+ * so these rules win. Dark and light (the Stokes family) stay exactly as they are. Two blocks
+ * define the tokens, one for data-theme="cupertino" (light) and one for "cupertino-dark": every
+ * value that differs between the appearances lives there, as a standard token or a --cup-* one.
+ * The shapes further down match both with [data-theme^=cupertino] and read those tokens, so a
+ * rule is written once and the dark counterpart is a token, not a second rule.
+ */
+
+:root[data-theme="cupertino"] {
+  color-scheme: light;
+  --font-sans: -apple-system, "SF Pro Text", "SF Pro Display", "Inter Variable", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+
+  /* A shade below Apple's #f5f5f7: the window sits on a desktop, not on a web page. */
+  --bg: #e8e8ed;
+  --bg-elev: #f7f7f9;
+  --panel: rgba(250, 250, 252, 0.66);
+  --panel-solid: rgba(238, 238, 242, 0.88);
+  --panel-border: rgba(0, 0, 0, 0.09);
+  --panel-border-strong: rgba(0, 0, 0, 0.15);
+  --track: rgba(118, 118, 128, 0.14);
+  --hover: rgba(0, 0, 0, 0.05);
+  --active: rgba(0, 0, 0, 0.09);
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --text-faint: #86868b;
+
+  --accent: #0071e3;
+  --accent-strong: #0077ed;
+  --accent-soft: rgba(0, 113, 227, 0.12);
+  --accent-text: #ffffff;
+  --accent-ink: #0066cc;
+  --accent-fill: #0071e3;
+  --accent-glow: rgba(0, 113, 227, 0.22);
+  --blue: #0071e3;
+  --warn: #ff9f0a;
+  --danger: #ff3b30;
+  --ok: #34c759;
+  --blue-soft: rgba(0, 113, 227, 0.12);
+  --warn-soft: rgba(255, 159, 10, 0.16);
+  --danger-soft: rgba(255, 59, 48, 0.14);
+  --ok-soft: rgba(52, 199, 89, 0.16);
+
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.07);
+  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.09);
+  --highlight: rgba(255, 255, 255, 0.85);
+  --menu-bg: rgba(250, 250, 252, 0.94);
+  /* A light tooltip, as macOS draws them in a light appearance. */
+  --tooltip-bg: rgba(246, 246, 246, 0.97);
+  --tooltip-text: #1d1d1f;
+  --tooltip-border: rgba(0, 0, 0, 0.1);
+  --tooltip-kbd-border: rgba(0, 0, 0, 0.18);
+  --scrim: rgba(0, 0, 0, 0.24);
+  --scroll-thumb: rgba(0, 0, 0, 0.22);
+  --scroll-thumb-hover: rgba(0, 0, 0, 0.38);
+  --focus-halo: 0 0 0 4px rgba(0, 125, 250, 0.35);
+  --logo-ink: #ffffff;
+
+  /* The viewport reads these as plain hex and applies its own alphas (viewport/theme.ts), so each
+     is a dark ink on the light floor: the grid lines and the contact shadow, not a pale tint. */
+  --vp-top: #f1f1f5;
+  --vp-bottom: #d6d6dd;
+  --vp-grid-minor: #48484a;
+  --vp-grid-major: #2c2c2e;
+  --vp-floor: #f1f1f5;
+  --vp-shadow: #1d1d1f;
+  --vp-edge: #3a3a3c;
+  --radius: 14px;
+  --radius-sm: 10px;
+
+  --cup-seg-selected: #fbfbfd;
+  --cup-seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --cup-chip-text: #424245; /* an idle segment: darker than --text-muted, which is too faint on the track */
+  --cup-chip-hover: rgba(0, 0, 0, 0.04);
+  --cup-field-bg: #fbfbfd;
+  --cup-field-border: #cfcfd4;
+  --cup-kbd-bg: #ececf0;
+  --cup-kbd-border: #d2d2d7;
+  --cup-logo-top: #3d9bff;
+  --cup-logo-bottom: #0071e3;
+  --cup-select-idle: rgba(0, 0, 0, 0.07); /* selected tree row while the tree is not focused */
+  --cup-dot-ok: #c7c7cc; /* a node that is fine says nothing */
+  --cup-light-border: rgba(0, 0, 0, 0.12);
+  --cup-light-idle: #d1d1d6; /* traffic light of a window that is not in front */
+
+  /* The residuals chart reads --series-1..4 (panels.css: accent, blue, ok, warn). Here the accent
+     and the blue are one colour, so the second series needs a colour of its own. */
+  --series-2: #30b0c7;
+}
+
+/* macOS dark: graphite surfaces, the brighter system blue, hairlines in white. */
+:root[data-theme="cupertino-dark"] {
+  color-scheme: dark;
+  --font-sans: -apple-system, "SF Pro Text", "SF Pro Display", "Inter Variable", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+
+  --bg: #1c1c1e;
+  --bg-elev: #2c2c2e;
+  --panel: rgba(44, 44, 46, 0.72);
+  --panel-solid: rgba(36, 36, 38, 0.9);
+  --panel-border: rgba(255, 255, 255, 0.09);
+  --panel-border-strong: rgba(255, 255, 255, 0.16);
+  --track: rgba(118, 118, 128, 0.24);
+  --hover: rgba(255, 255, 255, 0.06);
+  --active: rgba(255, 255, 255, 0.1);
+  --text: #f5f5f7;
+  --text-muted: #a1a1a6;
+  --text-faint: #7c7c81;
+
+  --accent: #0a84ff;
+  --accent-strong: #3395ff;
+  --accent-soft: rgba(10, 132, 255, 0.2);
+  --accent-text: #ffffff;
+  --accent-ink: #5aa9ff;
+  --accent-fill: #0a84ff;
+  --accent-glow: rgba(10, 132, 255, 0.3);
+  --blue: #0a84ff;
+  --warn: #ff9f0a;
+  --danger: #ff453a;
+  --ok: #30d158;
+  --blue-soft: rgba(10, 132, 255, 0.2);
+  --warn-soft: rgba(255, 159, 10, 0.2);
+  --danger-soft: rgba(255, 69, 58, 0.2);
+  --ok-soft: rgba(48, 209, 88, 0.2);
+
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --highlight: rgba(255, 255, 255, 0.06);
+  --menu-bg: rgba(44, 44, 46, 0.94);
+  --tooltip-bg: rgba(58, 58, 60, 0.97);
+  --tooltip-text: #f5f5f7;
+  --tooltip-border: rgba(255, 255, 255, 0.1);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --scroll-thumb: rgba(255, 255, 255, 0.22);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.36);
+  --focus-halo: 0 0 0 4px rgba(10, 132, 255, 0.4);
+  --logo-ink: #ffffff;
+
+  /* Light ink on the dark floor, the mirror of the light appearance (see there). */
+  --vp-top: #2b2b30;
+  --vp-bottom: #121214;
+  --vp-grid-minor: #9d9da3;
+  --vp-grid-major: #c7c7cc;
+  --vp-floor: #2c2c2e;
+  --vp-shadow: #000000;
+  --vp-edge: #0b0b0d;
+  --radius: 14px;
+  --radius-sm: 10px;
+
+  --cup-seg-selected: #636366;
+  --cup-seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  --cup-chip-text: #a1a1a6;
+  --cup-chip-hover: rgba(255, 255, 255, 0.06);
+  --cup-field-bg: #1c1c1e;
+  --cup-field-border: rgba(255, 255, 255, 0.14);
+  --cup-kbd-bg: #2c2c2e;
+  --cup-kbd-border: rgba(255, 255, 255, 0.14);
+  --cup-logo-top: #4da3ff;
+  --cup-logo-bottom: #0a84ff;
+  --cup-select-idle: rgba(255, 255, 255, 0.08);
+  --cup-dot-ok: #636366;
+  --cup-light-border: rgba(0, 0, 0, 0.3);
+  --cup-light-idle: #4a4a4e;
+
+  --series-2: #40c8e0; /* see the light appearance */
+}
+
+/* Tokens the two appearances share. */
+:root[data-theme^="cupertino"] {
+  --cup-on-accent-soft: rgba(255, 255, 255, 0.9); /* secondary text and icons on an accent fill */
+  --cup-on-accent-line: rgba(255, 255, 255, 0.45); /* a key cap's outline on an accent fill */
+  --cup-light-close: #ff5f57;
+  --cup-light-min: #febc2e;
+  --cup-light-zoom: #28c840;
+  --cup-glyph-close: #4d0000; /* the glyph that appears on each light under the pointer */
+  --cup-glyph-min: #995700;
+  --cup-glyph-zoom: #006400;
+}
+
+/* Vibrancy: heavier blur, hairline borders, no lit top edge. */
+:root[data-theme^="cupertino"] .glass {
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: var(--shadow);
+}
+/* The flow strip sits INSIDE the top bar, which already has the vibrancy: it takes none of its own, or it
+   shows as a grey slab with a shadow on the bar (the rule above outranks `.guided-strip.glass`). */
+:root[data-theme^="cupertino"] .guided-strip.glass {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* The rule above is more specific than .toast and .dialog and replaces their shadows, so what each
+   adds to the common one is restated: the toast's coloured kind bar, the dialog's deeper shadow. */
+:root[data-theme^="cupertino"] .toast {
+  box-shadow:
+    var(--shadow),
+    inset 3px 0 0 var(--toast-accent);
+}
+:root[data-theme^="cupertino"] .dialog {
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+}
+:root[data-theme^="cupertino"] .topbar {
+  background: var(--panel-solid);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+:root[data-theme^="cupertino"] .topbar-right {
+  padding-right: 14px; /* the traffic lights keep 14 px from the left edge; so does Run from the right */
+}
+:root[data-theme^="cupertino"] .viewport-bg {
+  background:
+    var(--vp-grain),
+    radial-gradient(140% 110% at 50% 38%, transparent 55%, var(--vp-vignette, rgba(0, 0, 0, 0.28)) 100%),
+    radial-gradient(110% 80% at 50% 10%, var(--vp-top) 0%, var(--vp-bottom) 100%);
+}
+
+/* Stage chips as a macOS segmented control: grey track, raised selected segment. The track is
+   concentric with its segments (9 px = 7 px + the 2 px of padding; no border to add to the sum). */
+:root[data-theme^="cupertino"] .stage-chips {
+  gap: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--track);
+}
+:root[data-theme^="cupertino"] .chip {
+  height: 26px;
+  border-radius: 7px;
+  color: var(--cup-chip-text);
+}
+:root[data-theme^="cupertino"] .chip:hover {
+  color: var(--text);
+  background: var(--cup-chip-hover);
+}
+:root[data-theme^="cupertino"] .chip.active {
+  background: var(--cup-seg-selected);
+  color: var(--text);
+  box-shadow: var(--cup-seg-shadow);
+}
+
+/* Flat blue primary, no glow; pills keep their shape. */
+:root[data-theme^="cupertino"] .btn.primary {
+  background: var(--accent);
+  box-shadow: none;
+}
+:root[data-theme^="cupertino"] .btn.primary:hover {
+  background: var(--accent-strong);
+  filter: none;
+}
+:root[data-theme^="cupertino"] .btn.primary:focus-visible {
+  box-shadow: var(--focus-halo);
+}
+
+/* Inputs: hairline border, blue focus ring. */
+:root[data-theme^="cupertino"] .field {
+  border-color: var(--cup-field-border);
+  background: var(--cup-field-bg);
+}
+:root[data-theme^="cupertino"] .field:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-halo);
+}
+:root[data-theme^="cupertino"] .kbd {
+  background: var(--cup-kbd-bg);
+  border-color: var(--cup-kbd-border);
+  color: var(--text-muted);
+}
+
+/* Status chrome: plain text separated by hairlines, not a row of badges. The icons go (the words
+   say it), the connection dot loses its halo, and a node that is fine stops shouting green. */
+:root[data-theme^="cupertino"] .status-cluster {
+  gap: 0; /* the padding of the pills alone spaces the text, evenly on both sides of a hairline */
+}
+:root[data-theme^="cupertino"] .status-pill,
+:root[data-theme^="cupertino"] .status-pill.accent {
+  height: auto;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 0; /* the hairline between two pills is a straight edge, not a pill's arc */
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+:root[data-theme^="cupertino"] .status-pill svg {
+  display: none;
+}
+:root[data-theme^="cupertino"] .status-pill + .status-pill {
+  box-shadow: inset 1px 0 0 var(--panel-border-strong);
+}
+:root[data-theme^="cupertino"] .conn::before {
+  width: 7px;
+  height: 7px;
+  box-shadow: none;
+}
+:root[data-theme^="cupertino"] .tree-row .dot.ok {
+  background: var(--cup-dot-ok);
+}
+
+/* A select as a Mac pop-up button: no native arrow (panels.css draws a chevron), here a small
+   accent tile with a light chevron at the right end. */
+:root[data-theme^="cupertino"] .select-chevron {
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  padding: 3px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Section headers read as a Mac sidebar's, not a dashboard's: sentence case, no tracking. */
+:root[data-theme^="cupertino"] .section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+:root[data-theme^="cupertino"] .segmented {
+  border-color: transparent;
+  background: var(--track);
+}
+:root[data-theme^="cupertino"] .segmented button[aria-checked="true"] {
+  background: var(--cup-seg-selected);
+  box-shadow: var(--cup-seg-shadow);
+}
+
+/* Tree selection, as in a Mac sidebar: a quiet grey row while the tree is not focused, a solid
+   accent row with light text while it is. The tree's own accent bar goes. The type icon, the
+   value and the chevron follow the row's colour; the status dot gets a ring to stay legible. */
+:root[data-theme^="cupertino"] .tree-row {
+  border-radius: 6px;
+}
+:root[data-theme^="cupertino"] .tree-row.selected {
+  background: var(--cup-select-idle);
+}
+:root[data-theme^="cupertino"] .tree-row.selected::before {
+  display: none;
+}
+:root[data-theme^="cupertino"] [role="tree"]:focus-within .tree-row.selected {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+:root[data-theme^="cupertino"] [role="tree"]:focus-within .tree-row.selected :is(.tree-icon, .muted),
+:root[data-theme^="cupertino"] [role="tree"]:focus-within .tree-row.selected > button:first-child {
+  color: var(--cup-on-accent-soft);
+}
+:root[data-theme^="cupertino"] [role="tree"]:focus-within .tree-row.selected .dot {
+  box-shadow: 0 0 0 1.5px var(--accent-text);
+}
+
+/* Menus as on macOS: tight rows, the item under the pointer or the keyboard filled with the accent
+   and its text, icon and key cap turned light. The radii are concentric (10 px = 5 px + 5 px). */
+:root[data-theme^="cupertino"] .popover {
+  padding: 5px;
+  border-radius: 10px;
+}
+:root[data-theme^="cupertino"] .menu-item {
+  height: 24px;
+  border-radius: 5px;
+}
+:root[data-theme^="cupertino"] .menu-item:not([aria-disabled="true"]):is(:hover, :focus) {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+:root[data-theme^="cupertino"] .menu-item:not([aria-disabled="true"]):is(:hover, :focus) .menu-icon {
+  color: var(--accent-text);
+}
+:root[data-theme^="cupertino"] .menu-item:not([aria-disabled="true"]):is(:hover, :focus) .menu-icon * {
+  color: var(--accent-text) !important; /* icons may carry their own colour inline */
+}
+:root[data-theme^="cupertino"] .menu-item:not([aria-disabled="true"]):is(:hover, :focus) .kbd {
+  border-color: var(--cup-on-accent-line);
+  background: transparent;
+  color: var(--accent-text);
+}
+
+/* Scrollbars as on macOS: the thumb shows only while the pointer is over its scroll area. The
+   longhand keeps the padding-box clip that styles.css gives the thumb. */
+@supports selector(::-webkit-scrollbar) {
+  :root[data-theme^="cupertino"] *::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+  :root[data-theme^="cupertino"] *:hover::-webkit-scrollbar-thumb {
+    background-color: var(--scroll-thumb);
+  }
+  :root[data-theme^="cupertino"] *:hover::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scroll-thumb-hover);
+  }
+}
+
+/* Traffic-light window controls (hosted only), rendered by TopBar at the top-left. */
+.traffic-lights {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 14px;
+}
+:root[data-theme^="cupertino"] .traffic-lights {
+  display: flex;
+}
+:root[data-theme^="cupertino"] .win-controls {
+  display: none;
+}
+.traffic-light {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 999px;
+  border: 0.5px solid var(--cup-light-border, rgba(0, 0, 0, 0.12));
+  cursor: default;
+  display: grid;
+  place-items: center;
+  color: transparent;
+  transition: color 120ms ease;
+}
+.traffic-light svg {
+  width: 8px;
+  height: 8px;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  fill: none;
+}
+.traffic-light.close {
+  background: var(--cup-light-close);
+}
+.traffic-light.minimize {
+  background: var(--cup-light-min);
+}
+.traffic-light.zoom {
+  background: var(--cup-light-zoom);
+}
+/* The glyphs show on all three while the pointer is over the group, each in a dark shade of its own colour. */
+.traffic-lights:hover .traffic-light.close {
+  color: var(--cup-glyph-close);
+}
+.traffic-lights:hover .traffic-light.minimize {
+  color: var(--cup-glyph-min);
+}
+.traffic-lights:hover .traffic-light.zoom {
+  color: var(--cup-glyph-zoom);
+}
+/* A window that is not in front greys its lights (host.ts sets data-active on <html>);
+   under the pointer they get their colours back, as on macOS, so a background window can be closed. */
+:root[data-theme^="cupertino"][data-active="false"] .traffic-lights:not(:hover) .traffic-light {
+  background: var(--cup-light-idle);
+}
+.traffic-light:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-halo);
+}

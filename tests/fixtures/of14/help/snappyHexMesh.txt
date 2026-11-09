@@ -1,0 +1,32 @@
+
+Usage: snappyHexMesh [OPTIONS]
+options:
+  -case <dir>       specify alternate case directory, default is the cwd
+  -checkGeometry    check all surface geometry for quality
+  -dict <file>      read control dictionary from specified location
+  -fileHandler <handler>
+                    override the fileHandler
+  -hostRoots <((host1 dir1) .. (hostN dirN))>
+                    slave root directories (per host) for distributed running
+  -libs '("lib1.so" ... "libN.so")'
+                    pre-load libraries
+  -mesh <name>      specify alternative mesh
+  -noOverwrite      Do not overwrite existing mesh/results files
+  -outFile <file>   name of the file to save the simplified surface to
+  -overwrite        Deprecated option, this is now default behaviour
+  -parallel         run in parallel
+  -patches <(patch0 .. patchN)>
+                    only triangulate selected patches (wildcards supported)
+  -region <name>    specify alternative mesh region
+  -roots <(dir1 .. dirN)>
+                    slave root directories for distributed running
+  -surfaceSimplify <boundBox>
+                    simplify the surface using snappyHexMesh starting from a
+                    boundBox
+  -srcDoc           display source code in browser
+  -doc              display application documentation in browser
+  -help             print the usage
+
+Using: OpenFOAM-14 (see https://openfoam.org)
+Build: 14-a4867fc914c1
+

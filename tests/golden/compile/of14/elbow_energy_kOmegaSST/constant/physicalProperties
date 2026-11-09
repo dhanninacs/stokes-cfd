@@ -1,0 +1,42 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "constant";
+    object          physicalProperties;
+}
+
+// sensibleInternalEnergy: the liquid form (OpenFOAM water template); sensibleEnthalpy is the gas form and would need hConst with Cp.
+
+thermoType
+{
+    type            heRhoThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          eConst;
+    equationOfState rhoConst;
+    specie          specie;
+    energy          sensibleInternalEnergy;
+}
+
+mixture
+{
+    specie
+    {
+        molWeight       1;
+    }
+    equationOfState
+    {
+        rho             998.2;
+    }
+    thermodynamics
+    {
+        Cv              4182.0;
+        hf              0;
+    }
+    transport
+    {
+        mu              0.001002;
+        Pr              7.0072976588628775;
+    }
+}

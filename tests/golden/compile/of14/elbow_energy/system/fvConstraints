@@ -1,0 +1,15 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "system";
+    object          fvConstraints;
+}
+
+limitT
+{
+    type            limitTemperature;
+    cellZone        all;
+    min             1.0;
+    max             5000.0;
+}

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stokes flyer</title>
+<style>
+  :root {
+    --ink: #0e1116;
+    --paper: #ffffff;
+    --soft: #f3f5f7;
+    --line: #e1e5ea;
+    --muted: #5b6472;
+    --accent: #1fb6a4;
+    --accent-soft: #d9f3ef;
+    --amber: #f2b135;
+    --amber-soft: #fff1cc;
+    --violet-soft: #e8def8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e9ecef; color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .page { width: 210mm; min-height: 297mm; margin: 16px auto; background: var(--paper);
+    box-shadow: 0 10px 40px rgba(0,0,0,.18); padding: 0 0 8mm; }
+  @media print {
+    @page { size: A4; margin: 0; }
+    html, body { background: #fff; }
+    .page { margin: 0; box-shadow: none; width: 210mm; }
+  }
+
+  /* header */
+  .hero { background: var(--ink); color: #fff; padding: 9mm 10mm 7mm; position: relative; overflow: hidden; }
+  .hero::after { content: ""; position: absolute; right: -40px; top: -60px; width: 260px; height: 260px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(31,182,164,.45), rgba(31,182,164,0) 65%); }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand svg { width: 44px; height: 44px; }
+  .brand h1 { margin: 0; font-size: 36px; letter-spacing: .18em; font-weight: 700; }
+  .tag { margin: 8px 0 0; font-size: 14.5px; color: #cfd6de; max-width: 150mm; line-height: 1.35; }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .pill { font-size: 10.5px; padding: 3px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.28); color: #e6e9ef; }
+  .pill.accent { background: var(--accent); border-color: var(--accent); color: #062a26; font-weight: 600; }
+
+  /* stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6mm 10mm 0; }
+  .stat { background: var(--soft); border-radius: 8px; padding: 8px 10px; border-left: 4px solid var(--accent); }
+  .stat b { display: block; font-size: 20px; line-height: 1.1; }
+  .stat span { font-size: 10px; color: var(--muted); line-height: 1.25; display: block; margin-top: 3px; }
+
+  section { padding: 5mm 10mm 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--accent); margin: 0 0 6px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .card h3 { margin: 0 0 3px; font-size: 12.5px; }
+  .card p { margin: 0; font-size: 10.5px; color: var(--muted); line-height: 1.35; }
+
+  /* workflow */
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; }
+  .step { position: relative; padding: 8px 9px 8px 10px; background: var(--soft); border-radius: 8px; margin-right: 10px; }
+  .step:last-child { margin-right: 0; }
+  .step::after { content: ""; position: absolute; right: -9px; top: 50%; width: 0; height: 0; margin-top: -6px;
+    border-left: 8px solid #c9cfd6; border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+  .step:last-child::after { display: none; }
+  .step .n { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #062a26;
+    font-size: 10.5px; font-weight: 700; text-align: center; line-height: 18px; margin-right: 5px; }
+  .step h3 { margin: 0 0 4px; font-size: 12px; display: flex; align-items: center; }
+  .step ul { margin: 0; padding-left: 12px; font-size: 9.6px; color: var(--muted); line-height: 1.3; }
+  .step li { margin: 1px 0; }
+
+  /* architecture */
+  .arch { display: grid; grid-template-columns: 1fr 24px 1fr 24px 1fr; align-items: stretch; gap: 0; }
+  .box { border: 1.5px solid var(--ink); border-radius: 8px; padding: 8px 10px; }
+  .box h3 { margin: 0 0 3px; font-size: 12.5px; }
+  .box p { margin: 0; font-size: 10px; color: var(--muted); line-height: 1.35; }
+  .box.engines { border-style: dashed; }
+  .link { display: flex; align-items: center; justify-content: center; color: #8a939e; font-size: 16px; }
+  .caption { font-size: 10px; color: var(--muted); margin: 6px 0 0; }
+
+  /* tiers */
+  .tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tier { border-radius: 8px; padding: 8px 10px; }
+  .tier.free { background: var(--accent-soft); }
+  .tier.pro { background: var(--amber-soft); }
+  .tier h3 { margin: 0 0 4px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: baseline; }
+  .tier h3 small { font-size: 9.5px; font-weight: 500; color: var(--muted); }
+  .tier ul { margin: 0; padding-left: 14px; font-size: 10.3px; line-height: 1.35; }
+
+  /* roadmap */
+  .road { position: relative; height: 62px; margin-top: 4px; }
+  .road .bar { position: absolute; left: 0; right: 0; top: 30px; height: 2px; background: #c9cfd6; }
+  .m { position: absolute; width: 9.09%; font-size: 8.6px; line-height: 1.15; color: var(--muted); text-align: center; }
+  .m::before { content: ""; position: absolute; left: 50%; margin-left: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .m.up { top: 0; } .m.up::before { top: 26px; }
+  .m.down { top: 40px; } .m.down::before { top: -14px; }
+  .m b { display: block; color: var(--ink); font-size: 9.2px; }
+  .m.demo b { color: var(--amber); }
+  .m.demo::before { background: var(--amber); }
+
+  footer { padding: 5mm 10mm 0; font-size: 8.4px; color: #7a8390; line-height: 1.4; border-top: 1px solid var(--line); margin-top: 5mm; }
+  footer code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 8.4px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <div class="brand">
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <rect x="2" y="2" width="44" height="44" rx="10" fill="#1fb6a4"/>
+        <path d="M10 30c4-6 8-6 12 0s8 6 12 0 8-6 12 0" fill="none" stroke="#062a26" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M10 20c4-6 8-6 12 0s8 6 12 0 8-6 12 0" fill="none" stroke="#062a26" stroke-width="3.2" stroke-linecap="round" opacity=".55"/>
+      </svg>
+      <h1>STOKES</h1>
+    </div>
+    <p class="tag">From CAD to CFD results on OpenFOAM<sup>®</sup> — built for engineers and their AI agents.</p>
+    <div class="pills">
+      <span class="pill accent">Free core · Pro features</span>
+      <span class="pill">Windows (WSL2) and Linux</span>
+      <span class="pill">Pure Python + C++ kernels</span>
+      <span class="pill">Personal project · planning complete 2 Oct 2026</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><b>60 fps</b><span>orbit at 10 M triangles (target)</span></div>
+    <div class="stat"><b>&lt; 16 ms</b><span>face picking at 5 M triangles (target)</span></div>
+    <div class="stat"><b>20 M cells</b><span>interactive, 100 M in batch (target)</span></div>
+    <div class="stat"><b>2–4×</b><span>faster steady runs with the coupled solver (measured, 2.15 M cells)</span></div>
+  </div>
+
+  <section>
+    <h2>Why Stokes</h2>
+    <div class="cards">
+      <div class="card"><h3>Modern and fast, natively</h3><p>Shapr3D-style adaptive UI, STAR-CCM+ / Fluent tree. Python + C++ kernels, PySide6 + QML, VTK viewport. Follows your OS theme.</p></div>
+      <div class="card"><h3>End to end, no dictionaries</h3><p>STEP in → named faces → mesh → physics → run → scenes and reports. The case is compiled from one model; every number is reproducible.</p></div>
+      <div class="card"><h3>Agent-ready from day one</h3><p>One API behind the UI, CLI, HTTP server and MCP. Assistant with Claude, OpenAI, Gemini or a local model. Agents get full control.</p></div>
+      <div class="card"><h3>Your OpenFOAM, your machine</h3><p>Attaches to your existing OpenFOAM 14. In-house coupled solver built from source. Nothing leaves your machine.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Workflow</h2>
+    <div class="flow">
+      <div class="step"><h3><span class="n">1</span>Geometry</h3><ul><li>STEP, IGES, STL import</li><li>fluid extraction, enclosures, defeature</li><li>named selections by click, box, lasso, angle</li></ul></div>
+      <div class="step"><h3><span class="n">2</span>Mesh</h3><ul><li>snappyHexMesh, cfMesh, blockMesh, Gmsh</li><li>live cell estimate</li><li>quality tree, show bad cells</li></ul></div>
+      <div class="step"><h3><span class="n">3</span>Physics</h3><ul><li>steady or transient; laminar, RANS, LES</li><li>energy, CHT, porous, MRF</li><li>CoolProp, Cantera, REFPROP; units and expressions</li></ul></div>
+      <div class="step"><h3><span class="n">4</span>Solve</h3><ul><li>foamRun, foamMultiRun</li><li>coupledSimpleFoam: no relaxation factors</li><li>Fluent via PyFluent (Pro)</li></ul></div>
+      <div class="step"><h3><span class="n">5</span>Results</h3><ul><li>scenes, slices, iso, streamlines, probes</li><li>compare runs, HTML report (Pro)</li><li>open in ParaView</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Architecture at a glance</h2>
+    <div class="arch">
+      <div class="box"><h3>Desktop app</h3><p>Python + C++ · PySide6 + QML · VTK · OCCT<br>model, geometry, compiler, post-processing, API</p></div>
+      <div class="link">⇄</div>
+      <div class="box"><h3>Stokes agent</h3><p>runs beside the solver: WSL2, Linux, remote<br>staging, supervision, log parsing, extraction</p></div>
+      <div class="link">⇄</div>
+      <div class="box engines"><h3>Engines (yours)</h3><p>OpenFOAM 14, snappyHexMesh, cfMesh, Gmsh<br>coupledSimpleFoam (built from source), Fluent</p></div>
+    </div>
+    <p class="caption">GPL engines are driven as separate processes, never linked. The application stack is MIT / BSD / Apache / LGPL only.</p>
+  </section>
+
+  <section>
+    <h2>Free vs Pro</h2>
+    <div class="tiers">
+      <div class="tier free"><h3>Free <small>no licence file needed</small></h3>
+        <ul><li>full local workflow on Windows (WSL2) and Linux</li><li>all meshers and OpenFOAM engines</li><li>Python API, CLI, headless server, journals</li><li>scenes, probes, image and CSV export</li><li>no limits on cells, cores or jobs</li></ul></div>
+      <div class="tier pro"><h3>Pro <small>feature flags, offline licence</small></h3>
+        <ul><li>remote execution: SSH, SLURM / PBS, containers</li><li>Fluent engine through PyFluent</li><li>embedded assistant and MCP server</li><li>reports, run comparison, parametric sweeps</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Roadmap</h2>
+    <div class="road">
+      <div class="bar"></div>
+      <div class="m up" style="left:0%"><b>M0</b>Foundations</div>
+      <div class="m down" style="left:9.09%"><b>M1</b>Geometry</div>
+      <div class="m up" style="left:18.18%"><b>M2</b>Agent, meshing</div>
+      <div class="m down demo" style="left:27.27%"><b>M3</b>Physics, run, API · demo</div>
+      <div class="m up" style="left:36.36%"><b>M4</b>Post-processing</div>
+      <div class="m down" style="left:45.45%"><b>M5</b>Coupled, CHT</div>
+      <div class="m up" style="left:54.54%"><b>M6</b>Assistant</div>
+      <div class="m down" style="left:63.63%"><b>M7</b>Fluent</div>
+      <div class="m up" style="left:72.72%"><b>M8</b>Packaging</div>
+      <div class="m down" style="left:81.81%"><b>M9</b>Beta</div>
+      <div class="m up" style="left:90.9%"><b>M10</b>Expansion</div>
+    </div>
+  </section>
+
+  <footer>
+    OPENFOAM<sup>®</sup> is a registered trade mark of OpenCFD Limited, producer and distributor of the OpenFOAM software via www.openfoam.com.
+    This offering is not approved or endorsed by OpenCFD Limited. Ansys and Fluent are trade marks of ANSYS, Inc.<br>
+    Planning documents: <code>the project repository</code> (README.md, docs/00–06, docs/adr). Targets are design budgets; the coupled-solver speed-up is from its published benchmark.
+  </footer>
+</div>
+</body>
+</html>

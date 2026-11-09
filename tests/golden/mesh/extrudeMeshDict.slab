@@ -1,0 +1,26 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "system";
+    object          extrudeMeshDict;
+}
+
+constructFrom   patch;
+
+sourceCase      ".";
+
+sourcePatches
+(
+    front
+);
+
+exposedPatchName back;
+
+extrudeModel    plane;
+
+thickness       0.05;
+
+flipNormals     true;
+
+mergeFaces      false;

@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "preset": {
+    "title": "Minimal",
+    "description": "The viewport, the palette and a floating properties card; the output drawer stays folded."
+  },
+  "layout": {
+    "left": {
+      "mode": "tabs",
+      "size": 300,
+      "collapsed": false,
+      "panels": []
+    },
+    "right": {
+      "mode": "tabs",
+      "size": 320,
+      "collapsed": false,
+      "panels": []
+    },
+    "bottom": {
+      "mode": "tabs",
+      "size": 240,
+      "collapsed": true,
+      "panels": [
+        {
+          "id": "output",
+          "order": 0,
+          "tabs": [
+            "console",
+            "log",
+            "residuals",
+            "reports"
+          ]
+        },
+        {
+          "id": "design-table",
+          "order": 1
+        },
+        {
+          "id": "plots",
+          "order": 2
+        }
+      ]
+    },
+    "float": {
+      "mode": "tabs",
+      "size": 320,
+      "collapsed": false,
+      "panels": [
+        {
+          "id": "properties",
+          "order": 0,
+          "anchor": "tr",
+          "x": 16,
+          "y": 16,
+          "size": 320
+        },
+        {
+          "id": "conditions",
+          "order": 1
+        }
+      ]
+    },
+    "hidden": [
+      "tree",
+      "details",
+      "mesh",
+      "solve",
+      "results"
+    ]
+  },
+  "islands": {
+    "bl": [],
+    "br": [
+      "view",
+      "gizmo"
+    ],
+    "tl": [],
+    "tr": [],
+    "hidden": [
+      "modes"
+    ]
+  },
+  "topbar": {
+    "items": [
+      {
+        "id": "logo",
+        "visible": true
+      },
+      {
+        "id": "project",
+        "visible": true
+      },
+      {
+        "id": "status.connection",
+        "visible": false
+      },
+      {
+        "id": "status.units",
+        "visible": false
+      },
+      {
+        "id": "status.engine",
+        "visible": false
+      },
+      {
+        "id": "status.licence",
+        "visible": false
+      },
+      {
+        "id": "stages",
+        "visible": false
+      },
+      {
+        "id": "commands",
+        "visible": true
+      },
+      {
+        "id": "appearance",
+        "visible": false
+      },
+      {
+        "id": "run",
+        "visible": true
+      },
+      {
+        "id": "window",
+        "visible": true
+      }
+    ],
+    "stages": {
+      "style": "hidden"
+    }
+  },
+  "tree": {
+    "groupOrder": [
+      "geometry",
+      "mesh",
+      "physics",
+      "regions",
+      "solver",
+      "monitors",
+      "scenes",
+      "runs",
+      "studies"
+    ],
+    "hidden": [],
+    "stages": {
+      "Geometry": [
+        "/geometry"
+      ],
+      "Mesh": [
+        "/mesh"
+      ],
+      "Physics": [
+        "/physics",
+        "/regions"
+      ],
+      "Solve": [
+        "/solver",
+        "/monitors",
+        "/runs"
+      ],
+      "Results": [
+        "/scenes",
+        "/runs"
+      ],
+      "Explore": [
+        "/studies"
+      ]
+    },
+    "linkStage": true,
+    "defaultExpanded": 2,
+    "layout": "outline"
+  }
+}
