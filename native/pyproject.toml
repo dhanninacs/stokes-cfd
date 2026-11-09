@@ -1,0 +1,14 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.1"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "stokes-native"
+version = "0.0.1"
+description = "C++ kernels for Stokes (optional; the application falls back to Python)."
+requires-python = ">=3.13"
+
+[tool.scikit-build]
+minimum-version = "0.10"
+build-dir = "build/{wheel_tag}"
+wheel.py-api = "cp313"
