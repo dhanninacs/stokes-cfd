@@ -1,0 +1,176 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stokes-cfd"
+dynamic = ["version"]
+description = "Stokes: CAD-to-results CFD workbench on OpenFOAM, built for engineers and their agents."
+readme = "README.md"
+requires-python = ">=3.13,<3.15"
+license = { file = "LICENSE" }
+authors = [{ name = "Chandra Dhannina" }]
+keywords = ["cfd", "openfoam", "pre-processing", "post-processing", "mcp"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: X11 Applications :: Qt",
+  "Intended Audience :: Science/Research",
+  "License :: Other/Proprietary License",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+  "numpy>=2.0",
+  "scipy>=1.15",
+  "pint>=0.24",
+  "lark>=1.2",
+  "cryptography>=43",
+]
+
+[project.optional-dependencies]
+agent = ["msgpack>=1.1"]
+server = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "websockets>=13"]
+ui = ["PySide6>=6.11"]
+extract = ["vtk>=9.4"]
+cad = ["cadquery-ocp>=7.8"]
+explore = ["pymoo>=0.6", "SALib>=1.5.1", "scikit-learn>=1.5"]
+materials = ["CoolProp>=8.0", "cantera>=3.2"]
+dev = [
+  "msgpack>=1.1",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "websockets>=13",
+  "pymoo>=0.6",
+  "SALib>=1.5.1",
+  "scikit-learn>=1.5",
+  "CoolProp>=8.0",
+  "cantera>=3.2",
+  "httpx>=0.27",
+  "pytest>=8",
+  "hypothesis>=6",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "pip-licenses>=5",
+  "pip-audit>=2.7",
+  "pre-commit>=3",
+]
+
+[project.scripts]
+stokes = "stokes.cli.main:main"
+stokes-agent = "stokes_agent.__main__:main"
+
+[project.gui-scripts]
+stokes-app = "stokes.app.__main__:main"
+
+[tool.hatch.version]
+path = "stokes/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["stokes", "agent/stokes_agent"]
+# Package data ships with the packages above (grammar.lark, public_key.pem); the shipped
+# workspace presets are named as well so that no ignore pattern can drop them (ADR-0015).
+artifacts = ["stokes/workspace/presets/*.json"]
+
+# **The third-party notices, mapped in from the root rather than copied** (T-177 correction 2).
+# `app.notices` tries the packaged path first so a wheel with no checkout can still show them, and
+# `force-include` is what puts the ONE root file there - a committed copy under `stokes/app/assets/`
+# would be a second source that drifts. Nothing generates the root file (`tools/audit_licenses.py`
+# checks licences, it does not write notices), so it stays hand-written and there is nothing to run.
+[tool.hatch.build.targets.wheel.force-include]
+"THIRD-PARTY-NOTICES.md" = "stokes/app/assets/THIRD-PARTY-NOTICES.md"
+
+[tool.hatch.build.targets.sdist]
+include = ["stokes", "agent", "tools", "docs", "tests", "README.md", "LICENSE", "CLAUDE.md"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["native/", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "RET", "RUF",
+  "S",      # bandit: no eval/exec/shell=True/pickle
+  "PTH",    # pathlib
+  "T20",    # no print outside the CLI
+  "ERA",    # no commented-out code
+  "PL",     # pylint subset
+]
+ignore = [
+  "PLR0913", # many arguments are fine for specs and command handlers
+  "PLR0917", # positional parameters mirror command parameters
+  "PLR2004", # magic numbers in tests and budgets
+  "PLC0415", # lazy imports are policy: heavy modules load at the point of use
+  "N818",    # error names are stable codes (UnitMismatch, NoProject); the base class carries "Error"
+  "S101",    # assert is fine in tests (re-enabled for stokes/ below)
+  "RUF012",
+]
+
+[tool.ruff.lint.pylint]
+max-branches = 15
+
+[tool.ruff.lint.per-file-ignores]
+"stokes/cli/**" = ["T20", "PLR0911", "PLR0912", "PLR0915"]
+"stokes/app/**" = ["PLR0915", "PLR0912"]
+"stokes/server/**" = ["E501"]  # JSON examples in docstrings and long response literals
+"tools/**" = ["T20", "S603", "S607", "PLR0912", "PLR0915"]
+"tests/**" = ["S", "PLR", "T20", "N802", "ERA001"]
+"stokes/**" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["stokes", "stokes_agent"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.13"
+files = ["stokes", "agent", "tools"]
+strict = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+mypy_path = ["agent", "."]
+# `tools/` has no __init__.py and its scripts import each other as `tools.x`: without explicit bases mypy
+# sees `tools/e2e_support.py` as both `e2e_support` and `tools.e2e_support` and stops.
+explicit_package_bases = true
+# The browser-driven review harnesses are run as scripts and import each other by bare name
+# (`from bench_scene import ...`), which no package layout can satisfy; they never ship. The gates
+# and every other tool stay checked.
+exclude = '^tools/(bench_.*|measure_browser_load|test_interactions|test_outline|test_gui_flow|test_mesh_find|fake_results)\.py$'
+
+[[tool.mypy.overrides]]
+module = ["pint", "pint.*", "lark", "lark.*", "msgpack", "piplicenses", "vtkmodules.*", "pyqtgraph", "pyqtgraph.*", "OCP", "OCP.*", "scipy", "scipy.*", "yaml"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# VTK-facing modules: the `vtkmodules.*` stubs type the C++ classes but not the free functions, so
+# `vtk_to_numpy` and friends read as untyped. The alternative is a `# type: ignore` on every call.
+module = ["stokes_agent.extract", "stokes_agent.fidelity"]
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+# Qt-facing package: PySide6 stubs are loose.
+module = ["stokes.app.*"]
+disallow_untyped_calls = false
+disallow_any_generics = false
+warn_return_any = false
+disallow_subclassing_any = false
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+  "perf: performance budget tests",
+  "ui: needs PySide6, runs offscreen",
+  "engine: needs an OpenFOAM installation (set STOKES_ENGINE_TESTS=1)",
+  "slow: longer than ten seconds",
+]
+filterwarnings = ["error::DeprecationWarning:stokes.*"]

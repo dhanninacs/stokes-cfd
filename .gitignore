@@ -1,0 +1,56 @@
+# Environments and build output
+.venv/
+node_modules/
+web/dist/
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+native/build/
+
+# Local runtime data
+.stokes/
+*.log
+# **The pitzDaily fixtures are data, not logs.** `*.log` above would exclude them, and a clean
+# clone then fails ~10 tests with no hint why - claude-win2 found this in his merge. The negation
+# has to come after the pattern it overrides.
+!tests/fixtures/**/*.log
+.env
+.env.*
+
+# Private, never committed
+tools/ip_blocklist.txt
+.review/
+docs/drafts/
+docs/research/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Stray local artefacts
+*.log.err
+/.web-*.png
+/HANDOVER-LOCAL.md
+/.mailbox/
+
+# Session-local working notes and safety snapshots (never committed)
+/.coordination/
+/.safety/
+/.shots/
+
+# The perf run log. Every `pytest -m perf` appends to it, so tracking it dirtied every worker's tree
+# on every perf run, with numbers that belong to one machine and one run. Nothing reads it back: the
+# budgets are asserted in the tests themselves, and the harness creates the file on the first run.
+tests/perf/results.jsonl
+!tests/fixtures/**/*.log
+stokes/app/assets/THIRD-PARTY-NOTICES.md

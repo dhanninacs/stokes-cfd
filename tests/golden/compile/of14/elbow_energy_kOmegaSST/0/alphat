@@ -1,0 +1,36 @@
+FoamFile
+{
+    format          ascii;
+    class           volScalarField;
+    location        "0";
+    object          alphat;
+}
+
+dimensions      [1 -1 -1 0 0 0 0];
+
+internalField   uniform 0.01178823529411765;
+
+boundaryField
+{
+    cold_inlet
+    {
+        type            calculated;
+        value           uniform 0.01178823529411765;
+    }
+    hot_inlet
+    {
+        type            calculated;
+        value           uniform 0.01178823529411765;
+    }
+    outlet
+    {
+        type            calculated;
+        value           uniform 0.0;
+    }
+    walls
+    {
+        type            compressible::alphatJayatillekeWallFunction;
+        Prt             0.85;
+        value           uniform 0.0;
+    }
+}

@@ -1,0 +1,688 @@
+/*
+ * Guided mode: the flow strip across the top of the viewport and the step card at its left.
+ * Theme tokens only (`--panel`, `--accent`, `--ok`, `--warn`, `--text-muted`...), so the four themes need
+ * nothing of their own. A state is never colour alone: each dot carries an icon and the button a word.
+ */
+
+/* ------------------------------------------------------------------ the layer */
+/* Offsets follow the open side slots (`--slot-left`, `--slot-right`, set by the layout on <main>). */
+.guided-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ the strip, in the top bar's middle cell */
+/* It used to float in a second row over the viewport while the bar's middle stood empty (owner, 2026-11-03). In
+   the bar it is flat: no glass panel of its own, the bar is the surface. */
+.guided-strip-wrap {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 8px;
+}
+.guided-strip,
+.guided-strip.glass {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.guided-steps {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.guided-step-item {
+  display: flex;
+  min-width: 0;
+}
+/* The rail between steps: a hairline that fills with the status colour once the step before it is done, and
+   runs from that colour into the accent where it reaches the open step, so the bar reads as progress. */
+.guided-step-item + .guided-step-item::before {
+  align-self: center;
+  width: 14px;
+  height: 2px;
+  margin: 0 1px;
+  border-radius: 1px;
+  content: "";
+  background: var(--panel-border-strong);
+  transition: background 200ms ease-out;
+}
+.guided-step-item:has(> .guided-step[data-state="done"]) + .guided-step-item::before {
+  background: color-mix(in srgb, var(--ok) 70%, transparent);
+}
+.guided-step-item:has(> .guided-step[data-state="done"]) + .guided-step-item:has(> .guided-step[aria-current="step"])::before {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ok) 70%, transparent), var(--accent));
+}
+.guided-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 220px;
+  height: 30px;
+  padding: 0 12px 0 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+.guided-step:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.guided-step[aria-current="step"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+/* One line in every state, so the strip keeps one height and the steps do not shift when another opens. */
+.guided-step-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.guided-step-label {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.guided-step-hint {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 450;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The hint is the open card's subtitle and every step's tooltip; in the bar it would only crowd the project name. */
+.guided-step-hint {
+  display: none;
+}
+.guided-dot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+  color: var(--text-muted);
+}
+/* Done is a soft tint with the check in the status colour (DESIGN.md 3b: status is never a filled badge). */
+.guided-dot[data-state="done"] {
+  border-color: transparent;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.guided-dot[data-state="attention"] {
+  border-color: var(--warn);
+  background: transparent;
+  color: var(--warn);
+}
+.guided-dot[data-state="running"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.guided-dot[data-state="attention"] svg,
+.guided-dot[data-state="running"] svg {
+  margin: -1.5px;
+}
+/* A narrower bar drops the labels of the steps that are not open: the strip shares the bar with the project and
+   command clusters. */
+@media (max-width: 1180px) {
+  .guided-step:not([aria-current="step"]) .guided-step-text {
+    display: none;
+  }
+  .guided-step:not([aria-current="step"]) {
+    padding-right: 7px;
+  }
+}
+
+/* ------------------------------------------------------------------ the stack: card, then legend */
+.guided-stack {
+  position: absolute;
+  top: 12px;
+  left: calc(var(--slot-left, 0px) + 12px);
+  display: flex;
+  /* Column, wrapping: when the card and the legend together are taller than the room (the line
+     plot open, a short window), the legend wraps into a second column beside the card instead of
+     running under the viewport's toolbar (measured on pipe3, 2026-11-01: the legend sat under
+     Body/Paint). The height leaves that toolbar (~52 px) out as well as the bottom slot. */
+  flex-flow: column wrap;
+  align-content: flex-start;
+  gap: 8px 12px;
+  max-height: calc(100% - 12px - var(--slot-bottom, 0px) - 64px);
+  pointer-events: none;
+}
+/* The legend is the viewport's own component; here it is part of the stack instead of a corner overlay. */
+.guided-stack .field-legend {
+  position: static;
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+.guided-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+  flex-shrink: 0;
+  /* A card taller than the room (Results with the Analyse block open, a short window) scrolls in
+     place rather than running off the bottom of the viewport. The stack's own height is only a
+     max-height, so a percentage here would resolve to nothing: the window's height is the measure,
+     less the top bar, the viewport toolbar and the status bar (~140 px). */
+  /* Less the bottom slot too (the Console drawer, 240 px by default): without it the Fluid card on a
+     768 px window ran 290 px under the viewport toolbar and its Next button could not be pressed
+     (elbow walkthrough, 2026-11-08). A floor keeps a usable card on a very short window. */
+  max-height: max(180px, calc(100vh - 140px - var(--slot-bottom, 0px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px 12px;
+  pointer-events: auto;
+}
+.guided-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+.guided-card-num {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.guided-card-titles {
+  flex: 1;
+  min-width: 0;
+}
+.guided-card-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 22px;
+}
+.guided-card-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.guided-fold {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.guided-fold:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.guided-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.guided-card-foot {
+  display: flex;
+}
+.guided-card-foot .btn {
+  flex: 1;
+  justify-content: center;
+}
+.guided-actions {
+  display: flex;
+  gap: 6px;
+}
+.guided-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+.guided-link {
+  text-decoration: none;
+}
+.guided-note,
+.guided-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.guided-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.guided-line strong {
+  color: var(--text);
+}
+.guided-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--danger);
+}
+.guided-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--track);
+  font-size: 12px;
+}
+.guided-readout[data-ok="false"] strong {
+  color: var(--warn);
+}
+.guided-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.guided-field .field {
+  width: 110px;
+  height: 28px;
+}
+/* A choice by name (the Mesher) takes the row: at 110 px "snappyHexMesh" and "Polyhedral (cfMesh pMesh)"
+   were cut to "snappyHex". */
+.guided-field select.field {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.guided-state {
+  font-size: 12px;
+}
+.guided-spark {
+  height: 112px;
+}
+.guided-spark .run-legend {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ chips */
+/* A row of choices is one segmented control: a recessed track and a raised segment for the chosen one, as the
+   Guided / Full switch and the Display settings draw it. A chip on its own (the Boundaries card's assign
+   buttons) is a plain 8 px button. */
+.guided-chips {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--panel-border);
+  border-radius: 9px;
+  background: var(--track);
+}
+.guided-chips.wide {
+  flex: 1;
+}
+.guided-chip {
+  display: inline-flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--track);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+.guided-chip:hover {
+  background: var(--hover);
+  border-color: var(--panel-border-strong);
+}
+.guided-chips .guided-chip {
+  min-height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.guided-chips .guided-chip:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.guided-chip[aria-pressed="true"],
+.guided-chips .guided-chip[aria-pressed="true"] {
+  background: var(--bg-elev);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 1px var(--panel-border-strong);
+}
+.guided-chip[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+.guided-chip[aria-disabled="true"]:hover {
+  background: var(--track);
+  border-color: var(--panel-border);
+}
+.guided-chips .guided-chip[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+.guided-chip-sub {
+  font-size: 10px;
+  font-weight: 450;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ looks (the Results card) */
+.looks-fields {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.looks-more {
+  flex: none;
+  width: 84px;
+}
+.looks-more .field {
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+.looks-tiles {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+.looks-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 46px;
+  padding: 5px 1px 4px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--track);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+.looks-tile:hover {
+  background: var(--hover);
+  border-color: var(--panel-border-strong);
+  color: var(--text);
+}
+.looks-tile[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.looks-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.looks-tile[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+.looks-controls,
+.looks-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.looks-legend {
+  padding-top: 7px;
+  border-top: 1px solid var(--panel-border);
+}
+.looks-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+}
+.looks-label {
+  flex: none;
+  width: 48px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.looks-row .guided-chip {
+  min-height: 22px;
+  padding: 1px 6px;
+  font-size: 11.5px;
+}
+.looks-slider {
+  flex: 1;
+  min-width: 0;
+}
+.looks-value {
+  flex: none;
+  min-width: 52px;
+  font-size: 11.5px;
+  text-align: right;
+}
+.looks-map {
+  flex: 1;
+  min-width: 0;
+}
+.looks-map .field {
+  height: 26px;
+  font-size: 12px;
+}
+.looks-end {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+}
+
+/* ------------------------------------------------------------------ geometry rows */
+.guided-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 232px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.guided-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.guided-row-name {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guided-row-note {
+  font-size: 11.5px;
+}
+.guided-row .guided-chip {
+  min-height: 24px;
+  padding: 1px 8px;
+  font-size: 11.5px;
+}
+
+/* ------------------------------------------------------------------ boundaries */
+.guided-assign {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.guided-assign-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.guided-assign-row .guided-chip {
+  flex: 1;
+}
+.guided-bnd-value {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+}
+.guided-bnd-value .field {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+}
+.guided-bnds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  margin: 0;
+  padding: 6px 0 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--panel-border);
+  list-style: none;
+}
+.guided-bnd {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.guided-bnd-name {
+  flex: none;
+  width: 66px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guided-face-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+.guided-swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--panel-border-strong);
+  background: var(--text-faint);
+}
+.guided-x {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.guided-x:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* The Mesh card's fineness slider: a log scale with Coarse, Medium and Fine marked on it, and a box for a size. */
+.fineness { display: flex; flex-direction: column; gap: 6px; }
+.fineness-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fineness-entry { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.fineness-entry input { width: 64px; text-align: right; }
+.fineness-slider { width: 100%; margin: 0; accent-color: var(--accent); }
+.fineness-marks { position: relative; height: 14px; font-size: 11px; color: var(--text-muted); }
+.fineness-marks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+
+/* The Fluid card's flow options: a caption over each segmented choice. */
+.guided-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.guided-cap {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* An inlet's temperature (heat transfer on) sits on its own line under its speed, so the row stays legible
+   in a narrow card. */
+.guided-bnd[data-temp] {
+  flex-wrap: wrap;
+}
+.guided-bnd[data-temp] .guided-bnd-temp {
+  order: 1;
+  flex: 1 1 100%;
+  padding-left: 19px;
+}
+.guided-assign-cap {
+  flex: 1;
+  padding-left: 2px;
+  font-size: 12px;
+}
+
+/* An imported case's quick settings (CaseSettingsCard): entries from its own dictionaries, by file. */
+.case-quick { display: flex; flex-direction: column; gap: 8px; }
+.case-quick-group { display: flex; flex-direction: column; gap: 4px; }
+.case-quick-file { font-size: 11px; }
+.case-quick-row .guided-field { align-items: center; }
+.case-quick-row .guided-field > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.case-quick-row input.field { min-width: 0; }

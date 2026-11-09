@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "preset": {
+    "title": "Workflow",
+    "description": "One workflow tree in setup order and no stage band, properties on the right, as SimScale users expect."
+  },
+  "layout": {
+    "left": {
+      "mode": "tabs",
+      "size": 320,
+      "collapsed": false,
+      "panels": [
+        {
+          "id": "tree",
+          "order": 0
+        },
+        {
+          "id": "details",
+          "order": 1
+        }
+      ]
+    },
+    "right": {
+      "mode": "tabs",
+      "size": 340,
+      "collapsed": false,
+      "panels": [
+        {
+          "id": "properties",
+          "order": 0
+        },
+        {
+          "id": "mesh",
+          "order": 1
+        },
+        {
+          "id": "conditions",
+          "order": 2
+        },
+        {
+          "id": "solve",
+          "order": 3
+        },
+        {
+          "id": "results",
+          "order": 4
+        },
+        {
+          "id": "plots",
+          "order": 5
+        }
+      ]
+    },
+    "bottom": {
+      "mode": "tabs",
+      "size": 240,
+      "collapsed": true,
+      "panels": [
+        {
+          "id": "output",
+          "order": 0,
+          "tabs": [
+            "console",
+            "log",
+            "residuals",
+            "reports"
+          ]
+        },
+        {
+          "id": "design-table",
+          "order": 1
+        }
+      ]
+    },
+    "float": {
+      "mode": "tabs",
+      "size": 320,
+      "collapsed": false,
+      "panels": []
+    },
+    "hidden": []
+  },
+  "islands": {
+    "bl": [
+      "modes"
+    ],
+    "br": [
+      "view",
+      "gizmo"
+    ],
+    "tl": [],
+    "tr": [],
+    "hidden": []
+  },
+  "topbar": {
+    "items": [
+      {
+        "id": "logo",
+        "visible": true
+      },
+      {
+        "id": "project",
+        "visible": true
+      },
+      {
+        "id": "status.connection",
+        "visible": true
+      },
+      {
+        "id": "status.units",
+        "visible": true
+      },
+      {
+        "id": "status.engine",
+        "visible": true
+      },
+      {
+        "id": "status.licence",
+        "visible": true
+      },
+      {
+        "id": "stages",
+        "visible": false
+      },
+      {
+        "id": "commands",
+        "visible": true
+      },
+      {
+        "id": "appearance",
+        "visible": true
+      },
+      {
+        "id": "run",
+        "visible": true
+      },
+      {
+        "id": "window",
+        "visible": true
+      }
+    ],
+    "stages": {
+      "style": "hidden"
+    }
+  },
+  "tree": {
+    "groupOrder": [
+      "geometry",
+      "physics",
+      "regions",
+      "mesh",
+      "solver",
+      "monitors",
+      "runs",
+      "scenes",
+      "studies"
+    ],
+    "hidden": [],
+    "stages": {
+      "Geometry": [
+        "/geometry"
+      ],
+      "Mesh": [
+        "/mesh"
+      ],
+      "Physics": [
+        "/physics",
+        "/regions"
+      ],
+      "Solve": [
+        "/solver",
+        "/monitors",
+        "/runs"
+      ],
+      "Results": [
+        "/scenes",
+        "/runs"
+      ],
+      "Explore": [
+        "/studies"
+      ]
+    },
+    "linkStage": false,
+    "defaultExpanded": 1,
+    "layout": "outline"
+  }
+}

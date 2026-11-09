@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Stokes</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <script>
+      // Set the theme and the motion preference before the first paint, so a light window never
+      // flashes dark. App keeps them in step afterwards. Storage may be blocked: stay silent.
+      (function () {
+        try {
+          var requested = new URLSearchParams(window.location.search).get("theme") || "auto";
+          var light = window.matchMedia("(prefers-color-scheme: light)").matches;
+          var theme = light ? "light" : "dark";
+          if (requested === "cupertino-auto") theme = light ? "cupertino" : "cupertino-dark";
+          else if (requested === "ubuntu-auto") theme = light ? "ubuntu" : "ubuntu-dark";
+          else if (["dark", "light", "cupertino", "cupertino-dark", "ubuntu", "ubuntu-dark"].indexOf(requested) >= 0) theme = requested;
+          document.documentElement.dataset.theme = theme;
+          if (window.localStorage.getItem("stokes.reducedMotion") === "1") document.documentElement.dataset.motion = "reduced";
+        } catch (e) {
+          /* defaults apply */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

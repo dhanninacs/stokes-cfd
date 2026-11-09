@@ -1,0 +1,173 @@
+/*
+ * Ubuntu: the Yaru-inspired style family (DESIGN.md §2), in a light and a dark appearance. Every
+ * value here is read from this machine's installed Yaru theme, not invented: the dark appearance
+ * from /usr/share/themes/Yaru-dark/gtk-3.0/gtk.gresource and the light from
+ * /usr/share/themes/Yaru/gtk-3.0/gtk.gresource. The base accent is Ubuntu orange #E95420
+ * (theme_selected_bg_color); Yaru also ships blue #0073e5, purple #7764d8, magenta, red, yellow,
+ * olive, sage, prussiangreen and wartybrown accents, which a user can reach with a custom theme's
+ * --accent. Imported after styles.css, so these rules win. Dark and light (the Stokes family) and
+ * Cupertino stay exactly as they are. Two blocks define the tokens, one for data-theme="ubuntu"
+ * (light) and one for "ubuntu-dark"; every value that differs between the appearances lives there.
+ * The shapes further down match both with [data-theme^=ubuntu] and read those tokens, so a rule is
+ * written once and the dark counterpart is a token, not a second rule.
+ */
+
+:root[data-theme="ubuntu"] {
+  color-scheme: light;
+
+  --bg: #fafafa; /* theme_bg_color */
+  --bg-elev: #ffffff; /* theme_base_color */
+  --panel: rgba(250, 250, 250, 0.86);
+  --panel-solid: #fafafa;
+  --panel-border: #c7c7c7; /* borders */
+  --panel-border-strong: #a8a8a8;
+  --track: rgba(0, 0, 0, 0.06);
+  --hover: rgba(0, 0, 0, 0.05);
+  --active: rgba(0, 0, 0, 0.1);
+  --text: #3d3d3d; /* theme_fg_color */
+  --text-muted: #6d6d6d;
+  --text-faint: #9c9c9c; /* insensitive_fg_color */
+
+  /* Yaru's selected background is the orange; on a light panel the accent as text is darker. */
+  --accent-ink: #c7431a;
+
+  --blue: #0073e5; /* Yaru's blue accent */
+  --warn: #f99b11;
+  --danger: #c7162b;
+  --ok: #109b26;
+  --blue-soft: rgba(0, 115, 229, 0.12);
+  --warn-soft: rgba(249, 155, 17, 0.16);
+  --danger-soft: rgba(199, 22, 43, 0.12);
+  --ok-soft: rgba(16, 155, 38, 0.14);
+
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.07);
+  --shadow-pop: 0 16px 44px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.09);
+  --highlight: rgba(255, 255, 255, 0.9);
+  --menu-bg: rgba(255, 255, 255, 0.98);
+  /* Yaru keeps tooltips dark in both appearances: they are an overlay, not a panel. */
+  --tooltip-bg: #3d3d3d;
+  --tooltip-text: #f7f7f7;
+  --tooltip-border: rgba(255, 255, 255, 0.14);
+  --tooltip-kbd-border: rgba(255, 255, 255, 0.28);
+  --scrim: rgba(0, 0, 0, 0.3);
+  --scroll-thumb: rgba(0, 0, 0, 0.22);
+  --scroll-thumb-hover: rgba(0, 0, 0, 0.38);
+  --logo-ink: #ffffff; /* the logo tile carries its own colour in every theme */
+
+  /* The viewport reads these as plain hex and applies its own alphas (viewport/theme.ts), so each
+     is a dark ink on the light floor: the grid lines and the contact shadow, not a pale tint. */
+  --vp-top: #fafafa;
+  --vp-bottom: #d9d9d9;
+  --vp-grid-minor: #6d6d6d;
+  --vp-grid-major: #3d3d3d;
+  --vp-floor: #f2f2f2;
+  --vp-shadow: #3d3d3d;
+  --vp-edge: #3d3d3d;
+}
+
+/* Yaru dark: graphite surfaces, the same orange accent, hairlines in near-black. */
+:root[data-theme="ubuntu-dark"] {
+  color-scheme: dark;
+
+  --bg: #2c2c2c; /* theme_bg_color */
+  --bg-elev: #272727; /* theme_base_color / content_view_bg */
+  --panel: rgba(44, 44, 44, 0.82);
+  --panel-solid: #2c2c2c;
+  --panel-border: #181818; /* borders */
+  --panel-border-strong: #454545;
+  --track: rgba(255, 255, 255, 0.06);
+  --hover: rgba(255, 255, 255, 0.06);
+  --active: rgba(255, 255, 255, 0.1);
+  --text: #f7f7f7; /* theme_fg_color */
+  --text-muted: #b5b5b5;
+  --text-faint: #929292; /* insensitive_fg_color */
+
+  /* On a dark panel the accent as text is lighter than the fill. */
+  --accent-ink: #f07a4f;
+
+  --blue: #3297ff;
+  --warn: #f99b11;
+  --danger: #c7162b;
+  --ok: #109b26;
+  --blue-soft: rgba(50, 151, 255, 0.18);
+  --warn-soft: rgba(249, 155, 17, 0.18);
+  --danger-soft: rgba(199, 22, 43, 0.22);
+  --ok-soft: rgba(16, 155, 38, 0.2);
+
+  --shadow: 0 12px 34px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 20px 54px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.45);
+  --highlight: rgba(255, 255, 255, 0.06);
+  --menu-bg: rgba(52, 52, 52, 0.98); /* theme_unfocused_bg_color */
+  --tooltip-bg: #343434; /* theme_unfocused_bg_color */
+  --tooltip-text: #f7f7f7;
+  --tooltip-border: rgba(255, 255, 255, 0.12);
+  --tooltip-kbd-border: rgba(255, 255, 255, 0.22);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --scroll-thumb: rgba(255, 255, 255, 0.2);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.34);
+  --logo-ink: #ffffff;
+
+  /* Light ink on the dark floor, the mirror of the light appearance (see there). */
+  --vp-top: #343434; /* theme_unfocused_bg_color */
+  --vp-bottom: #181818;
+  --vp-grid-minor: #6d6d6d;
+  --vp-grid-major: #9a9a9a;
+  --vp-floor: #2f2f2f; /* theme_unfocused_base_color */
+  --vp-shadow: #000000;
+  --vp-edge: #181818;
+}
+
+/* Tokens the two appearances share: the typeface, the one accent and the Yaru geometry. */
+:root[data-theme^="ubuntu"] {
+  /* Yaru's own typeface, which this machine has installed; ui-sans-serif/system-ui cover a box
+     without it. Ubuntu Sans Mono for identifiers and the console, with Ubuntu Mono behind it. */
+  --font-sans: "Ubuntu Sans", "Ubuntu", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: "Ubuntu Sans Mono", "Ubuntu Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  /* The classic Yaru accent: Ubuntu orange, an accent variant only through a custom theme. */
+  --accent: #e95420;
+  --accent-strong: #f0693a; /* under the pointer */
+  --accent-soft: rgba(233, 84, 32, 0.16);
+  --accent-text: #ffffff;
+  --accent-fill: #e95420;
+  --accent-glow: rgba(233, 84, 32, 0.28);
+  --focus-halo: 0 0 0 4px rgba(233, 84, 32, 0.35);
+
+  /* Yaru controls are rounded rectangles, not pills and not Mac-like tiles. */
+  --radius: 8px;
+  --radius-sm: 6px;
+
+  /* The accent and the blue are two colours here, so the chart's default --series-2 stands. */
+  --series-2: var(--blue);
+}
+
+/* Yaru buttons are flat: a solid accent fill, no gradient and no glow under the primary one. */
+:root[data-theme^="ubuntu"] .btn.primary {
+  background: var(--accent-fill);
+  box-shadow: none;
+}
+:root[data-theme^="ubuntu"] .btn.primary:hover {
+  background: var(--accent-strong);
+  filter: none;
+}
+:root[data-theme^="ubuntu"] .btn.primary:focus-visible {
+  box-shadow: var(--focus-halo);
+}
+
+/* Stage chips as a Yaru header control: a rounded rectangle, square-ish segments, no pill. */
+:root[data-theme^="ubuntu"] .stage-chips {
+  border-radius: var(--radius-sm);
+}
+:root[data-theme^="ubuntu"] .chip {
+  border-radius: 4px;
+}
+
+/* Inputs: the Yaru border and an orange focus ring on the field itself. */
+:root[data-theme^="ubuntu"] .field:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-halo);
+}
+:root[data-theme^="ubuntu"] .kbd {
+  border-color: var(--panel-border);
+  background: var(--bg-elev);
+}

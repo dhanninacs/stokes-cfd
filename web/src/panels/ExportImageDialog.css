@@ -1,0 +1,30 @@
+/* The Export image dialog: a label column and a control column, spaced like the Results panel's rows. Theme tokens only. */
+.export-dialog {
+  display: grid;
+  gap: 10px;
+}
+.export-row {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.export-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.export-side {
+  width: 84px;
+}
+.export-size-note {
+  font-size: 11.5px;
+}
+.export-size-note.warn {
+  color: var(--warn);
+}
+.export-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}

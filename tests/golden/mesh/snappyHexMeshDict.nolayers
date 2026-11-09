@@ -1,0 +1,122 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "system";
+    object          snappyHexMeshDict;
+}
+
+castellatedMesh true;
+
+snap            true;
+
+addLayers       false;
+
+geometry
+{
+    inlet
+    {
+        type            triSurface;
+        file            "inlet.stl";
+        regions
+        {
+            inlet
+            {
+                name            inlet;
+            }
+        }
+    }
+    walls
+    {
+        type            triSurface;
+        file            "walls.stl";
+        regions
+        {
+            walls
+            {
+                name            walls;
+            }
+        }
+    }
+}
+
+castellatedMeshControls
+{
+    // Refinement: curvature via resolveFeatureAngle + level (min max)
+    maxLocalCells   1000000;
+    maxGlobalCells  5000000;
+    minRefinementCells 2;
+    nCellsBetweenLevels 3;
+    features
+    (
+        {
+            file            "inlet.eMesh";
+            level           3;
+        }
+    );
+    refinementSurfaces
+    {
+        inlet
+        {
+            level           (2 3);
+            patchInfo
+            {
+                type            patch;
+            }
+        }
+        walls
+        {
+            level           (1 2);
+            patchInfo
+            {
+                type            wall;
+            }
+        }
+    }
+    resolveFeatureAngle 30.0;
+    refinementRegions
+    {
+    }
+    insidePoint     (0.0 0.0 0.0);
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch    3;
+    tolerance       2.0;
+    nSolveIter      50;
+    nRelaxIter      5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap true;
+    explicitFeatureSnap true;
+}
+
+addLayersControls
+{
+    layers
+    {
+    }
+}
+
+meshQualityControls
+{
+    maxNonOrtho     65.0;
+    maxBoundarySkewness 20;
+    maxInternalSkewness 4.0;
+    maxConcave      80;
+    minVol          -1e+30;
+    minTetQuality   1e-30;
+    minArea         -1;
+    minTwist        0.05;
+    minDeterminant  0.001;
+    minFaceWeight   0.05;
+    minVolRatio     0.01;
+    minTriangleTwist -1;
+    nSmoothScale    4;
+    errorReduction  0.75;
+}
+
+debug           0;
+
+mergeTolerance  1e-06;

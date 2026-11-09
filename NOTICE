@@ -1,0 +1,72 @@
+Stokes
+Required Notice: Copyright (c) 2026 Chandra Dhannina
+
+Stokes is licensed under the PolyForm Noncommercial License 1.0.0. The full
+text is in the LICENSE file and at
+https://polyformproject.org/licenses/noncommercial/1.0.0
+
+Exceptions inside this repository
+---------------------------------
+
+tests/fixtures/of14/ holds OpenFOAM tutorial content, OpenFOAM utility logs
+and help output, used as test data only. It is not covered by the Stokes
+licence. It is the work of the OpenFOAM Foundation, licensed under the GNU
+General Public License version 3, and keeps the licence headers it came with.
+See tests/fixtures/of14/README.md.
+
+OPENFOAM(R) is a registered trade mark of OpenCFD Limited, producer and
+distributor of the OpenFOAM software via www.openfoam.com. This product is not
+approved or endorsed by OpenCFD Limited.
+
+Third-party components
+----------------------
+
+This repository does not vendor third-party source code. The components below
+are installed by pip or npm from their own distributions and stay under their
+own licences, which govern them. Nothing in the Stokes licence limits the rights
+those licences give you. The per-version list, with the further notices that
+LGPL, OFL and Apache-2.0 components require, is THIRD-PARTY-NOTICES.md.
+The dependency register is docs/engineering/dependencies.md.
+
+Python, runtime and optional extras
+  numpy                     BSD-3-Clause
+  scipy                     BSD-3-Clause
+  pint                      BSD-3-Clause
+  lark                      MIT
+  cryptography              Apache-2.0 OR BSD-3-Clause
+  msgpack                   Apache-2.0
+  fastapi                   MIT
+  uvicorn                   BSD-3-Clause
+  websockets                BSD-3-Clause
+  PySide6, shiboken6        LGPL-3.0 (unmodified, dynamically linked)
+  vtk                       BSD-3-Clause
+  cadquery-ocp              Apache-2.0; contains Open CASCADE Technology,
+                            LGPL-2.1 with the OCCT exception
+  pymoo                     Apache-2.0
+  moocore (via pymoo)       LGPL-2.1-or-later (unmodified, dynamically loaded)
+  SALib                     MIT
+  scikit-learn              BSD-3-Clause
+  CoolProp                  MIT
+  cantera                   BSD-3-Clause
+  ruamel.yaml (via cantera) MIT
+
+Python, development only (not shipped)
+  pytest MIT; hypothesis MPL-2.0; httpx BSD-3-Clause; ruff MIT; mypy MIT;
+  pip-licenses MIT; pip-audit Apache-2.0; pre-commit MIT; hatchling MIT
+
+JavaScript (web/), bundled into the built front end
+  react, react-dom          MIT
+  three                     MIT
+  zustand                   MIT
+  lucide-react              ISC
+  uplot                     MIT
+  @fontsource-variable/inter  OFL-1.1
+
+JavaScript, development only (not shipped)
+  vite, @vitejs/plugin-react, tailwindcss, @tailwindcss/vite, vitest,
+  @types/*  MIT; typescript Apache-2.0; @playwright/test Apache-2.0
+
+Programs driven as separate processes, never imported or distributed
+  OpenFOAM (GPL-3.0), snappyHexMesh, cfMesh (GPL-3.0), Gmsh (GPL-2.0+),
+  ParaView (BSD-3-Clause). ANSYS Fluent and NIST REFPROP are the user's own
+  commercially licensed programs.

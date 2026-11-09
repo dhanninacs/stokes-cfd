@@ -1,0 +1,429 @@
+/*
+ * The Start screen: a rail of actions at the left, the user's projects as cards beside it. Theme tokens only, so
+ * the four themes need nothing of their own. A card with no saved thumbnail shows its own streamlines around its
+ * monogram (`flowArt.ts`) on the viewport's backdrop (`--vp-*`), rather than a stock icon.
+ */
+.start-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ the rail */
+.start-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 0;
+  padding: 22px 14px 16px;
+  background: var(--panel-solid);
+  border-right: 1px solid var(--panel-border);
+}
+.start-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+}
+.start-brand img {
+  border-radius: 7px;
+}
+.start-brand > span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.start-brand strong {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.start-brand small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.start-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.start-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.start-action svg {
+  flex: none;
+  color: var(--text-muted);
+}
+.start-action:hover:not(:disabled) {
+  background: var(--hover);
+}
+/* The app's own primary button (`.btn.primary` in styles.css): the accent as a fill, and the text made for it. */
+.start-action--primary {
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-fill));
+  color: var(--accent-text);
+  font-weight: 600;
+  box-shadow:
+    0 4px 14px var(--accent-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.start-action--primary svg {
+  color: inherit;
+}
+.start-action--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-fill));
+  filter: brightness(1.06);
+}
+.start-action--quiet {
+  height: 30px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.start-rail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+.start-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.start-status > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.start-status[data-connected="true"] > span {
+  background: var(--ok);
+}
+
+/* ------------------------------------------------------------------ the main area */
+.start-main {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 26px clamp(20px, 3vw, 40px) 32px;
+}
+.start-section + .start-section {
+  margin-top: 30px;
+}
+.start-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.start-section-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.start-section-head .link {
+  margin-left: auto;
+  font-size: 12px;
+}
+.start-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.start-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.start-section-head .start-hint {
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------------ the cards */
+.start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.start-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius, 10px);
+  background: var(--panel-solid);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+.start-card:hover:not(:disabled) {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.start-card:disabled {
+  cursor: default;
+}
+.start-card[data-missing] {
+  opacity: 0.55;
+}
+.start-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  color: var(--text-faint);
+  /* The viewport's backdrop and floor grid, faint: what an empty project opens into. */
+  background: radial-gradient(120% 90% at 50% 0%, var(--vp-top, var(--bg-elev)) 0%, var(--vp-bottom, var(--bg)) 100%);
+  border-bottom: 1px solid var(--panel-border);
+}
+.start-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.start-thumb--sample {
+  color: var(--accent);
+}
+/* The card's own streamlines (`flowArt`): quiet ink at rest, the accent flowing while the card is hovered. */
+.flow-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.flow-line {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.55;
+  transition:
+    stroke 0.2s,
+    opacity 0.2s;
+}
+.start-card:is(:hover, :focus-visible):not(:disabled) .flow-line {
+  stroke: var(--accent);
+  opacity: 0.8;
+  stroke-dasharray: 7 5;
+  animation: flow-run 1.6s linear infinite;
+}
+@keyframes flow-run {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+/* The cylinder the stream parts around: a round tile, 2R high, with the monogram (or the example's icon). */
+.start-thumb {
+  container-type: inline-size;
+}
+.start-mono {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 40%;
+  aspect-ratio: 1;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 50%;
+  background: var(--panel-solid);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 var(--highlight);
+  font-size: clamp(13px, 7.5cqw, 22px);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+.start-card:hover:not(:disabled) .start-mono {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.start-thumb--sample .start-mono {
+  color: var(--accent-ink);
+}
+.start-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+}
+.start-card-body strong,
+.start-card-body small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.start-card-body strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.start-card-body small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.start-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 420px;
+  padding: 18px;
+  border: 1px dashed var(--panel-border-strong, var(--panel-border));
+  border-radius: var(--radius, 10px);
+}
+.start-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.start-empty .start-action--primary {
+  width: auto;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ the tutorials fold */
+.start-tutorials > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.start-tutorials > summary::-webkit-details-marker {
+  display: none;
+}
+.start-tutorials > summary h2::before {
+  content: "\203A";
+  display: inline-block;
+  width: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+.start-tutorials[open] > summary h2::before {
+  transform: rotate(90deg);
+}
+.start-tutorial-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius, 10px);
+  background: var(--panel-solid);
+}
+.start-problem {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.start-screen button:focus-visible,
+.start-screen summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.start-screen button:disabled {
+  opacity: 0.5;
+}
+.start-screen .start-card[data-missing]:disabled {
+  opacity: 0.55;
+}
+
+/* The top bar keeps only what means something with no project open. */
+.app-shell[data-start-screen="true"] .stage-chips,
+.app-shell[data-start-screen="true"] [data-ws-item="run"],
+.app-shell[data-start-screen="true"] .tb-engine,
+.app-shell[data-start-screen="true"] .tb-licence,
+.app-shell[data-start-screen="true"] .tb-units,
+.app-shell[data-start-screen="true"] [data-ws-item="tree-toggle"] {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .start-screen {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .start-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    border-right: none;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .start-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .start-action,
+  .start-action--primary {
+    width: auto;
+    margin: 0;
+  }
+  .start-rail-foot {
+    flex-direction: row;
+    margin: 0 0 0 auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .start-card:hover:not(:disabled) {
+    transform: none;
+  }
+  .start-card:is(:hover, :focus-visible):not(:disabled) .flow-line {
+    animation: none;
+  }
+  .start-card,
+  .start-tutorials > summary h2::before {
+    transition: none;
+  }
+}
+
+/* Cupertino and Ubuntu draw the primary action flat, as their `.btn.primary` does. */
+:root[data-theme^="cupertino"] .start-action--primary,
+:root[data-theme^="cupertino"] .start-action--primary:hover:not(:disabled),
+:root[data-theme^="ubuntu"] .start-action--primary,
+:root[data-theme^="ubuntu"] .start-action--primary:hover:not(:disabled) {
+  background: var(--accent-fill);
+  box-shadow: none;
+}

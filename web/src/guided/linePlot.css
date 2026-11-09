@@ -1,0 +1,44 @@
+/* The plot over a line on the Looks card (R5): a small SVG of the ResidualPlot family. */
+.line-plot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px 2px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--track);
+}
+.line-plot svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 140px;
+}
+.line-grid {
+  stroke: var(--panel-border);
+  stroke-width: 1;
+}
+.line-axis {
+  stroke: var(--panel-border-strong);
+  stroke-width: 1;
+}
+.line-tick {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.line-curve {
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.line-title {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.line-actions {
+  margin-top: 0;
+}

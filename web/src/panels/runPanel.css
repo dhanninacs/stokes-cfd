@@ -1,0 +1,210 @@
+/* ------------------------------------------------------------------ the Run panel and the residual chart (T-217) */
+/* Surfaces and ink are the shared tokens, so the four themes need nothing of their own; a state is never
+   colour alone (each tone carries an icon and a word). The panel reuses the Mesh panel's section,
+   state line, progress bar, hint and log classes (panels.css) so the two stages read alike. */
+
+.run-chart-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  min-height: 0;
+}
+.run-chart-box.in-panel {
+  height: 190px;
+}
+.run-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.run-legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.run-legend button:hover {
+  background: var(--hover);
+}
+.run-legend button[aria-pressed="false"] {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.run-swatch {
+  width: 14px;
+  height: 0;
+  border-top: 2px solid var(--text-muted);
+}
+.run-swatch.s0,
+.res-line.s0 {
+  border-color: var(--series-1);
+  stroke: var(--series-1);
+  fill: none;
+}
+.run-swatch.s1,
+.res-line.s1 {
+  border-color: var(--series-2);
+  stroke: var(--series-2);
+  fill: none;
+}
+.run-swatch.s2,
+.res-line.s2 {
+  border-color: var(--series-3);
+  stroke: var(--series-3);
+  fill: none;
+}
+.run-swatch.s3,
+.res-line.s3 {
+  border-color: var(--series-4);
+  stroke: var(--series-4);
+  fill: none;
+}
+.res-dot.s0 {
+  fill: var(--series-1);
+}
+.res-dot.s1 {
+  fill: var(--series-2);
+}
+.res-dot.s2 {
+  fill: var(--series-3);
+}
+.res-dot.s3 {
+  fill: var(--series-4);
+}
+.run-chart {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.run-chart svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.res-line {
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.res-grid {
+  stroke: var(--panel-border);
+  stroke-width: 1;
+}
+.res-axis {
+  stroke: var(--panel-border-strong);
+  stroke-width: 1;
+}
+.res-tick {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.res-target {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+}
+.res-target-label {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.run-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 8px;
+  text-align: center;
+}
+
+.run-why {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.run-why li {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.run-why svg {
+  flex: none;
+  margin-top: 2px;
+}
+.run-why li[data-severity="error"] svg {
+  color: var(--danger);
+}
+.run-why li[data-severity="warning"] svg {
+  color: var(--warn);
+}
+.run-engines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.run-final {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 4px 10px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.run-final dt {
+  color: var(--text-muted);
+}
+.run-final dd {
+  margin: 0;
+}
+
+/* The drawer's Log tab: the Events | Job choice above the view. */
+.log-views {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 0;
+}
+.job-log {
+  height: 100%;
+  margin: 0;
+  overflow: auto;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.job-log.in-panel {
+  height: auto;
+  max-height: 200px;
+  padding: 6px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+}
+
+/* Three readouts share the strip: the set-up one keeps its width, these two take less. */
+.setup-readout.compact {
+  max-width: min(240px, 22vw);
+}
