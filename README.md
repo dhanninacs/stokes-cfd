@@ -1,13 +1,22 @@
-# Stokes
+# Stokes: an OpenFOAM GUI for Windows and Linux
 
 > **About this branch.** `main` carries the documentation. The code lives on two branches: [`windows`](https://github.com/dhanninacs/stokes-cfd/tree/windows) and [`linux`](https://github.com/dhanninacs/stokes-cfd/tree/linux). Source snapshots are on the [releases page](https://github.com/dhanninacs/stokes-cfd/releases).
 
-**A desktop CFD workbench on OpenFOAM®: CAD in, results out, and every action
-available to an LLM agent as a tool call.**
+**Stokes is a desktop CFD workbench and graphical interface for OpenFOAM®
+Foundation 14.** Import a STEP file, click faces to make them inlets, outlets,
+walls or symmetry planes, mesh with snappyHexMesh or cfMesh, run the solver and
+look at slices, streamlines and iso-surfaces, in one window. Every action is
+also an API call, so scripts and LLM agents can drive a simulation the same way
+you do.
 
-Import a STEP file, tag the inlets and outlets, mesh it, run OpenFOAM and look at
-the flow, in one window. Runs on **Windows** (native, through a FoamWin build of
-OpenFOAM 14) and **Linux** (native OpenFOAM 14).
+It is for engineers and students who want to use OpenFOAM without hand-editing
+dictionaries, and for people who want to automate CFD. It runs natively on
+**Windows** (through the [FoamWin](https://github.com/dhanninacs/foamWin) build of
+OpenFOAM 14, no WSL needed) and on **Linux** (the official OpenFOAM 14 packages).
+
+Docs site: **<https://dhanninacs.github.io/stokes-cfd/>** ·
+Quick start: [Windows](docs/INSTALL-WINDOWS.md), [Linux](docs/INSTALL-LINUX.md) ·
+[FAQ](#faq)
 
 [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-support%20Stokes-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/csdhan)
 
@@ -82,6 +91,35 @@ prediction.
   and a JSON-RPC/WebSocket server (an MCP server is planned). Anything you can
   click, an agent can call.
 
+## Why Stokes
+
+- **No dictionary editing to get started.** The case files are generated from
+  the model you build in the window. Existing OpenFOAM cases and tutorials can
+  also be imported and their files edited as text inside the app.
+- **Native Windows.** It drives a native Windows build of OpenFOAM 14, so there
+  is no WSL, virtual machine or Docker layer to set up.
+- **Honest results.** A run that stops at its iteration limit is labelled *not
+  converged*, with the residual history beside it.
+- **Scriptable from the start.** The window, the `stokes` command line and a
+  local JSON-RPC server all call the same Python API, so anything you can click
+  can be scripted or driven by an agent.
+- **Your OpenFOAM, untouched.** Stokes never links or bundles OpenFOAM; it runs
+  your installed tools as separate processes.
+
+## What is supported today
+
+| | Status |
+|---|---|
+| OpenFOAM version | Foundation **14** only. openfoam.com (ESI) versions are not supported yet. |
+| Windows 10/11 x64 | Supported, most tested; OpenFOAM through FoamWin, parallel runs through MS-MPI. |
+| Linux x86-64 | Supported; one full end-to-end run recorded so far ([details](docs/LINUX-READINESS.md)). |
+| macOS | Not supported. |
+| Geometry import | STEP (also IGES and BREP from the command line). |
+| Meshers | snappyHexMesh, blockMesh, cfMesh (hex-dominant, tetrahedral, polyhedral) and poly-hexcore; 2D planar and axisymmetric modes. |
+| Physics | Incompressible and heat-transfer flows: laminar, k-ε, k-ω SST, energy equation. |
+| Post-processing | Slices, iso-surfaces, clips, streamlines, vectors, probes, line plots, reports, picture export. |
+| Installer | None yet: run from source. |
+
 ## Install and run
 
 Stokes runs from source today. There is **no installer yet** (see
@@ -114,6 +152,53 @@ commands, the engine setup and the fixes for the usual snags.
 step, then covers the viewport, the results tools, the command line and the
 server.
 
+## FAQ
+
+**Is Stokes a GUI for OpenFOAM?**
+Yes. It is a desktop pre- and post-processor that sets up, runs and shows
+OpenFOAM Foundation 14 cases. It does not replace OpenFOAM; you install OpenFOAM
+separately.
+
+**Does it need WSL on Windows?**
+No. It runs natively on Windows 10 and 11 against FoamWin, a native Windows build
+of OpenFOAM 14. Parallel runs use Microsoft MPI.
+
+**Which OpenFOAM version does it support?**
+OpenFOAM Foundation 14 (openfoam.org). The openfoam.com (ESI) line is not
+supported yet.
+
+**Does it work on Linux?**
+Yes, with the official OpenFOAM 14 packages on Ubuntu 22.04 or newer. Linux has
+had less testing than Windows so far.
+
+**Is it free?**
+The source is free to use, study and modify for noncommercial purposes under the
+PolyForm Noncommercial licence. Commercial use needs a separate licence from the
+author.
+
+**Is it open source?**
+It is source-available rather than OSI open source: the code is public, but the
+licence does not allow commercial use.
+
+**Can I import CAD?**
+Yes: STEP files in the window; STEP, IGES and BREP from the command line.
+
+**Which meshers can I use?**
+snappyHexMesh and blockMesh, plus cfMesh's hex-dominant, tetrahedral and
+polyhedral meshers and a poly-hexcore option. cfMesh is included in FoamWin; on
+Linux you build it once ([how](docs/INSTALL-LINUX.md)).
+
+**Can I use it on a remote machine?**
+Yes. Run `python -m stokes.server` on the machine and open its URL through an SSH
+tunnel. The server only listens on `127.0.0.1` and needs a one-time token.
+
+**Can I script it or drive it from an LLM?**
+Yes. Every action in the window is an API command, available from the `stokes`
+command line and the local JSON-RPC/WebSocket server.
+
+**Is it endorsed by OpenCFD or the OpenFOAM Foundation?**
+No. See the trade-mark notice below.
+
 ## Status
 
 Stokes is **pre-alpha** (`0.0.1.dev0`). It works end to end on both platforms and
@@ -123,8 +208,9 @@ its gates are green, but:
 - The first release number, the trade-mark search for the name and the
   Windows signing certificate are the owner's open items.
 - FoamWin, the Windows OpenFOAM build, is not yet release-verified.
-- The result of a run is only as good as the settings and the mesh. The elbow
-  runs here stop "not converged" by design of the demo settings.
+- The result of a run is only as good as the settings and the mesh. The
+  pictures come from a run that stopped "not converged" at its 1e-4 target; the
+  run in the video converged in 161 iterations at the default 1e-3 target.
 
 What was run, what passed and what is open is recorded, dated, in
 [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md) and
@@ -139,6 +225,8 @@ What was run, what passed and what is open is recorded, dated, in
 | [docs/INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md) | Requirements, FoamWin, install, run, troubleshooting on Windows. |
 | [docs/INSTALL-LINUX.md](docs/INSTALL-LINUX.md) | The same for Linux, including OpenFOAM 14 and cfMesh. |
 | [docs/USAGE.md](docs/USAGE.md) | A guided tour of the elbow case, the viewport, results, CLI and server. |
+| [Guides](https://dhanninacs.github.io/stokes-cfd/) | Task pages: OpenFOAM 14 on Windows without WSL, meshing a STEP file, residual targets and convergence. |
+| [llms.txt](llms.txt) | A plain-text summary for LLMs and search tools. |
 | [docs/00-open-questions.md](docs/00-open-questions.md) | Every product decision, with its consequence. |
 | [docs/01-vision-and-scope.md](docs/01-vision-and-scope.md) | Who it is for, scope, free versus paid. |
 | [docs/02-architecture.md](docs/02-architecture.md) | Process model, packages, API surfaces, data model. |
@@ -162,6 +250,13 @@ What was run, what passed and what is open is recorded, dated, in
   by pure functions; hand edits are recorded overrides.
 - **Pure Python with C++ only where measured**, on Python 3.13+. The window is
   a Chromium (QtWebEngine) host on a React and three.js front end.
+
+## Trade marks
+
+OPENFOAM® is a registered trade mark of OpenCFD Limited, producer and distributor
+of the OpenFOAM software via www.openfoam.com. This product is not approved or
+endorsed by OpenCFD Limited, the OpenFOAM Foundation or The OpenFOAM Foundation
+Ltd.
 
 ## Contributing and security
 
