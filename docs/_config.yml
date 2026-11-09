@@ -1,0 +1,18 @@
+title: Stokes
+description: An OpenFOAM GUI for Windows and Linux. Import STEP, mesh with snappyHexMesh or cfMesh, solve and view results in one desktop CFD workbench.
+url: https://dhanninacs.github.io
+baseurl: /stokes-cfd
+theme: jekyll-theme-cayman
+plugins:
+  - jekyll-sitemap
+  - jekyll-seo-tag
+defaults:
+  - scope: { path: "" }
+    values: { image: /images/social-preview.png }
+exclude:
+  - adr
+  - engineering
+  - plans
+  - audit
+include:
+  - llms.txt
