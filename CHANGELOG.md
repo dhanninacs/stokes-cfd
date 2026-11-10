@@ -7,6 +7,7 @@ Changelog; versions follow semantic versioning.
 
 ### Changed
 
+- Documentation: FoamWin, the OpenFOAM 14 engine Stokes drives on Windows, now has its own project site at <https://dhanninacs.github.io/foamWin/>; the header, the Windows tech spec, the Windows FAQ, the Windows install guide and the footer link to it, and the footer keeps a separate link to the FoamWin source.
 - Documentation: the README is rewritten with the elbow case in nine screenshots (geometry, boundaries, two meshes, residuals, velocity, temperature, streamlines, Full mode) in one orientation, plus montages of the three themes in dark and light and of nine colour maps, install guides for Windows (`docs/INSTALL-WINDOWS.md`, FoamWin) and Linux (`docs/INSTALL-LINUX.md`), a usage tour (`docs/USAGE.md`) and a Buy me a coffee link (`.github/FUNDING.yml` adds GitHub's Sponsor button).
 - Found by running Fluent's mixing-elbow example (water, 0.4 m/s at 20 °C and 1.2 m/s at 40 °C, realizable k-ε, energy on) through every mesher from the Guided screens:
   - **A lost inlet no longer gives a silent wrong answer.** cfMesh's Cartesian mesh at 5 mm cells dropped the 25 mm hot inlet (a patch with 0 faces), checkMesh said ok, and the run solved one cold stream (293.4 K at the outlet against the 296.3 K energy balance). The Mesh card now says which inlet or outlet has no faces, and Run refuses with `solve.boundary_not_meshed` until the mesh has it.

@@ -109,7 +109,7 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
     <h2 class="headline" id="specs-title">Tech specs.</h2>
     <dl class="specs">
       <div><dt>OpenFOAM</dt><dd>Foundation 14, from openfoam.org. The openfoam.com line is not supported yet.</dd></div>
-      <div><dt>Windows 10 and 11</dt><dd><span class="yes">Yes</span>, natively, with no WSL. OpenFOAM comes from <a href="https://github.com/dhanninacs/foamWin" data-track="out_foamwin_specs" data-track-label="FoamWin (specs)">FoamWin</a>. The most tested platform.</dd></div>
+      <div><dt>Windows 10 and 11</dt><dd><span class="yes">Yes</span>, natively, with no WSL. OpenFOAM comes from <a href="https://dhanninacs.github.io/foamWin/" data-track="out_foamwin_specs" data-track-label="FoamWin (specs)">FoamWin</a>. The most tested platform.</dd></div>
       <div><dt>Linux</dt><dd><span class="yes">Yes</span>, with the official OpenFOAM&nbsp;14 packages. Less tested than Windows so far.</dd></div>
       <div><dt>macOS</dt><dd><span class="no">Not supported.</span></dd></div>
       <div><dt>Geometry</dt><dd>STEP import through Open CASCADE. IGES and BREP from the command line.</dd></div>
@@ -177,7 +177,7 @@ source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</cod
     <h2 class="headline" id="faq-title">Questions.</h2>
     <div class="faq">
       <details><summary>Does it need WSL on Windows?</summary>
-        <p>No. It drives FoamWin, a native Windows build of OpenFOAM&nbsp;14, directly. There is no WSL, virtual machine or Docker layer.</p></details>
+        <p>No. It drives <a href="https://dhanninacs.github.io/foamWin/" data-track="out_foamwin_faq" data-track-label="FoamWin (FAQ)">FoamWin</a>, a native Windows build of OpenFOAM&nbsp;14, directly. There is no WSL, virtual machine or Docker layer.</p></details>
       <details><summary>Does it replace OpenFOAM?</summary>
         <p>No. You install OpenFOAM separately. Stokes writes the case, runs your OpenFOAM tools as separate processes and reads the results back. It never bundles or links OpenFOAM.</p></details>
       <details><summary>Can I use my own OpenFOAM cases?</summary>

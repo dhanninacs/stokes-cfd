@@ -3,7 +3,7 @@
 Stokes runs natively on Windows 10 and 11 (x64). It does not ship an engine: it
 drives an OpenFOAM Foundation 14 install as separate processes. On Windows that
 install is **FoamWin**, a native build of OpenFOAM 14 with MS-MPI, from
-<https://github.com/dhanninacs/foamWin>. WSL is not required.
+<https://dhanninacs.github.io/foamWin/>. WSL is not required.
 
 There is no installer for Stokes yet. You run it from a checkout, which takes
 about ten minutes.
