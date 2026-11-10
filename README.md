@@ -272,6 +272,12 @@ for noncommercial purposes. Third-party components keep their own licences, list
 in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). For commercial use, contact
 the author through [GitHub](https://github.com/dhanninacs).
 
+**AI tools.** Asking an AI assistant to explain Stokes, install it or change your own
+copy for noncommercial use is fine. Copying, porting or rewriting it with an AI tool for
+a commercial product, a paid service or an employer needs a commercial licence, and
+training commercial AI models on this repository is not permitted. See
+[AI-USE.md](AI-USE.md).
+
 ## Support Stokes
 
 Stokes is free for noncommercial use and stays that way thanks to the people who

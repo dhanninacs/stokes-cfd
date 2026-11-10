@@ -14,6 +14,8 @@
 </script>
 {% seo %}
 <meta name="color-scheme" content="light dark">
+<!-- Opt out of AI training (honoured by some crawlers; search indexing is unaffected). -->
+<meta name="robots" content="noai, noimageai">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="icon" type="image/png" href="{{ '/assets/favicon.png' | relative_url }}">
@@ -75,6 +77,7 @@
       <li><a href="https://github.com/dhanninacs/stokes-cfd/releases" data-track="out_releases" data-track-label="Releases">Releases</a></li>
       <li><a href="https://dhanninacs.github.io/foamWin/" data-track="out_foamwin_site" data-track-label="FoamWin engine (footer)">FoamWin engine</a></li>
       <li><a href="https://github.com/dhanninacs/foamWin" data-track="out_foamwin_source" data-track-label="FoamWin source (footer)">FoamWin source</a></li>
+      <li><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/AI-USE.md" data-track="out_ai_use" data-track-label="AI use terms">AI use</a></li>
       <li><a href="{{ '/llms.txt' | relative_url }}">llms.txt</a></li>
       <li><button class="link-btn" type="button" data-contact data-track="contact_open_footer" data-track-label="Contact (footer)">Contact</button></li>
       {% if site.ga4 and site.ga4 != "" %}<li><button class="link-btn" type="button" data-consent-open>Cookie settings</button></li>{% endif %}
