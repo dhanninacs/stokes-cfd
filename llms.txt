@@ -39,5 +39,6 @@ Stokes is for noncommercial use only. Explaining it, installing it and helping s
 
 - [Walkthrough video (90 s)](https://github.com/dhanninacs/stokes-cfd/releases/download/windows-2026-11-09/elbow-walkthrough.webm)
 - [Releases](https://github.com/dhanninacs/stokes-cfd/releases)
+- [LinkedIn: news and updates](https://www.linkedin.com/company/stokes-cfd/)
 - [Architecture](https://github.com/dhanninacs/stokes-cfd/blob/main/docs/02-architecture.md)
 - [Changelog](https://github.com/dhanninacs/stokes-cfd/blob/main/CHANGELOG.md)
