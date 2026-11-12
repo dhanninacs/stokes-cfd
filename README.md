@@ -16,7 +16,8 @@ OpenFOAM 14, no WSL needed) and on **Linux** (the official OpenFOAM 14 packages)
 
 Docs site: **<https://dhanninacs.github.io/stokes-cfd/>** ·
 Quick start: [Windows](docs/INSTALL-WINDOWS.md), [Linux](docs/INSTALL-LINUX.md) ·
-[FAQ](#faq)
+[FAQ](#faq) ·
+[LinkedIn](https://www.linkedin.com/company/stokes-cfd/)
 
 [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-support%20Stokes-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/csdhan)
 
@@ -270,7 +271,8 @@ Stokes is released under the
 [PolyForm Noncommercial License 1.0.0](LICENSE): free to use, study and modify
 for noncommercial purposes. Third-party components keep their own licences, listed
 in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). For commercial use, contact
-the author through [GitHub](https://github.com/dhanninacs).
+the author through [GitHub](https://github.com/dhanninacs) or the
+[Stokes LinkedIn page](https://www.linkedin.com/company/stokes-cfd/).
 
 **AI tools.** Asking an AI assistant to explain Stokes, install it or change your own
 copy for noncommercial use is fine. Copying, porting or rewriting it with an AI tool for

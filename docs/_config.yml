@@ -3,6 +3,12 @@ description: An OpenFOAM GUI for Windows and Linux. Import STEP, mesh with snapp
 url: https://dhanninacs.github.io
 baseurl: /stokes-cfd
 lang: en
+# Profiles listed as sameAs in the structured data, so search engines tie them to the site.
+social:
+  name: Stokes
+  links:
+    - https://github.com/dhanninacs/stokes-cfd
+    - https://www.linkedin.com/company/stokes-cfd/
 # Google Analytics 4 measurement ID (G-XXXXXXXXXX). Empty turns analytics and the consent banner off.
 # Even when set, nothing loads until a visitor allows it.
 ga4: ""
