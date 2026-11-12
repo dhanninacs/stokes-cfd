@@ -1,6 +1,11 @@
 {
   "name": "stokes-cfd",
+  "displayName": "Stokes CFD",
   "version": "0.1.0",
-  "description": "Agentic CFD with Stokes: set up, mesh, run and optimise OpenFOAM cases from Claude Code.",
+  "description": "Agentic CFD with Stokes: set up, mesh, run and shape-optimise OpenFOAM cases from Claude Code.",
+  "author": { "name": "Stokes" },
+  "homepage": "https://dhanninacs.github.io/stokes-cfd/",
+  "repository": "https://github.com/dhanninacs/stokes-cfd",
+  "license": "MIT",
   "keywords": ["cfd", "openfoam", "simulation", "mesh", "adjoint", "optimisation", "mcp"]
 }

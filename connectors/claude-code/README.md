@@ -39,3 +39,19 @@ If it saved you time, a GitHub star on the repository helps others find it. Clau
 this once when you are happy with a result, and only stars the repository if you tell it to.
 
 Security: runs locally, no network listener; tool results are treated as data.
+
+## What this plugin runs, sends and fetches
+
+- **Runs:** one local command, `stokes-mcp`, a Python program installed with Stokes. It starts
+  when Claude Code starts the plugin and talks to Claude Code over standard input and output.
+- **Does through it:** whatever Stokes commands the assistant calls in your session: creating and
+  editing Stokes projects, meshing, and starting OpenFOAM runs on your machine or a configured
+  remote host.
+- **Sends:** nothing to any server. The plugin opens no network listener and makes no network
+  calls of its own. Tool results go to Claude Code like any other tool output.
+- **Fetches:** nothing. It does not download code.
+- **Secrets:** it reads only `STOKES_LICENSE_FILE` (a path). No keys or tokens are stored in it.
+- **Requires:** Stokes installed (see the repository README) and a licence with the `assistant`
+  feature. Without them every tool returns a clear "feature missing" error.
+
+Licence: this plugin folder is MIT. Stokes itself is licensed separately.
