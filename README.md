@@ -89,8 +89,8 @@ prediction.
 - **Quantities everywhere.** Every number carries a unit; type `2 [m/s]` or
   `U_in * 1.5`.
 - **Agent-ready.** One Python API sits behind the window, the `stokes` command
-  and a JSON-RPC/WebSocket server (an MCP server is planned). Anything you can
-  click, an agent can call.
+  and a JSON-RPC/WebSocket server and an MCP server (`stokes-mcp`) with a
+  [Claude Code plugin](connectors/claude-code). Anything you can click, an agent can call.
 
 ## Why Stokes
 
