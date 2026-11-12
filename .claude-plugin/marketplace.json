@@ -1,0 +1,15 @@
+{
+  "name": "stokes-cfd",
+  "owner": { "name": "Stokes" },
+  "metadata": { "description": "Agentic CFD for Claude Code: OpenFOAM setup, meshing, runs and adjoint shape optimisation." },
+  "plugins": [
+    {
+      "name": "stokes-cfd",
+      "source": "./connectors/claude-code",
+      "description": "Set up, mesh, run and shape-optimise OpenFOAM CFD cases (ducts, elbows, pressure drop, heat transfer, STEP meshing, parameter sweeps) through the Stokes workbench.",
+      "version": "0.1.0",
+      "category": "engineering",
+      "tags": ["cfd", "openfoam", "simulation", "meshing", "optimisation", "adjoint", "engineering", "fluid-dynamics"]
+    }
+  ]
+}

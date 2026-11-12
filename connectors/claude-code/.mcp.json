@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "stokes": { "command": "stokes-mcp", "args": [] }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "stokes-cfd",
+  "version": "0.1.0",
+  "description": "Agentic CFD with Stokes: set up, mesh, run and optimise OpenFOAM cases from Claude Code.",
+  "keywords": ["cfd", "openfoam", "simulation", "mesh", "adjoint", "optimisation", "mcp"]
+}
