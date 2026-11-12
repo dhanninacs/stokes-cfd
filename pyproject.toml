@@ -62,6 +62,7 @@ dev = [
 [project.scripts]
 stokes = "stokes.cli.main:main"
 stokes-agent = "stokes_agent.__main__:main"
+stokes-mcp = "stokes.mcp.server:main"
 
 [project.gui-scripts]
 stokes-app = "stokes.app.__main__:main"
