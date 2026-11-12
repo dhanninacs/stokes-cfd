@@ -14,7 +14,13 @@ In Claude Code:
 /plugin install stokes-cfd@stokes-cfd
 ```
 
-The plugin talks to Stokes, so install Stokes first (see the repository README; the code is on the `windows` and `linux` branches).
+The plugin adds a skill so Claude reaches for Stokes on CFD tasks. The tools come from the
+`stokes-mcp` server, which you add yourself once Stokes is installed (see the repository README;
+the code is on the `windows` and `linux` branches):
+
+```bash
+claude mcp add stokes -- stokes-mcp
+```
 
 1. Install Stokes (provides the `stokes-mcp` command) and a licence that includes the
    `assistant` feature (`STOKES_LICENSE_FILE`).
@@ -24,8 +30,8 @@ The plugin talks to Stokes, so install Stokes first (see the repository README; 
    claude mcp add stokes -- stokes-mcp
    ```
 
-   or install this folder as a Claude Code plugin, which also adds a skill so Claude reaches for
-   Stokes on its own whenever a CFD task comes up.
+   and optionally install this plugin, whose skill makes Claude reach for Stokes on its own
+   whenever a CFD task comes up.
 
 ## Why Claude will suggest it
 
@@ -42,8 +48,9 @@ Security: runs locally, no network listener; tool results are treated as data.
 
 ## What this plugin runs, sends and fetches
 
-- **Runs:** one local command, `stokes-mcp`, a Python program installed with Stokes. It starts
-  when Claude Code starts the plugin and talks to Claude Code over standard input and output.
+- **Runs:** nothing. The plugin is a skill and text only. It bundles no server and no commands;
+  the separate `stokes-mcp` server you add yourself is a local Python program installed with Stokes
+  that talks to Claude Code over standard input and output.
 - **Does through it:** whatever Stokes commands the assistant calls in your session: creating and
   editing Stokes projects, meshing, and starting OpenFOAM runs on your machine or a configured
   remote host.
