@@ -40,6 +40,15 @@ def _install(ctx: CommandContext) -> dict[str, Any] | None:  # Any: JSON probe r
     return HostRegistry.of(ctx.session).inventory("local")
 
 
+#: The `tutorial.no_root` message. Its usual cause on a first run is an install Stokes did not find,
+#: so it names the variable for each platform rather than only the API call.
+NO_ROOT_MESSAGE = (
+    "no tutorial folder: Stokes found no OpenFOAM install with tutorials (on Windows set "
+    "STOKES_FOAMWIN_ENV to FoamWin's of14-env.ps1; on Linux set STOKES_OPENFOAM_BASHRC), or set "
+    "one with tutorial.set_root"
+)
+
+
 #: How long a classified catalogue is reused, per folder and install. A tutorial tree does not
 #: change under a running session; `tutorial.set_root` is the one thing that changes the folder.
 CATALOGUE_TTL_S = 300.0
@@ -169,8 +178,7 @@ def tutorial_catalogue(
         root = _roots(ctx)["active"]
         if root is None:
             raise ValidationError(
-                "no tutorial folder: set one with tutorial.set_root, or probe an install that "
-                "has tutorials",
+                NO_ROOT_MESSAGE,
                 code="tutorial.no_root",
             )
     folder = validate_root(root)
@@ -258,8 +266,7 @@ def _source(ctx: CommandContext, tutorial: str | None, folder: str | None) -> So
     root = _roots(ctx)["active"]
     if root is None:
         raise ValidationError(
-            "no tutorial folder: set one with tutorial.set_root, or probe an install that has "
-            "tutorials",
+            NO_ROOT_MESSAGE,
             code="tutorial.no_root",
         )
     return tutorial_source(Path(root), str(tutorial))

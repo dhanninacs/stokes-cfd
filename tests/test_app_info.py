@@ -164,6 +164,8 @@ def test_the_no_openfoam_message_says_what_to_do() -> None:
     from stokes.mesh.errors import NO_INSTALL_ADVICE
 
     assert "STOKES_OPENFOAM_BASHRC" in NO_INSTALL_ADVICE, "the message does not name the variable"
+    # Windows reads a different variable; naming only the Linux one is the wrong advice there.
+    assert "STOKES_FOAMWIN_ENV" in NO_INSTALL_ADVICE, "the Windows variable is not named"
     assert "standard prefix" in NO_INSTALL_ADVICE
     # It still says what is wrong, so it is a message and not only advice.
     assert NO_INSTALL_ADVICE.startswith("the host has no OpenFOAM install")
