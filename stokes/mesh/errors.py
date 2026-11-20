@@ -47,8 +47,9 @@ class MeshNotBuilt(MeshError):
 #: tarball under `~/opt`, which is a normal way to have one) is invisible to it. Measured on this
 #: box: with the variable unset, `bashrc_candidates()` is empty; with it set, the install is found.
 NO_INSTALL_ADVICE = (
-    "the host has no OpenFOAM install: set STOKES_OPENFOAM_BASHRC to your OpenFOAM environment "
-    "script (the file that exports WM_PROJECT_DIR), or install OpenFOAM under a standard prefix"
+    "the host has no OpenFOAM install: on Windows set STOKES_FOAMWIN_ENV to FoamWin's "
+    "of14-env.ps1; on Linux set STOKES_OPENFOAM_BASHRC to your OpenFOAM environment script (the "
+    "file that exports WM_PROJECT_DIR), or install OpenFOAM under a standard prefix"
 )
 
 
