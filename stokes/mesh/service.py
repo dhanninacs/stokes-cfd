@@ -172,6 +172,23 @@ QUALITY_DIST_MAX_BINS = 256
 QUALITY_DIST_MAX_WORST = 512
 
 
+def snapshot_warnings(snap: Any) -> list[str]:  # Any: MeshSnapshot
+    """The warnings a blockMesh snapshot carries before anything runs: tags it cannot mesh.
+
+    A tag wholly inside the domain is named as before. A tag only PARTLY inside (a `walls` tag
+    holding a channel's sides and the pins within it) is named too, with the count it loses:
+    blockMesh fills the bounding box, so those faces are simply not in the mesh.
+    """
+    warnings = [
+        f"tag {tag} lies inside the domain; blockMesh cannot mesh it" for tag in snap.unmapped
+    ]
+    from stokes.mesh.snapshot import inner_faces_message
+
+    for tag, count in sorted((getattr(snap, "inner_faces", None) or {}).items()):
+        warnings.append(inner_faces_message(tag, count))
+    return warnings
+
+
 def _symmetry_flatness(data: memoryview, header: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     """Each planar symmetry patch's flatness, from the surface artifact. **A worker thread.**
 
@@ -541,9 +558,7 @@ class MeshService:
             mesh_basis_parts(snap, driver_for(str(snap.mesher)).DRIVER_VERSION, engine)
         )
         result.meta["derives_from"] = derives
-        result.meta["warnings"] = [
-            f"tag {tag} lies inside the domain; blockMesh cannot mesh it" for tag in snap.unmapped
-        ]
+        result.meta["warnings"] = snapshot_warnings(snap)
         # **The patch names, tag ids and types the driver will write** (T-207 amendment 3):
         # T-210 serves
         # them to the viewport and T-214 reads them for the solve snapshot.
@@ -643,10 +658,7 @@ class MeshService:
             self._total = 0
             self._done_steps = 0
             self._engine = engine
-            self._warnings = tuple(
-                f"tag {tag} lies inside the domain; blockMesh cannot mesh it"
-                for tag in snap.unmapped
-            )
+            self._warnings = tuple(snapshot_warnings(snap))
             # `_finished` is REPLACED by `_new_job_event`, not cleared here: clearing a shared event
             # would also release a `wait()` that belongs to the job being replaced.
             self._cancel.clear()

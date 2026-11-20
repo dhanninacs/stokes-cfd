@@ -147,6 +147,13 @@ def precheck(session: Session, settings: Node, snap: Any) -> dict[str, Any]:
 
     mesher = str(snap.mesher)
     domain = str(getattr(snap, "domain", "") or "")
+
+    # **A tag partly inside the blockMesh box** (the pin-fin case): its inner faces have a
+    # boundary but will not be in the mesh at all, which is neither "unassigned" nor fine.
+    from stokes.mesh.snapshot import inner_faces_message
+
+    for tag, count in sorted((getattr(snap, "inner_faces", None) or {}).items()):
+        findings.append(_finding("mesh.faces_not_meshed", "warn", inner_faces_message(tag, count)))
     surfaces = tuple(getattr(snap, "surfaces", ()) or ())
     triangles = dict(getattr(snap, "surface_triangles", {}) or {})
     faces = dict(getattr(snap, "surface_faces", {}) or {})
