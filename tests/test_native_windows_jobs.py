@@ -65,6 +65,22 @@ def test_native_tool_resolution_never_falls_back_to_path(tmp_path: Path) -> None
     assert resolve_utility(env, "foamRun") is None
 
 
+def test_foamwin_default_install_folder_is_discovered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FoamWin installs to `%LOCALAPPDATA%\\OpenFOAM-14-win` by default; find it unconfigured."""
+    from stokes_agent.native_env import candidates
+
+    script = tmp_path / "OpenFOAM-14-win" / "of14-env.ps1"
+    script.parent.mkdir()
+    script.write_text("# handshake\n")
+    monkeypatch.delenv("STOKES_FOAMWIN_ENV", raising=False)
+    monkeypatch.delenv("WM_PROJECT_DIR", raising=False)
+    monkeypatch.delenv("ProgramFiles", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert candidates() == [script.resolve()]
+
+
 def test_native_handshake_filters_environment_and_checks_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
