@@ -1,6 +1,9 @@
 """The duct, end to end, headless: model -> mesh -> solve -> the four checks (T-214c, checkpoint B).
 
     PYTHONPATH=.:agent STOKES_OPENFOAM_BASHRC=<the env script> python3 tools/e2e_duct.py <folder>
+    STOKES_FOAMWIN_ENV=<of14-env.ps1> python tools/e2e_duct.py <folder>   # Windows
+
+(On Windows the variable is optional when FoamWin is in its default folder.)
 
 **This is the gate the owner's target depends on.** It builds the duct, meshes it, solves it on real
 OpenFOAM, and then asks four questions whose answers are physics rather than plumbing: did the

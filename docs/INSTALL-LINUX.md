@@ -127,7 +127,7 @@ cd stokes-cfd
 python3.13 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
-cd web && npm install && npm run build && cd ..
+cd web && npm ci && npm run build && cd ..
 .venv/bin/stokes --help
 ```
 
@@ -217,7 +217,8 @@ The app log is `~/.stokes/logs/app.log`; look there first when something fails.
 | cfMesh meshes have inverted cells or "Could not find a boundary region" | You built cfMesh 1.2.0. Rebuild with the port in step 3. |
 | `cartesianMesh: command not found` | cfMesh is not built or its bin folder is not on the path; re-source `etc/bashrc`. |
 | Four ranks refused on a small VM | The OpenMPI `--oversubscribe` flag is only added when OpenMPI is identified; set `STOKES_OPENFOAM_BASHRC` to the install's env script. |
-| `npm run build` fails on engine version | Install Node.js 22.12 or newer. |
+| `npm ci` stops with `EBADENGINE` / "Unsupported engine" | Install Node.js 22.12 or newer (`node --version`). |
+| `pip install -e .` says there is no `pyproject.toml` | You cloned the default `main` branch, which is documentation only. Run `git checkout linux` in the checkout. |
 | `pip install` says the Python is too old | Stokes needs 3.13 or 3.14 (step 1). |
 | HiDPI or fractional scaling looks wrong on Wayland | See the Wayland notes in [LINUX-READINESS.md](LINUX-READINESS.md). |
 
@@ -226,7 +227,7 @@ The app log is `~/.stokes/logs/app.log`; look there first when something fails.
 ```bash
 git pull
 .venv/bin/pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
-cd web && npm install && npm run build && cd ..
+cd web && npm ci && npm run build && cd ..
 ```
 
 Questions and bug reports: open an issue on GitHub. If Stokes is useful to you,

@@ -87,8 +87,9 @@ prediction.
 - **Quantities everywhere.** Every number carries a unit; type `2 [m/s]` or
   `U_in * 1.5`.
 - **Agent-ready.** One Python API sits behind the window, the `stokes` command
-  and a JSON-RPC/WebSocket server (an MCP server is planned). Anything you can
-  click, an agent can call.
+  and a JSON-RPC/WebSocket server and an MCP server (`stokes-mcp`) with a
+  [Claude Code plugin](https://github.com/dhanninacs/stokes-cfd/tree/main/connectors/claude-code).
+  Anything you can click, an agent can call.
 
 ## Why Stokes
 
@@ -140,7 +141,7 @@ git clone -b windows https://github.com/dhanninacs/stokes-cfd.git   # or -b linu
 cd stokes-cfd
 python -m venv .venv                       # Windows: .venv\Scripts\python, Linux: .venv/bin/python
 .venv/bin/pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
-cd web && npm install && npm run build && cd ..
+cd web && npm ci && npm run build && cd ..
 .venv/bin/python -m stokes.app             # the desktop window
 ```
 
