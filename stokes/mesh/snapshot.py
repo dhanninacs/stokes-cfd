@@ -116,33 +116,36 @@ class MeshSnapshot:
     #: The 2D mode (ADR-0031) as `stokes.mesh.two_d.TwoD.record` gives it; **empty in 3D**, so a
     #: 3D snapshot, its basis and its dictionaries are what they were before 2D existed.
     two_d: dict[str, Any] = field(default_factory=dict)
+    #: Tag name -> how many of its faces lie on NO box side, for the tags that DID reach a side.
+    #:
+    #: **The partial counterpart of `unmapped`.** A `walls` tag holding a pin-fin channel's outer
+    #: faces and its 24 pins reaches the box sides through the outer faces, so it was never
+    #: unmapped - and the pins were dropped from the mesh with no warning and `ok: true`. Measured
+    #: 2026-11-20 on a 200 x 60 x 10 mm channel: 5.7 % of the fluid volume gone, silently. Empty
+    #: for snappy and the cfMesh family, which mesh the shape itself.
+    inner_faces: dict[str, int] = field(default_factory=dict)
+
+
+def inner_faces_message(tag: str, count: int) -> str:
+    """The words for a tag's faces blockMesh leaves out: the precheck's and the result's."""
+    return (
+        f"{count} face{'s' if count != 1 else ''} of tag {tag} lie inside the domain and are not "
+        "in the mesh: blockMesh fills the bounding box. Use snappyHexMesh or a cfMesh type to mesh "
+        "the shape itself"
+    )
 
 
 # ---------------------------------------------------------------------- the pure half
 
 
-def side_mapping(
+def _side_test(
     positions: Any,
     indices: Any,
     face_ids: Any,
-    tag_faces: dict[str, set[int]],
     bbox: tuple[float, float, float, float, float, float],
     tol: float,
-) -> tuple[dict[str, str], tuple[str, ...], dict[str, list[str]]]:
-    """Map the box's six sides to tag names.
-
-    A face lies on a side when **every** vertex of **every** triangle with that face id is
-    within ``tol``
-    of that side's plane. Every vertex, not the centroid: a face that spans the box corner is on
-    two sides
-    at once by its centroid and on neither by this rule, and "on neither" is the honest answer
-    for a face
-    that is not a side.
-
-    Returns ``(sides, unmapped, conflicts)``. Tags are processed in **name order** so the result
-    does not
-    depend on the order the tree happens to hold them.
-    """
+) -> Any:  # Any: Callable[[int, str], bool], kept loose so numpy stays a lazy import
+    """`on_side(face, side)`: whether every vertex of a face id lies on one box side's plane."""
     import numpy as np
 
     xmin, ymin, zmin, xmax, ymax, zmax = bbox
@@ -169,6 +172,58 @@ def side_mapping(
         if not ids:
             return False
         return bool(np.all(np.abs(coordinates[list(ids), axis] - value) <= tol))
+
+    return on_side
+
+
+def inner_faces(
+    positions: Any,
+    indices: Any,
+    face_ids: Any,
+    tag_faces: dict[str, set[int]],
+    bbox: tuple[float, float, float, float, float, float],
+    tol: float,
+    skip: tuple[str, ...] = (),
+) -> dict[str, int]:
+    """Per tag, the faces on no box side: what blockMesh will leave out of the mesh.
+
+    ``skip`` names tags already reported whole (`unmapped`), so a tag is warned about once.
+    Only tags with at least one such face appear.
+    """
+    on_side = _side_test(positions, indices, face_ids, bbox, tol)
+    out: dict[str, int] = {}
+    for name in sorted(tag_faces):
+        if name in skip:
+            continue
+        missing = sum(1 for face in tag_faces[name] if not any(on_side(face, s) for s in SIDES))
+        if missing:
+            out[name] = missing
+    return out
+
+
+def side_mapping(
+    positions: Any,
+    indices: Any,
+    face_ids: Any,
+    tag_faces: dict[str, set[int]],
+    bbox: tuple[float, float, float, float, float, float],
+    tol: float,
+) -> tuple[dict[str, str], tuple[str, ...], dict[str, list[str]]]:
+    """Map the box's six sides to tag names.
+
+    A face lies on a side when **every** vertex of **every** triangle with that face id is
+    within ``tol``
+    of that side's plane. Every vertex, not the centroid: a face that spans the box corner is on
+    two sides
+    at once by its centroid and on neither by this rule, and "on neither" is the honest answer
+    for a face
+    that is not a side.
+
+    Returns ``(sides, unmapped, conflicts)``. Tags are processed in **name order** so the result
+    does not
+    depend on the order the tree happens to hold them.
+    """
+    on_side = _side_test(positions, indices, face_ids, bbox, tol)
 
     sides: dict[str, str] = {}
     conflicts: dict[str, list[str]] = {}
@@ -1032,6 +1087,7 @@ def build_snapshot(session: Session, settings: Node) -> MeshSnapshot:
         )
     side_tags = {side: _tag_id(project, name) for side, name in sides.items()}
     side_kinds = {side: tag_kinds.get(name, "") for side, name in sides.items()}
+    inner = inner_faces(positions, indices, faces, tag_faces, grown, tol, skip=unmapped)
     return MeshSnapshot(
         settings_id=str(settings.id),
         mesher=mesher,
@@ -1055,6 +1111,7 @@ def build_snapshot(session: Session, settings: Node) -> MeshSnapshot:
         side_faces={
             side: len(tag_faces[name]) for side, name in sides.items() if name in tag_faces
         },
+        inner_faces=inner,
     )
 
 

@@ -173,6 +173,17 @@ def test_the_dual_gets_the_feature_angle_never_below_the_floor() -> None:
     assert sharper["argv"] == ["polyDualMesh", "85.5"]
 
 
+def test_a_layered_dual_keeps_fewer_features() -> None:
+    """With layers the floor is 120 degrees: at 70 the dual folded the layer cells at a pipe tee's
+    concave rim into 7 negative-volume cells (measured 2026-11-20); at 120 checkMesh passed."""
+    layered = snap("polyhex", layer_counts={"walls": 3})
+    dual = next(s for s in cfmesh.steps(layered) if s["name"] == "polyDualMesh")
+    assert dual["argv"] == ["polyDualMesh", "120"]
+    blunter = snap("polyhex", layer_counts={"walls": 3}, feature_angle=150.0)
+    assert cfmesh.dual_feature_angle(blunter) == 150.0
+    assert cfmesh.dual_feature_angle(snap("polyhex", layer_counts={"walls": 0})) == 70.0
+
+
 def test_patch_types_and_cell_count() -> None:
     record = snap()
     assert cfmesh.patch_types(record) == {"inlet": "patch", "outlet": "patch", "walls": "wall"}

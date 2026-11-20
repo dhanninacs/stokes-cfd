@@ -34,7 +34,7 @@ from stokes.mesh.drivers.blockmesh import (
     write,
 )
 from stokes.mesh.errors import MeshInvalid
-from stokes.mesh.snapshot import SIDES, MeshSnapshot, side_mapping
+from stokes.mesh.snapshot import SIDES, MeshSnapshot, inner_faces, side_mapping
 
 UNIT = (0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
 
@@ -139,6 +139,35 @@ def test_a_tag_inside_the_box_is_unmapped() -> None:
     assert sides == {}
     assert unmapped == ("interior",)
     assert conflicts == {}
+
+
+def test_a_tag_partly_inside_the_box_is_reported_with_its_lost_faces() -> None:
+    """**A tag that reaches a side can still hold faces inside**, and those are not in the mesh.
+
+    The pin-fin case (2026-11-20): `walls` held a channel's sides and its 24 pins, reached the box
+    through the sides, and so was never `unmapped` - the pins vanished with no warning.
+    """
+    from stokes.mesh.service import snapshot_warnings
+
+    vertices, indices, face_ids = unit_box()
+    vertices = np.vstack([vertices, [[0.5, 0.5, 0.5], [0.4, 0.5, 0.5]]])
+    indices = np.vstack([indices, [[8, 0, 1], [9, 2, 3]]])
+    face_ids = np.append(face_ids, [6, 7])
+    tags = {"inlet": {0}, "walls": {2, 3, 4, 5, 6, 7}, "pin": {6}}
+    sides, unmapped, _ = side_mapping(vertices, indices, face_ids, tags, UNIT, 1e-6)
+    assert unmapped == ("pin",) and sides["ymin"] == "walls"
+    inner = inner_faces(vertices, indices, face_ids, tags, UNIT, 1e-6, skip=unmapped)
+    assert inner == {"walls": 2}, "the wholly-inside tag is skipped; the partial one counted"
+
+    warnings = snapshot_warnings(duct(unmapped=unmapped, inner_faces=inner))
+    assert warnings[0] == "tag pin lies inside the domain; blockMesh cannot mesh it"
+    assert warnings[1].startswith("2 faces of tag walls lie inside the domain and are not in")
+
+
+def test_a_tag_wholly_on_the_box_loses_nothing() -> None:
+    vertices, indices, face_ids = unit_box()
+    tags = {"inlet": {0}, "outlet": {1}, "walls": {2, 3, 4, 5}}
+    assert inner_faces(vertices, indices, face_ids, tags, UNIT, 1e-6) == {}
 
 
 def test_two_tags_on_one_side_conflict() -> None:

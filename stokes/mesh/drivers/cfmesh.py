@@ -75,7 +75,7 @@ from stokes.compile.parallel import checked_cores
 from stokes.mesh.errors import MeshInvalid
 
 #: Bumped when any emitted text changes; it enters the mesh basis.
-DRIVER_VERSION = "cfmesh/3"
+DRIVER_VERSION = "cfmesh/4"
 
 #: The types whose planar symmetry patches are flattened after the fill (see the module docstring).
 FLATTENS: frozenset[str] = frozenset({"cfmesh_poly"})
@@ -118,6 +118,18 @@ MESHERS: tuple[str, ...] = tuple(VOLUME_STEPS)
 #: (the faceted CAD reads as features). 70 is what the measured run used; a user's sharper
 #: `feature_angle` is honoured above it.
 DUAL_MIN_FEATURE_ANGLE = 70.0
+
+#: The floor when the walls carry layers. **Measured 2026-11-20** on a pipe tee and a four-branch
+#: manifold, 3 layers, the same layered `cartesianMesh` (checkMesh clean) given to `polyDualMesh`:
+#: at 70 degrees the dual kept the ~90 degree concave rim where the branch meets the main pipe as a
+#: feature, folded the layer cells there and left 7 and 8 negative-volume cells (5 failed checks,
+#: max non-orthogonality 169 and 142 degrees); at 30 it was worse (19 and 39). At 120 and at 179
+#: both passed every check (max non-orthogonality 41 and 40 degrees). `-concaveMultiCells` and
+#: `-splitAllFaces` removed the negative cells but still failed 1 to 3 checks. Edges BETWEEN
+#: patches (an inlet's rim) stay features at any angle; a sharp edge within one wall patch is
+#: what this gives up, rounded by at most half a cell. The unlayered dual keeps 70: the same two
+#: geometries pass there.
+DUAL_LAYERED_MIN_FEATURE_ANGLE = 120.0
 
 #: Seconds per volume step. cfMesh meshes the demo in 8 to 43 s; an hour leaves room for real
 #: parts without letting a wedged process hold the job for ever.
@@ -262,8 +274,14 @@ def _planar(points: list[tuple[float, float, float]]) -> bool:
 
 
 def dual_feature_angle(snap: Any) -> float:
-    """The angle `polyDualMesh` is given: the settings' feature angle, never below the floor."""
-    return max(float(getattr(snap, "feature_angle", 0.0) or 0.0), DUAL_MIN_FEATURE_ANGLE)
+    """The angle `polyDualMesh` is given: the settings' feature angle, never below the floor.
+
+    The floor is higher when any wall carries layers (`DUAL_LAYERED_MIN_FEATURE_ANGLE`).
+    """
+    counts = getattr(snap, "layer_counts", None) or {}
+    layered = any(int(n) > 0 for n in counts.values())
+    floor = DUAL_LAYERED_MIN_FEATURE_ANGLE if layered else DUAL_MIN_FEATURE_ANGLE
+    return max(float(getattr(snap, "feature_angle", 0.0) or 0.0), floor)
 
 
 def cell_count(snap: Any) -> int:
