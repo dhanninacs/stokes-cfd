@@ -59,7 +59,7 @@ CFMESH_MESHERS: tuple[str, ...] = ("cfmesh", "cfmesh_tet", "cfmesh_poly", "polyh
 #: The meshers that follow the part's own surfaces - one surface per boundary tag, per-surface
 #: sizes and wall layers - as opposed to blockMesh's bounding box. The basis, the task rows and the
 #: front end's sizing and layer pages all ask this one question.
-SURFACE_MESHERS: tuple[str, ...] = ("snappy", *CFMESH_MESHERS)
+SURFACE_MESHERS: tuple[str, ...] = ("snappy", *CFMESH_MESHERS, "gmsh")
 
 #: Where the domain comes from. ``region`` joins this with snappy (T-150), which is why it is an
 #: enum and not a boolean.

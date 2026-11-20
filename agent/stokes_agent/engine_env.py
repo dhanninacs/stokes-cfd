@@ -446,6 +446,27 @@ def mpi_flags(env: EngineEnv) -> tuple[str, ...]:
     return ()
 
 
+def missing_utility_reason(env: EngineEnv, name: str) -> str:
+    """Why a program cannot run, and what to do: plain words for the ones a user installs.
+
+    **Gmsh is the one a normal install lacks**: FoamWin ships it in a `gmsh` folder beside its
+    handshake script, but its installer (v14.0.0-win.5) does not copy that folder, and a Linux
+    OpenFOAM install does not include Gmsh at all.
+    """
+    if name == "gmsh":
+        if env.native_tools:
+            return (
+                "Gmsh was not found in the FoamWin install's gmsh folder (beside of14-env.ps1). "
+                "FoamWin's installer does not copy it: copy the gmsh folder from the FoamWin ZIP "
+                "into the install folder, then restart Stokes. Or choose another mesher."
+            )
+        return (
+            "Gmsh is not installed on this host. Install it (Ubuntu: sudo apt install gmsh), "
+            "then restart Stokes. Or choose another mesher."
+        )
+    return f"{name} is not on the engine's PATH"
+
+
 def mpi_unavailable_reason(env: EngineEnv) -> str:
     """An actionable platform-specific refusal, also suitable for the settings UI."""
     if env.native_tools:

@@ -148,13 +148,21 @@ MESHERS: tuple[MesherSpec, ...] = (
         "threads",
         layers=True,
     ),
+    # **Built** (ADR-0007 decision 5): Gmsh as a process on a generated script, reading the part's
+    # own B-rep so curved faces stay curved and each tag becomes a patch. Tetrahedra only; its
+    # threads come from `-nt`. Measured on a pipe tee at 3 mm: 69 k cells, checkMesh OK.
     MesherSpec(
         "gmsh",
-        "Gmsh",
-        False,
-        (),
-        "Gmsh ships with FoamWin but has no driver yet; use the cfMesh tetrahedral type for "
-        "tetrahedra",
+        "Tetrahedral (Gmsh)",
+        True,
+        ("part",),
+        "tetrahedra from the part's own CAD surfaces, sized by curvature: fewer cells than "
+        "cfMesh's tetrahedral type. Meshes a part's own volume; needs a CAD (STEP) part.",
+        ("tetrahedral",),
+        "threads",
+        layers=False,
+        layers_why="Gmsh cannot grow boundary layers in this version of Stokes. Choose "
+        "snappyHexMesh, hex-dominant, poly-hexcore or polyhedral for layers.",
     ),
 )
 

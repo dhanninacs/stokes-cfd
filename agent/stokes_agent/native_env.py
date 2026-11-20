@@ -99,6 +99,14 @@ def capture(path: Path, timeout: float) -> EngineEnv:
             tool = appbin / f"{name}.exe"
             if tool.is_file() and tool.resolve().parent == appbin:
                 tools[name] = str(tool)
+        # **Gmsh is not an OpenFOAM program**, so it is not in `FOAM_APPBIN`: FoamWin ships it in
+        # a `gmsh` folder beside its handshake script (its `of14-shell.ps1` puts that folder on
+        # PATH). Only that one fixed place counts, beside the install the host chose; the tool
+        # paths the handshake itself reports are not trusted for this, nor is PATH.
+        gmsh_dir = path.parent / "gmsh"
+        gmsh_exe = gmsh_dir / "gmsh.exe"
+        if gmsh_exe.is_file() and gmsh_exe.resolve().parent == gmsh_dir.resolve():
+            tools["gmsh"] = str(gmsh_exe.resolve())
         if not all(name in tools for name in ("blockMesh", "checkMesh", "foamRun")):
             raise ValueError("required native tools are absent")
         env = {

@@ -55,7 +55,7 @@ def test_an_unknown_mesher_is_refused_by_name_listing_what_works() -> None:
     from stokes.mesh.errors import MeshNotBuilt
 
     with pytest.raises(MeshNotBuilt) as caught:
-        driver_for("gmsh")
+        driver_for("no_such_mesher")
     assert caught.value.code == "mesh.not_built"
     assert "blockmesh" in str(caught.value)
     assert "snappy" in str(caught.value)

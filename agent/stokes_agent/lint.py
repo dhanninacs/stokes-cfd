@@ -1215,9 +1215,16 @@ def lint_file(rel: str, path: Path) -> list[Finding]:
     """
     if path.is_symlink():
         return [Finding(rel, 0, "", "a symbolic link in a job folder")]
-    large_stl = is_staged_surface(rel)
-    if large_stl:
-        return lint_large_stl(rel, path)
+    # **A Gmsh job's two inputs have their own rules** (`lint_gmsh`): its script, a program
+    # checked line by line against a closed grammar, and the STEP it reads, checked as data.
+    # Imported here: `lint_gmsh` takes `Finding` from this module.
+    from .lint_gmsh import lint_gmsh_input
+
+    special = lint_gmsh_input(rel, path)
+    if special is None and is_staged_surface(rel):
+        special = lint_large_stl(rel, path)
+    if special is not None:
+        return special
     try:
         with path.open("rb") as handle:
             raw = handle.read(MAX_SCAN_BYTES + 1)

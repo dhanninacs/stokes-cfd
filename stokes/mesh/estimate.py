@@ -82,6 +82,9 @@ CELL_FACTORS: dict[str, float] = {
     "polyhex": 0.83,
     "cfmesh_poly": 3.5,
     "cfmesh_tet": 12.9,
+    # **Gmsh, measured 2026-11-20 on four parts** (pipe tee, branch manifold, bend, 20-pin
+    # channel) against snappyHexMesh at the same settings: 6.2, 7.9, 6.6 and 7.6 times; the median.
+    "gmsh": 7.1,
 }
 
 

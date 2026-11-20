@@ -26,6 +26,7 @@ only end-to-end Linux run recorded so far is in
 | OpenFOAM | Foundation **14** | meshing and solving |
 | MPI | OpenMPI (comes with OpenFOAM) | runs on more than one core |
 | cfMesh | the OpenFOAM 13 port, built against 14 (step 3) | tet, polyhedral and hex-dominant meshes; snappyHexMesh and blockMesh do not need it |
+| Gmsh | any 4.x (`sudo apt install gmsh`) | the Gmsh tetrahedral mesher only; `gmshToFoam` comes with OpenFOAM |
 | Display | X11 or Wayland session | the window; `--browser` works without a Qt display |
 | Graphics | GPU with WebGL 2, or software rendering (step 5) | the 3D view |
 | Memory and disk | 8 GB RAM minimum, 16 GB or more for meshes over a million cells; 5 GB free | |

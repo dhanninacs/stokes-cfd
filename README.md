@@ -115,7 +115,7 @@ prediction.
 | Linux x86-64 | Supported; one full end-to-end run recorded so far ([details](docs/LINUX-READINESS.md)). |
 | macOS | Not supported. |
 | Geometry import | STEP (also IGES and BREP from the command line). |
-| Meshers | snappyHexMesh, blockMesh, cfMesh (hex-dominant, tetrahedral, polyhedral) and poly-hexcore; 2D planar and axisymmetric modes. |
+| Meshers | snappyHexMesh, blockMesh, cfMesh (hex-dominant, tetrahedral, polyhedral), poly-hexcore and Gmsh (tetrahedral); 2D planar and axisymmetric modes. |
 | Physics | Incompressible and heat-transfer flows: laminar, k-ε, k-ω SST, energy equation. |
 | Post-processing | Slices, iso-surfaces, clips, streamlines, vectors, probes, line plots, reports, picture export. |
 | Installer | None yet: run from source. |
@@ -185,8 +185,9 @@ Yes: STEP files in the window; STEP, IGES and BREP from the command line.
 
 **Which meshers can I use?**
 snappyHexMesh and blockMesh, plus cfMesh's hex-dominant, tetrahedral and
-polyhedral meshers and a poly-hexcore option. cfMesh is included in FoamWin; on
-Linux you build it once ([how](docs/INSTALL-LINUX.md)).
+polyhedral meshers, a poly-hexcore option, and Gmsh tetrahedra from the part's own
+CAD surfaces. cfMesh and Gmsh are included in FoamWin; on Linux you build cfMesh
+once and install Gmsh from your package manager ([how](docs/INSTALL-LINUX.md)).
 
 **Can I use it on a remote machine?**
 Yes. Run `python -m stokes.server` on the machine and open its URL through an SSH

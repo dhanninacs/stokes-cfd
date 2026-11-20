@@ -108,6 +108,16 @@ view results without it.
    download page for MS-MPI). Without it Stokes runs on one core and says so;
    asking for more cores without MS-MPI fails with a clear message rather than
    falling back silently.
+5. **For the Gmsh mesher** (tetrahedral, *Tetrahedral (Gmsh)* in the mesher list),
+   FoamWin's ZIP has a `gmsh` folder, but its installer (v14.0.0-win.5) does not
+   copy it. Copy it into the install folder yourself:
+
+   ```powershell
+   Copy-Item -Recurse .\gmsh "$env:LOCALAPPDATA\OpenFOAM-14-win\"
+   ```
+
+   Run that from the extracted ZIP. Stokes looks for `gmsh\gmsh.exe` beside
+   `of14-env.ps1` and nowhere else. The other meshers do not need it.
 
 ## 4. Point Stokes at the engine
 
@@ -207,6 +217,7 @@ The app log is `.stokes\logs\app.log`; look there first when something fails.
 | `npm ci` stops with `EBADENGINE` / "Unsupported engine" | Install Node.js 22.12 or newer (`node --version`). |
 | `pip install -e .` says there is no `pyproject.toml` or `setup.py` | You cloned the default `main` branch, which is documentation only. Run `git checkout windows` in the checkout (or clone again with `-b windows`). |
 | `pip install` says "requires a different Python", or fails building a package | Use Python 3.13 or 3.14 64-bit; 3.12 and 32-bit builds are not supported. `py -0p` lists the Pythons you have. |
+| Gmsh meshing fails with "Gmsh was not found in the FoamWin install's gmsh folder" | Copy the `gmsh` folder from the FoamWin ZIP into the install folder (step 3, item 5), then restart Stokes. |
 | `git pull` refuses because `web/package-lock.json` has local changes | An `npm install` rewrote it. Run `git checkout web/package-lock.json`, pull, then use `npm ci`. |
 | The page says the build is missing or old | Run `npm run build` in `web`. |
 | Very slow imports or Git errors | The checkout is on a network share. Clone to a local drive. |
