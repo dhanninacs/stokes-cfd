@@ -72,6 +72,7 @@ from typing import Any
 
 from stokes.compile.foam import Dict, Entry, Quoted, Raw, Word, render_file
 from stokes.compile.parallel import checked_cores
+from stokes.mesh.catalogue import grows_layers as _grows_layers
 from stokes.mesh.errors import MeshInvalid
 
 #: Bumped when any emitted text changes; it enters the mesh basis.
@@ -108,7 +109,7 @@ VOLUME_STEPS: dict[str, tuple[str, ...]] = {
 #: request on the pipe made 159 k prisms and left 132,239 points used by no face, so checkMesh
 #: failed; `improveMeshQuality` and `renumberMesh` kept them, and `generateBoundaryLayers` after a
 #: plain `tetMesh` failed two checks. A refusal says so; a failing mesh would not.
-NO_LAYERS: frozenset[str] = frozenset({"cfmesh_tet"})
+NO_LAYERS: frozenset[str] = frozenset(m for m in VOLUME_STEPS if not _grows_layers(m))
 
 #: The meshers this driver serves.
 MESHERS: tuple[str, ...] = tuple(VOLUME_STEPS)

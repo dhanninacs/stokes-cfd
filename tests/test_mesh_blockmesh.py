@@ -474,3 +474,11 @@ def test_a_tag_named_like_the_default_patch_is_refused() -> None:
     snap = duct(sides={"xmin": DEFAULT_PATCH}, side_kinds={"xmin": "velocity_inlet"})
     with pytest.raises(MeshInvalid):
         write(snap)
+
+
+def test_a_layer_request_on_blockmesh_is_a_result_warning() -> None:
+    from stokes.mesh.service import snapshot_warnings
+
+    assert snapshot_warnings(duct()) == []
+    (warning,) = snapshot_warnings(duct(layers_requested=3))
+    assert warning.startswith("the 3 boundary layers requested were not made: blockMesh has no")

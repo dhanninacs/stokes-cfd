@@ -15,6 +15,7 @@ import { findMeshNodes, isActive, phaseNow, readResult } from "../meshPanelModel
 import {
   HELPER_ASSUMPTIONS,
   addLayersVisible,
+  layersNotice,
   addThreeLayersPayload,
   coverageView,
   helperLine,
@@ -42,6 +43,8 @@ export default function LayersPage() {
   const nodeTypes = useStore((s) => s.nodeTypes);
   const mesh = useStore((s) => s.mesh);
   const busy = useMeshContext((s) => s.busy);
+  // Empty until the server answers `mesh.meshers`; a missing list must not break the page.
+  const meshers = useMeshContext((s) => s.meshers) ?? [];
   const resultNode = useStore((s) => s.tree);
   const [error, setError] = useState("");
   const [helper, setHelper] = useState<LayerEntry | null>(null);
@@ -136,6 +139,8 @@ export default function LayersPage() {
 
   const bodyHasLayers = false; // the domain body's layers field is read on the body page
   const views = wallViews(walls, settings, bodyHasLayers);
+  const mesherId = typeof settingsNode?.params?.mesher === "string" ? settingsNode.params.mesher : "blockmesh";
+  const noLayers = layersNotice(meshers.find((m) => m.id === mesherId), settings.layers);
   const coverage0 = coverage;
 
   return (
@@ -148,7 +153,12 @@ export default function LayersPage() {
           {error}
         </p>
       )}
-      {addLayersVisible(settings) && (
+      {noLayers !== null && (
+        <Note tip={noLayers.tip} data-ws="layers-unsupported">
+          {noLayers.text}
+        </Note>
+      )}
+      {noLayers === null && addLayersVisible(settings) && (
         <button
           type="button"
           className="link no-drag"

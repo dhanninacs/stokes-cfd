@@ -505,3 +505,49 @@ def test_the_precheck_blocks_tet_layers_before_generate(home: Path) -> None:
         f["code"] for f in session.execute("mesh.precheck")["findings"]
     ]
     assert session.execute("mesh.estimate")["ok"] is True
+
+
+def test_the_precheck_warns_when_blockmesh_is_given_layers(home: Path) -> None:
+    """blockMesh grows no layers: a request is a warning before the mesh, not a silent drop."""
+    from stokes.geometry.store import GeometryStore
+    from tests.test_project_save_as_portability import box, write_brep
+
+    source = write_brep(box(10.0, 20.0, 30.0), home / "part.brep")
+    session = Session()
+    session.execute("project.new", name="demo")
+    part_id = str(session.execute("geometry.import", path=str(source), units="mm")["id"])
+    assert GeometryStore.of(session).wait(part_id, timeout=180), "the import did not finish"
+    session.execute(
+        "mesh.configure", mesher="blockmesh", values={"domain_part": part_id, "layers": 3}
+    )
+    found = [
+        f
+        for f in session.execute("mesh.precheck")["findings"]
+        if f["code"] == "mesh.layers_unsupported"
+    ]
+    assert len(found) == 1 and found[0]["severity"] == "warn"
+    assert found[0]["message"].startswith("3 boundary layers requested, but blockMesh has no")
+    session.execute("mesh.configure", values={"layers": 0})
+    assert "mesh.layers_unsupported" not in [
+        f["code"] for f in session.execute("mesh.precheck")["findings"]
+    ]
+
+
+def test_the_catalogue_says_which_meshers_grow_layers() -> None:
+    from stokes.mesh.catalogue import MESHERS, grows_layers
+
+    flags = {spec.id: spec.layers for spec in MESHERS if spec.built}
+    assert flags == {
+        "blockmesh": False,
+        "snappy": True,
+        "cfmesh": True,
+        "cfmesh_tet": False,
+        "cfmesh_poly": True,
+        "polyhex": True,
+    }
+    for spec in MESHERS:
+        if spec.built and not spec.layers:
+            assert spec.layers_why, f"{spec.id} grows no layers and does not say why"
+        assert spec.to_json()["layers"] is spec.layers
+    assert {"cfmesh_tet"} == cfmesh.NO_LAYERS
+    assert not grows_layers("no_such_mesher")

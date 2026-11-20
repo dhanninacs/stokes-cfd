@@ -7,6 +7,28 @@
  * this module emits the word "added" about layers that have not been measured.
  */
 
+import type { MesherInfo } from "./meshPanelModel";
+
+/** The notice a mesher that grows no layers owes the user: a short line and the reason as its tip. */
+export interface LayersNotice {
+  text: string;
+  tip: string;
+}
+
+/**
+ * Whether to tell the user the chosen mesher makes no boundary layers, and in what words.
+ *
+ * **Said, not hidden**: blockMesh dropped a layer count with no word and the tetrahedral type refused only
+ * once Generate was pressed. `null` when the mesher can grow layers or the catalogue does not say.
+ */
+export function layersNotice(info: MesherInfo | null | undefined, requested: number): LayersNotice | null {
+  if (info === null || info === undefined || info.layers !== false) return null;
+  const tip = info.layersWhy || "This mesher does not grow boundary layers.";
+  const n = Math.max(0, Math.round(requested));
+  const text = n > 0 ? `${n} layer${n === 1 ? "" : "s"} requested; this mesher adds none` : "This mesher adds no boundary layers";
+  return { text, tip };
+}
+
 /** The every-wall settings, as the mesh_settings node holds them. */
 export interface LayerSettings {
   layers: number;

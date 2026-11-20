@@ -59,6 +59,13 @@ export interface MesherInfo {
   outputStructures: string[];
   /** How `cores` is spent: `mpi`, `threads` or `serial` (ADR-0032); "" from a server that does not say. */
   parallel?: string;
+  /**
+   * Whether this mesher grows boundary layers; null from a server that does not say, which a client treats
+   * as "can" so an older build never shows a false notice.
+   */
+  layers?: boolean | null;
+  /** Why it cannot, naming the meshers that can; "" when it can or the server does not say. */
+  layersWhy?: string;
 }
 
 /** `mesh.meshers`, read defensively: an entry without an id is dropped, a payload that is not ours gives none. */
@@ -81,6 +88,8 @@ export function readMeshers(payload: unknown): MesherInfo[] {
       */
       outputStructures: strings(entry.output_structures),
       parallel: text(entry.parallel),
+      layers: typeof entry.layers === "boolean" ? entry.layers : null,
+      layersWhy: text(entry.layers_why),
     });
   }
   return out;

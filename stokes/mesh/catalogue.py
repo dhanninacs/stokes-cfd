@@ -37,6 +37,12 @@ class MesherSpec:
     output_structures: tuple[str, ...] = ()
     #: How `cores` is spent: `mpi` (ranks), `threads` (OpenMP) or `serial` (ignored).
     parallel: str = "serial"
+    #: Whether this mesher grows boundary layers on walls. **False is said, never hidden**: a
+    #: layer count set with blockMesh used to be dropped with no word, and the tetrahedral type
+    #: refused only once Generate was pressed. A client shows `layers_why` when it is False.
+    layers: bool = False
+    #: Why a mesher cannot grow layers, in the user's words, naming the ones that can.
+    layers_why: str = ""
 
     def to_json(self) -> dict[str, object]:
         """As a client reads it: id, label, built, domains, why, output_structures, parallel."""
@@ -48,6 +54,8 @@ class MesherSpec:
             "why": self.why,
             "output_structures": list(self.output_structures),
             "parallel": self.parallel,
+            "layers": self.layers,
+            "layers_why": self.layers_why,
         }
 
 
@@ -68,6 +76,9 @@ MESHERS: tuple[MesherSpec, ...] = (
         "cannot become patches. Use snappyHexMesh for the shape itself.",
         ("structured-hexahedral",),
         "serial",
+        layers=False,
+        layers_why="blockMesh has no boundary-layer step: it fills a box with one block of cells. "
+        "Choose snappyHexMesh, hex-dominant, poly-hexcore or polyhedral for layers.",
     ),
     # **Built, and the DEFAULT** (the owner, via claude-win2's 1045 message: "make snappyHexMesh
     # work and make it default so that any CAD that user loads is meshable, blockMesh is user
@@ -83,6 +94,7 @@ MESHERS: tuple[MesherSpec, ...] = (
         "stays round.",
         ("hex-dominant",),
         "mpi",
+        layers=True,
     ),
     # **The cfMesh family and the poly-hexcore dual** (ADR-0032). Each meshes the inside of the
     # part's closed surface (`part` domain only, for now) and keeps the tag names as patches.
@@ -98,6 +110,7 @@ MESHERS: tuple[MesherSpec, ...] = (
         "excellent quality. Meshes a part's own volume.",
         ("hex-dominant",),
         "threads",
+        layers=True,
     ),
     MesherSpec(
         "cfmesh_tet",
@@ -108,6 +121,10 @@ MESHERS: tuple[MesherSpec, ...] = (
         "hex-dominant mesh for the same size. Meshes a part's own volume.",
         ("tetrahedral",),
         "threads",
+        layers=False,
+        layers_why="the tetrahedral type cannot grow boundary layers on this build: cfMesh leaves "
+        "unused points behind and checkMesh fails. Choose hex-dominant, poly-hexcore, polyhedral "
+        "or snappyHexMesh for layers.",
     ),
     MesherSpec(
         "cfmesh_poly",
@@ -118,6 +135,7 @@ MESHERS: tuple[MesherSpec, ...] = (
         "gradients. Meshes a part's own volume.",
         ("polyhedral",),
         "threads",
+        layers=True,
     ),
     MesherSpec(
         "polyhex",
@@ -128,6 +146,7 @@ MESHERS: tuple[MesherSpec, ...] = (
         "Cartesian mesh, layers included. Meshes a part's own volume.",
         ("poly-hexcore",),
         "threads",
+        layers=True,
     ),
     MesherSpec(
         "gmsh",
@@ -147,6 +166,11 @@ def mesher(mesher_id: str) -> MesherSpec:
             return spec
     known = ", ".join(spec.id for spec in MESHERS)
     raise MeshInvalid(f"no mesher {mesher_id!r}; known: {known}")
+
+
+def grows_layers(mesher_id: str) -> bool:
+    """Whether ``mesher_id`` grows boundary layers; an unknown id does not."""
+    return any(spec.id == mesher_id and spec.layers for spec in MESHERS)
 
 
 def meshers_json() -> list[dict[str, object]]:

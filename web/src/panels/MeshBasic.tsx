@@ -17,6 +17,9 @@ import { layersFor, finenessChoices } from "../setup/meshBasic";
 import { useStore } from "../state/store";
 import { currentScene } from "../viewport/scene";
 import { estimateLine } from "./sizingModel";
+import { layersNotice } from "./layersModel";
+import { useMeshContext } from "./meshRun";
+import { Note } from "../components/Note";
 import TwoDControls from "./TwoDControls";
 
 interface Estimate {
@@ -42,6 +45,9 @@ export default function MeshBasic({ node, locked }: { node: NodeSummary; locked:
   // Layers need snappyHexMesh: with blockMesh the switch is not drawn (the setting keeps its value).
   const showLayers = visibleFields("mesh_settings", ["layers"], node.params, DEFAULT_CONTEXT).layers !== "hidden";
   const busy = locked || action.busy;
+  const meshers = useMeshContext((c) => c.meshers) ?? [];
+  const mesherId = typeof node.params.mesher === "string" ? node.params.mesher : "blockmesh";
+  const noLayers = layersNotice(meshers.find((m) => m.id === mesherId), layers);
 
   // The cell range the size gives, asked the way the Sizing page asks (debounced, on a change of the tree).
   useEffect(() => {
@@ -101,6 +107,11 @@ export default function MeshBasic({ node, locked }: { node: NodeSummary; locked:
           disabled={busy}
           onChange={(on) => void action.run(() => configureMesh({ layers: layersFor(on) }))}
         />
+      )}
+      {noLayers !== null && (
+        <Note tip={noLayers.tip} data-ws="mesh-basic-no-layers">
+          {noLayers.text}
+        </Note>
       )}
       <TwoDControls settings={node} disabled={busy} configure={(values) => void action.run(() => configureMesh(values))} />
       {action.error !== "" && (

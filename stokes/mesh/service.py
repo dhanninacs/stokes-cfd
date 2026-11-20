@@ -182,6 +182,15 @@ def snapshot_warnings(snap: Any) -> list[str]:  # Any: MeshSnapshot
     warnings = [
         f"tag {tag} lies inside the domain; blockMesh cannot mesh it" for tag in snap.unmapped
     ]
+    asked = int(getattr(snap, "layers_requested", 0) or 0)
+    if asked > 0:
+        from stokes.mesh.catalogue import grows_layers, mesher
+
+        if not grows_layers(str(snap.mesher)):
+            warnings.append(
+                f"the {asked} boundary layer{'s' if asked != 1 else ''} requested were not made: "
+                f"{mesher(str(snap.mesher)).layers_why}"
+            )
     from stokes.mesh.snapshot import inner_faces_message
 
     for tag, count in sorted((getattr(snap, "inner_faces", None) or {}).items()):
