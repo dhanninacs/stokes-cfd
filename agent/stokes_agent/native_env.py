@@ -29,6 +29,9 @@ def candidates() -> list[Path]:
         if base:
             paths.extend(
                 (
+                    # FoamWin's own default (`setup-openfoam14.ps1 -InstallDir`): without it a
+                    # default install was never found unless STOKES_FOAMWIN_ENV was set.
+                    Path(base) / "OpenFOAM-14-win" / "of14-env.ps1",
                     Path(base) / "FoamWin" / "of14-env.ps1",
                     Path(base) / "Programs" / "FoamWin" / "of14-env.ps1",
                 )
