@@ -5,7 +5,7 @@ import { readMeshers } from "./meshPanelModel";
 
 describe("mesher kinds (ADR-0032)", () => {
   it("the cfMesh fills follow the shape; blockMesh does not", () => {
-    for (const id of ["snappy", "cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex"]) expect(followsShape(id)).toBe(true);
+    for (const id of ["snappy", "cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex", "gmsh"]) expect(followsShape(id)).toBe(true);
     expect(followsShape("blockmesh")).toBe(false);
     expect(isCfMesh("polyhex")).toBe(true);
     expect(isCfMesh("snappy")).toBe(false);
@@ -14,6 +14,7 @@ describe("mesher kinds (ADR-0032)", () => {
   it("the Cores line says how the count is spent", () => {
     expect(coresDescription("snappy", "mpi")).toContain("MPI");
     expect(coresDescription("cfmesh_poly", "threads")).toContain("OpenMP threads");
+    expect(coresDescription("gmsh", "threads")).toBe("Gmsh meshes in one process with this many threads.");
     expect(coresDescription("blockmesh", "serial")).toContain("serially");
     // An older server without `parallel` falls back on the id.
     expect(coresDescription("cfmesh", "")).toContain("OpenMP");

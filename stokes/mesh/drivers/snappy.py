@@ -319,6 +319,12 @@ class SnappySnapshot:
     #: only: the surfaces `front` and `back` are the slab's faces across the plane, and the case
     #: extrudes `front` to one layer, which makes `front` and `back` `empty`.
     two_d: dict[str, Any] = field(default_factory=dict)
+    #: The Gmsh driver's own inputs (`stokes.mesh.drivers.gmsh`), **empty for every other
+    #: mesher** so their records and bases are unchanged: ``groups`` (patch name -> Gmsh surface
+    #: numbers, 1-based), ``boxes`` (each B-rep face's bounding box in metres, in face order),
+    #: ``diagonal`` (the part's, metres) and ``part_spec`` (what the geometry worker needs to
+    #: export the part as STEP when the job is staged; `stokes.geometry.shapes.part_spec`).
+    gmsh: dict[str, Any] = field(default_factory=dict)
 
     @property
     def bbox(self) -> tuple[float, float, float, float, float, float]:

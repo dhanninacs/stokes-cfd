@@ -112,6 +112,8 @@ export const MESHER_STEPS: Readonly<Record<string, readonly string[]>> = {
   // A planar symmetry face is flattened and its type set back (stokes/mesh/drivers/cfmesh.py).
   cfmesh_poly: ["pMesh", "improveSymmetryPlanes", "symmetryType", "checkMesh"],
   polyhex: ["cartesianMesh", "polyDualMesh", "checkMesh"],
+  // Gmsh on the part's CAD, then the converter and the wall/symmetry types (stokes/mesh/drivers/gmsh.py).
+  gmsh: ["gmsh", "gmshToFoam", "patchType", "checkMesh"],
 };
 
 export function stepsOf(mesher: string): readonly string[] {

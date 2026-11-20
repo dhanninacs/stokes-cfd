@@ -10,8 +10,8 @@
 /** The cfMesh-driven volume fills: one joined surface and `system/meshDict`. */
 export const CFMESH_MESHERS: readonly string[] = ["cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex"];
 
-/** Every mesher that meshes the shape itself rather than its bounding box. */
-export const SURFACE_MESHERS: readonly string[] = ["snappy", ...CFMESH_MESHERS];
+/** Every mesher that meshes the shape itself rather than its bounding box (Gmsh reads the part's CAD). */
+export const SURFACE_MESHERS: readonly string[] = ["snappy", ...CFMESH_MESHERS, "gmsh"];
 
 /** Whether `mesher` follows the part's surfaces: local sizes, surfaces and wall layers apply. */
 export function followsShape(mesher: string): boolean {
@@ -30,6 +30,7 @@ export function isCfMesh(mesher: string): boolean {
 export function coresDescription(mesher: string, parallel: string): string {
   const how = parallel || (mesher === "snappy" ? "mpi" : isCfMesh(mesher) ? "threads" : "serial");
   if (how === "mpi") return "1 runs serially; larger counts use MPI.";
+  if (how === "threads" && mesher === "gmsh") return "Gmsh meshes in one process with this many threads.";
   if (how === "threads") return "cfMesh runs in one process with this many OpenMP threads.";
   return "blockMesh runs serially. Choose snappyHexMesh or a cfMesh type to mesh with several cores.";
 }

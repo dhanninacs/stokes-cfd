@@ -121,6 +121,44 @@ def test_native_handshake_filters_environment_and_checks_install(
         native_env.capture(script, 5)
 
 
+def test_gmsh_is_taken_only_from_the_installs_own_gmsh_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gmsh is not in `FOAM_APPBIN`: FoamWin ships it beside its handshake script. That one place
+    counts; a path the handshake reports (or PATH) does not."""
+    from stokes_agent import native_env
+
+    appbin, libbin = tmp_path / "bin", tmp_path / "lib"
+    appbin.mkdir()
+    libbin.mkdir()
+    for name in ("blockMesh", "checkMesh", "foamRun", "gmshToFoam"):
+        (appbin / f"{name}.exe").touch()
+    script = tmp_path / "of14-env.ps1"
+    script.touch()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "gmsh.exe").touch()
+    data = {
+        "schemaVersion": 1,
+        "distribution": "FoamWin",
+        "openfoam": {"flavour": "org", "version": "14"},
+        "environment": {"FOAM_APPBIN": str(appbin), "FOAM_LIBBIN": str(libbin)},
+        "tools": {"gmsh": str(elsewhere / "gmsh.exe")},
+        "parallel": {"available": False},
+    }
+    monkeypatch.setattr(
+        "stokes_agent.native_env.subprocess.run",
+        lambda *a, **kw: subprocess.CompletedProcess([], 0, json.dumps(data).encode(), b""),
+    )
+    env = native_env.capture(script, 5)
+    assert "gmsh" not in env.native_tools, "the handshake's own tool path must not be trusted"
+    assert env.native_tools["gmshToFoam"] == str(appbin / "gmshToFoam.exe")
+    (tmp_path / "gmsh").mkdir()
+    (tmp_path / "gmsh" / "gmsh.exe").touch()
+    env = native_env.capture(script, 5)
+    assert env.native_tools["gmsh"] == str((tmp_path / "gmsh" / "gmsh.exe").resolve())
+
+
 def test_mpi_requires_allowed_utility_and_agent_selected_launcher(tmp_path: Path) -> None:
     env = EngineEnv(
         "native",

@@ -54,9 +54,8 @@ def test_meshers_needs_no_project() -> None:
         "polyhex",
         "gmsh",
     ]
-    # **Six are built** (ADR-0032 adds the four cfMesh fills); Gmsh is listed with its reason
-    # rather than hidden.
-    assert [item["built"] for item in reply["meshers"]] == [True] * 6 + [False]
+    # **All seven are built** (ADR-0032 added the four cfMesh fills, ADR-0007 decision 5 Gmsh).
+    assert [item["built"] for item in reply["meshers"]] == [True] * 7
     assert all(item["why"] for item in reply["meshers"]), "every mesher must say why"
     assert "properties" in reply["schema"]
 
@@ -129,7 +128,9 @@ def test_a_second_configure_is_one_more_undo_step(session: Session) -> None:
     assert params["base_size"] == pytest.approx(0.002), "the earlier change must survive"
 
 
-def test_configure_refuses_a_mesher_that_is_not_built(session: Session) -> None:
+def test_configure_refuses_a_mesher_that_is_not_built(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """**Repointed from cfMesh to Gmsh** (ADR-0032 built cfMesh; before that, from snappy).
 
     snappyHexMesh is a built mesher and the DEFAULT now, so the old form of this test asserted the
@@ -137,6 +138,23 @@ def test_configure_refuses_a_mesher_that_is_not_built(session: Session) -> None:
     is unchanged: an unbuilt mesher is refused with the catalogue's reason, and the refusal leaves
     the settings alone.
     """
+    # **Every mesher is built now** (Gmsh was the last), so the catalogue entry is made unbuilt
+    # here: the subject - an unbuilt mesher is refused with its reason - outlives any one mesher.
+    import dataclasses
+
+    from stokes.mesh import catalogue
+
+    unbuilt = tuple(
+        dataclasses.replace(
+            spec,
+            built=False,
+            why="Gmsh has no driver yet; use the cfMesh tetrahedral type for tetrahedra",
+        )
+        if spec.id == "gmsh"
+        else spec
+        for spec in catalogue.MESHERS
+    )
+    monkeypatch.setattr(catalogue, "MESHERS", unbuilt)
     with pytest.raises(StokesError) as caught:
         session.execute("mesh.configure", mesher="gmsh")
     assert caught.value.code == "mesh.not_built"

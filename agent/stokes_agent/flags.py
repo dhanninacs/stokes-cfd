@@ -61,6 +61,10 @@ POSITIONAL: dict[str, str] = {
     # **`foamDictionary` edits one file, the boundary list** (the polyhedral mesher's symmetry
     # planes, `stokes.mesh.drivers.cfmesh`): no other path can be named.
     "foamDictionary": r"constant/polyMesh/boundary",
+    # **Gmsh's script and the converter's input: one path each.** The script is the case's own
+    # (`lint_gmsh` checks every line), and the mesh is the file Gmsh's `-o` names below.
+    "gmsh": r"constant/geometry/mesh\.geo",
+    "gmshToFoam": r"constant/geometry/mesh\.msh",
 }
 
 
@@ -132,8 +136,27 @@ ALLOWED_FLAGS: dict[str, dict[str, FlagSpec]] = {
             pattern=r"^entry0/[A-Za-z][A-Za-z0-9_]{0,63}/type$",
             why="the type of one patch in constant/polyMesh/boundary",
         ),
-        "-set": FlagSpec(1, pattern=r"^symmetry$", why="set back to symmetry after flattening"),
+        "-set": FlagSpec(
+            1,
+            pattern=r"^(symmetry|wall)$",
+            why="set back to symmetry after flattening; Gmsh's walls and symmetry planes, which "
+            "gmshToFoam writes as plain patches",
+        ),
     },
+    # **Gmsh** (`stokes.mesh.drivers.gmsh`): mesh in 3D, write the one mesh file the converter
+    # reads, and a thread count. Everything else Gmsh does is in the checked script.
+    "gmsh": {
+        "-3": FlagSpec(0, why="mesh the volume"),
+        "-o": FlagSpec(
+            1, pattern=r"^constant/geometry/mesh\.msh$", why="the file gmshToFoam reads"
+        ),
+        "-nt": FlagSpec(
+            1,
+            pattern=r"^([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-6])$",
+            why="the user's core count as Gmsh threads (1 to 256)",
+        ),
+    },
+    "gmshToFoam": {},
     # **The one flag with a value**, and its value is pinned: `foamRun` cannot run without a
     # solver name, and any solver other than the ones Stokes writes a case for would need a
     # different case. `fluid` is the energy-capable solver of `of14.fluid` (ADR-0027 step 4).

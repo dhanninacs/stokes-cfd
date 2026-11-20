@@ -197,6 +197,7 @@ def test_the_catalogue_lists_every_mesher_with_a_reason() -> None:
         "cfmesh_tet",
         "cfmesh_poly",
         "polyhex",
+        "gmsh",
     ]
     blockmesh = built[0]
     assert blockmesh.domains == ("part", "box")

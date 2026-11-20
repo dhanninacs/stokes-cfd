@@ -294,6 +294,8 @@ def snapshot_for(session: Session, settings: Node) -> Any:
         return build_snappy_snapshot(session, settings)
     if mesher in CFMESH_MESHERS:
         return build_cfmesh_snapshot(session, settings, mesher)
+    if mesher == "gmsh":
+        return build_gmsh_snapshot(session, settings)
     return build_snapshot(session, settings)
 
 
@@ -329,6 +331,103 @@ def build_cfmesh_snapshot(session: Session, settings: Node, mesher: str) -> Any:
         if (text := snap.stl_files.get(f"{GEOMETRY_DIR}/{surface.file}"))
     )
     return dataclasses.replace(snap, mesher=mesher, stl_files={SURFACE_FILE: joined})
+
+
+def build_gmsh_snapshot(session: Session, settings: Node) -> Any:
+    """The snappy record, re-labelled for Gmsh, with the face groups the script needs.
+
+    **Gmsh reads the part's B-rep, not the staged surfaces** (`stokes.mesh.drivers.gmsh`), so on
+    top of what cfMesh gets this adds, under `gmsh`: each patch's faces as Gmsh surface numbers
+    (Stokes face ``i`` is surface ``i + 1``, which the script verifies), every face's bounding box
+    from the display mesh (what the script checks the numbering against), the part's diagonal, and
+    the spec the geometry worker exports the part from when the job is staged.
+
+    Refused by name: a mesh-only part (it has no B-rep), a domain other than `part`, a 2D mode.
+    """
+    import dataclasses
+
+    import numpy as np
+
+    from stokes.geometry.shapes import part_spec
+    from stokes.geometry.store import GeometryStore
+    from stokes.mesh.drivers.gmsh import SURFACE_FILE
+    from stokes.mesh.drivers.snappy import GEOMETRY_DIR
+    from stokes.model import registry
+
+    own = _params(settings, registry)
+    domain = str(own["domain"])
+    if domain != "part":
+        raise MeshInvalid(
+            f"Gmsh meshes a part's own volume; the {domain!r} domain needs snappyHexMesh",
+            details={"code": "mesh.domain_unsupported", "mesher": "gmsh", "domain": domain},
+        )
+    if from_settings(own) is not None:
+        raise MeshInvalid(
+            "Gmsh meshes in 3D only; switch 2D off, or use blockMesh or snappyHexMesh for 2D",
+            details={"code": "mesh.two_d_unsupported", "mesher": "gmsh"},
+        )
+    snap = build_snappy_snapshot(session, settings)
+    project = session.require_project()
+    part_node = _part(project, own["domain_part"])
+    if str(part_node.params.get("family") or "") == "mesh":
+        raise MeshInvalid(
+            f"{part_node.name!r} is a mesh-only import with no CAD surfaces, and Gmsh meshes from "
+            "the CAD. Import a STEP version, or use snappyHexMesh or a cfMesh type.",
+            details={"code": "mesh.mesh_only", "mesher": "gmsh", "part": str(part_node.id)},
+        )
+    store = GeometryStore.of(session)
+    part_basis = store.basis(part_node)
+    mesh = store.mesh(str(part_node.id))
+    if mesh is None:
+        raise MeshInvalid(
+            "the domain part has no display mesh yet; wait for its import",
+            details={"code": "mesh.invalid", "part": str(part_node.id)},
+        )
+    positions, indices, face_ids = _arrays(mesh)
+    points = np.asarray(positions, dtype="float64")
+    corners = np.asarray(indices)
+    owners = np.asarray(face_ids)
+    count = int(owners.max()) + 1 if owners.size else 0
+    boxes: list[list[float]] = []
+    for face in range(count):
+        used = np.unique(corners[owners == face])
+        if used.size == 0:
+            raise MeshInvalid(
+                f"face {face} of {part_node.name!r} has no triangles, so Gmsh's numbering cannot "
+                "be checked; re-import the part",
+                details={"code": "mesh.invalid", "part": str(part_node.id), "face": face},
+            )
+        box = points[used]
+        boxes.append([*box.min(axis=0).tolist(), *box.max(axis=0).tolist()])
+    tag_faces, _kinds, _members, _digests = _tag_faces(project, part_node, count, part_basis)
+    groups: dict[str, list[int]] = {}
+    tagged: set[int] = set()
+    for surface in snap.surfaces:
+        faces = tag_faces.get(str(surface.name))
+        if faces:
+            groups[str(surface.region or surface.name)] = sorted(f + 1 for f in faces)
+            tagged.update(faces)
+    rest = sorted(set(range(count)) - tagged)
+    if rest:
+        # The faces in no tag: the snappy record calls them `unassigned`, typed `wall`.
+        groups["unassigned"] = [f + 1 for f in rest]
+    lo, hi = points.min(axis=0), points.max(axis=0)
+    joined = "".join(
+        text
+        for surface in snap.surfaces
+        if (text := snap.stl_files.get(f"{GEOMETRY_DIR}/{surface.file}"))
+    )
+    return dataclasses.replace(
+        snap,
+        mesher="gmsh",
+        stl_files={SURFACE_FILE: joined},
+        gmsh={
+            "groups": groups,
+            "boxes": boxes,
+            "diagonal": float(np.linalg.norm(hi - lo)),
+            "part_spec": part_spec(part_node, store.shape_dir(), part_basis),
+        },
+    )
 
 
 def build_snappy_snapshot(session: Session, settings: Node) -> Any:  # noqa: PLR0915 - one read, in order

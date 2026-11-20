@@ -636,8 +636,27 @@ class MeshService:
         driver = driver_for(str(snap.mesher))
         basis = mesh_basis(snap, driver.DRIVER_VERSION, engine)
         files = driver.write(snap)
+        # **A driver that reads the B-rep** (Gmsh) names the files to export here: the driver is
+        # pure, and an export needs the geometry worker. Done at generate only, never for a
+        # precheck or an estimate, which build the same snapshot many times.
+        exports = getattr(driver, "geometry_exports", None)
+        if exports is not None:
+            for path, spec in exports(snap):
+                files[path] = self._exported_step(spec)
         steps = driver.steps(snap)
         return basis, files, steps
+
+    def _exported_step(self, spec: dict[str, Any]) -> str:  # Any: JSON part spec
+        """One part as STEP text, in metres, written by the geometry worker (`export_step`)."""
+        import tempfile
+        from pathlib import Path
+
+        from stokes.geometry.worker import acquire
+
+        with tempfile.TemporaryDirectory(prefix="stokes-gmsh-") as folder:
+            out = Path(folder) / "domain.step"
+            acquire().export_step([spec], out, names=[str(spec.get("name") or "part")])
+            return out.read_text(encoding="utf-8", errors="strict")
 
     def _cells(self, snap: Any) -> int:
         """The cell count the chosen driver's background block will produce.

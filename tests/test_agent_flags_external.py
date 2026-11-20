@@ -125,6 +125,10 @@ def test_current_profile_lists_are_unchanged() -> None:
         # (`foamDictionary` is pinned to that one edit by `flags.py`).
         "improveSymmetryPlanes",
         "foamDictionary",
+        # ADR-0007 decision 5: Gmsh on a script `lint_gmsh` checks line by line, and its
+        # converter; both pinned to one path each by `flags.POSITIONAL`.
+        "gmsh",
+        "gmshToFoam",
     }
     assert current == jobs.ALLOWED_UTILITIES
     assert ALLOWED_FLAGS["foamRun"]["-solver"].pattern == r"^(incompressibleFluid|fluid)$"

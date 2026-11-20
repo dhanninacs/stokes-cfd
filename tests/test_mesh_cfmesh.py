@@ -71,7 +71,11 @@ def test_the_catalogue_names_the_fluent_cell_families_and_how_cores_are_spent() 
     assert all(by_id[m]["parallel"] == "threads" for m in CFMESH_MESHERS)
     # The cfMesh fills mesh a part's own volume only, for now.
     assert all(by_id[m]["domains"] == ["part"] for m in CFMESH_MESHERS)
-    assert by_id["gmsh"]["built"] is False and by_id["gmsh"]["why"]
+    # Gmsh is built (ADR-0007 decision 5): tetrahedra on a part's own volume, threaded.
+    assert by_id["gmsh"]["built"] is True and by_id["gmsh"]["why"]
+    assert by_id["gmsh"]["output_structures"] == ["tetrahedral"]
+    assert by_id["gmsh"]["parallel"] == "threads"
+    assert by_id["gmsh"]["domains"] == ["part"]
 
 
 # ------------------------------------------------------------------ the dictionary
@@ -444,8 +448,11 @@ def test_the_symmetry_steps_pass_the_agent_boundary_and_nothing_wider_does(store
         jobstore._check_argv(Step(step["name"], tuple(step["argv"])), engine)
     assert {"improveSymmetryPlanes", "foamDictionary"} <= jobs.MESHERS
     base = ("foamDictionary", "constant/polyMesh/boundary", "-entry", "entry0/mirror/type")
+    # `wall` is allowed since Gmsh (its converter writes walls as plain patches); every other
+    # type is still refused, so the edit cannot make a patch `empty`, `patch` or anything else.
     for argv in (
-        (*base, "-set", "wall"),
+        (*base, "-set", "patch"),
+        (*base, "-set", "empty"),
         (
             "foamDictionary",
             "system/controlDict",
@@ -544,6 +551,7 @@ def test_the_catalogue_says_which_meshers_grow_layers() -> None:
         "cfmesh_tet": False,
         "cfmesh_poly": True,
         "polyhex": True,
+        "gmsh": False,
     }
     for spec in MESHERS:
         if spec.built and not spec.layers:

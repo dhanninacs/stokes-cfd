@@ -72,6 +72,7 @@ from .engine_env import (
     EngineEnv,
     UnknownEngine,
     engine_id,
+    missing_utility_reason,
     mpi_launcher,
     mpi_unavailable_reason,
     resolve_engine,
@@ -127,6 +128,12 @@ ALLOWED_UTILITIES = frozenset(
         # edit of `constant/polyMesh/boundary` (`flags.py`).
         "improveSymmetryPlanes",
         "foamDictionary",
+        # **Gmsh and its converter** (ADR-0007 decision 5, `stokes.mesh.drivers.gmsh`). Gmsh reads
+        # one script whose every line `lint_gmsh` re-checks against a closed grammar (a Gmsh
+        # script can run shell commands), plus the STEP beside it; both paths are pinned in
+        # `flags.py`. `gmshToFoam` reads the one mesh file Gmsh wrote.
+        "gmsh",
+        "gmshToFoam",
     }
 )
 
@@ -205,6 +212,8 @@ MESHERS = frozenset(
         "polyDualMesh",
         "improveSymmetryPlanes",
         "foamDictionary",
+        # Gmsh writes `constant/geometry/mesh.msh`; the converter writes the polyMesh.
+        "gmshToFoam",
     }
 )
 MAX_ARGV_ITEM = 1024
@@ -1060,7 +1069,7 @@ class JobStore:
                 raise JobMissingUtility(mpi_unavailable_reason(engine))
         if resolve_utility(engine, argv[0]) is None:
             raise JobMissingUtility(
-                f"{argv[0]} is not on the engine's PATH",
+                missing_utility_reason(engine, argv[0]),
                 details={"code": "agent.missing_utility", "utility": argv[0]},
             )
 
@@ -1096,7 +1105,7 @@ class JobStore:
                 raise JobMissingUtility(mpi_unavailable_reason(engine))
         if resolve_utility(engine, argv[0]) is None:
             raise JobMissingUtility(
-                f"{argv[0]} is not on the engine's PATH",
+                missing_utility_reason(engine, argv[0]),
                 details={"code": "agent.missing_utility", "utility": argv[0]},
             )
 
@@ -1658,7 +1667,7 @@ class JobStore:
                 None,
                 {
                     "code": "agent.missing_utility",
-                    "message": f"{step.argv[0]} is not on the engine's PATH",
+                    "message": missing_utility_reason(engine, step.argv[0]),
                 },
             )
         libs = _launch_libs(step.argv[0], job_dir)
