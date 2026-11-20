@@ -34,6 +34,7 @@ Standard library only, and nothing is written to disk: the agent writes only und
 
 from __future__ import annotations
 
+import getpass
 import hashlib
 import os
 import platform
@@ -78,6 +79,8 @@ UTILITIES: tuple[str, ...] = (
     "foamDictionary",
     "gmsh",
     "gmshToFoam",
+    # ADR-0035: built into the user's OpenFOAM tree (`FOAM_USER_APPBIN`, on the captured PATH).
+    "coupledSimpleFoam",
 )
 
 # The ordinary environment a process needs, and nothing else.
@@ -293,7 +296,7 @@ def capture_env(bashrc: Path, timeout: float = 30.0) -> EngineEnv:
             capture_output=True,
             timeout=timeout,
             check=False,
-            env={"PATH": "/usr/bin:/bin", "HOME": str(Path.home())},
+            env=_sourcing_shell_env(),
             stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired as exc:
@@ -341,6 +344,35 @@ def capture_env(bashrc: Path, timeout: float = 30.0) -> EngineEnv:
         flavour=flavour_of(version),
         seconds=seconds,
     )
+
+
+def _sourcing_shell_env() -> dict[str, str]:
+    """The environment for the shell that sources the install's bashrc.
+
+    **OpenFOAM's own bashrc assumes it is sourced from a shell that already has the MPI runtime
+    on its library path.** Measured on this Linux host: sourcing only ``etc/bashrc`` leaves
+    ``blockMesh -help`` failing with ``libmpi.so.40: cannot open shared object file`` (exit 127),
+    while the same call works when the caller had sourced the install's env script first. So keep
+    the caller's ``PATH`` and ``LD_LIBRARY_PATH``, plus the OpenMPI relocation prefixes a
+    user-space build needs, and nothing else: no ``BASH_ENV``, no ``WM_*``/``FOAM_*`` from a
+    previous install, no secrets.
+    """
+    user = os.environ.get("USER") or getpass.getuser()
+    base = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(Path.home()),
+        # **OpenFOAM's bashrc builds `WM_PROJECT_USER_DIR` from `$USER`.** Measured: without it
+        # the captured `FOAM_USER_APPBIN` was `~/OpenFOAM/-14/...`, so a cfMesh built into the user
+        # prefix was invisible even though the launching shell had it on PATH.
+        "USER": user,
+        "LOGNAME": os.environ.get("LOGNAME") or user,
+    }
+    inherited = ("LD_LIBRARY_PATH", "OPAL_PREFIX", "PMIX_PREFIX", "PRTE_PREFIX", "PRTE_PKGDATADIR")
+    for key in inherited:
+        value = os.environ.get(key)
+        if value:
+            base[key] = value
+    return base
 
 
 def _tail(raw: bytes | None, limit: int = 2048) -> str:
@@ -414,6 +446,19 @@ def missing_utility_reason(env: EngineEnv, name: str) -> str:
         return (
             "Gmsh is not installed on this host. Install it (Ubuntu: sudo apt install gmsh), "
             "then restart Stokes. Or choose another mesher."
+        )
+    if name == "coupledSimpleFoam":
+        if env.native_tools:
+            return (
+                "coupledSimpleFoam is not in this FoamWin install (FoamWin releases before "
+                "v14.0.0-win.6 do not include it). Install a newer FoamWin, build it into this "
+                "one with FoamWin's scripts/build-coupled.sh, or run this case on a WSL or Linux "
+                "host where it is installed. Or choose another engine."
+            )
+        return (
+            "coupledSimpleFoam is not installed on this host. Build it from "
+            "github.com/dhanninacs/coupledSimpleFoam (./Allwmake with OpenFOAM 14 and Eigen), "
+            "then restart Stokes. Or choose another engine."
         )
     return f"{name} is not on the engine's PATH"
 

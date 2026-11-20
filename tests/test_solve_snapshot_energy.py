@@ -89,6 +89,7 @@ def legacy_basis(snap: SolveSnapshot) -> str:
     for name in ("max_courant", "write_time", "average", "average_start"):
         body.pop(name)
     body.pop("non_orthogonal")  # added with the limited schemes; not in the basis while off
+    body.pop("cells")  # added for the coupled writer; never in the basis (the mesh basis is)
     for patch in body["patches"]:
         for name in (*THERMAL_FIELDS, *TURBULENCE_FIELDS):
             patch.pop(name)

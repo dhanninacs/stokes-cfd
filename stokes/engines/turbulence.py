@@ -12,6 +12,10 @@ from dataclasses import dataclass
 _INCOMP = "of14.incompressibleFluid"
 _FLUID = "of14.fluid"
 _BOTH = (_INCOMP, _FLUID)
+#: coupledSimpleFoam (ADR-0035): the models its README says were exercised - laminar, k-epsilon and
+#: k-omega SST. It builds the same incompressible momentum-transport family, so others would
+#: construct, but they are untested with the coupled block and are not offered.
+_COUPLED = "coupled.simple"
 
 
 @dataclass(frozen=True)
@@ -46,8 +50,8 @@ def _les(name: str, fields: tuple[str, ...] = ()) -> TurbulenceSpec:
 
 
 MODELS: tuple[TurbulenceSpec, ...] = (
-    TurbulenceSpec("laminar", "laminar", _BOTH, (), ()),
-    _ras("kEpsilon", ("k", "epsilon")),
+    TurbulenceSpec("laminar", "laminar", (*_BOTH, _COUPLED), (), ()),
+    _ras("kEpsilon", ("k", "epsilon"), engines=(*_BOTH, _COUPLED)),
     _ras("RNGkEpsilon", ("k", "epsilon")),
     _ras("realizableKE", ("k", "epsilon")),
     _ras("LaunderSharmaKE", ("k", "epsilon")),
@@ -67,7 +71,7 @@ MODELS: tuple[TurbulenceSpec, ...] = (
     ),
     _ras("kOmega", ("k", "omega")),
     _ras("kOmega2006", ("k", "omega")),
-    _ras("kOmegaSST", ("k", "omega")),
+    _ras("kOmegaSST", ("k", "omega"), engines=(*_BOTH, _COUPLED)),
     _ras("kOmegaSSTLM", ("k", "omega", "gammaInt", "ReThetat")),
     _ras("kOmegaSSTSAS", ("k", "omega"), transient=True),
     _ras("SpalartAllmaras", ("nuTilda",)),

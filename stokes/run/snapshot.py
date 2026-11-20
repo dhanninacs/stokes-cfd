@@ -128,6 +128,7 @@ def build_solve_snapshot(
         settings_id=str(settings.id),
         cores=core_count(params.get("cores", 1)),
         non_orthogonal=_mesh_non_ortho(mesh_status) > NON_ORTHO_LIMIT,
+        cells=_mesh_cells(mesh_status),
         engine="of14.incompressibleFluid"
         if params.get("engine") == "of14.kOmegaSST"
         else str(params.get("engine") or ""),
@@ -443,6 +444,22 @@ def _mesh_non_ortho(mesh_status: dict[str, Any]) -> float:
         return float(value) if value is not None else 0.0
     except (TypeError, ValueError):
         return 0.0
+
+
+def _mesh_cells(mesh_status: dict[str, Any]) -> int:
+    """The built mesh's cell count from `mesh.status`, or its quality block; 0 unknown."""
+    quality = mesh_status.get("quality")
+    for value in (
+        mesh_status.get("cells"),
+        quality.get("cells") if isinstance(quality, dict) else None,
+    ):
+        try:
+            count = int(value or 0)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            return count
+    return 0
 
 
 #: The kinds that carry the flow in or out: a run without one of them solves another problem.
@@ -816,13 +833,19 @@ def solve_basis(snap: SolveSnapshot, mesh_basis: str, mesh_job: str, engine_stri
     **The writer is the one that writes the case**: an `of14.fluid` snapshot is written by the
     energy writer (ADR-0027), so its `WRITER_VERSION` is the one that marks its runs stale.
     """
+    from stokes.compile.coupled import simple as coupled_writer
     from stokes.compile.of14 import WRITER_VERSION
     from stokes.compile.of14 import fluid as fluid_writer
 
-    writer = fluid_writer.WRITER_VERSION if snap.engine == fluid_writer.ENGINE else WRITER_VERSION
+    writer = {
+        fluid_writer.ENGINE: fluid_writer.WRITER_VERSION,
+        coupled_writer.ENGINE: coupled_writer.WRITER_VERSION,
+    }.get(snap.engine, WRITER_VERSION)
 
     physical_snapshot = asdict(snap)
     cores = physical_snapshot.pop("cores", 1)
+    # The cell count is the mesh's, and the mesh basis is already in the hash below.
+    physical_snapshot.pop("cells", None)
     # Only when on, so a run on an ordinary mesh keeps the basis it had before the flag existed.
     if not physical_snapshot.get("non_orthogonal"):
         physical_snapshot.pop("non_orthogonal", None)

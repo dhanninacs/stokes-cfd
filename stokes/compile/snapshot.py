@@ -159,6 +159,10 @@ class SolveSnapshot:
     #: elbow: a tetrahedral mesh at 79.8 degrees diverged ("Negative initial temperature") at
     #: iteration 67 with plain `corrected`. Off, the case is unchanged (and so is its basis).
     non_orthogonal: bool = False
+    #: The mesh's cell count, 0 when unknown. Only the coupled writer reads it, to pick a linear
+    #: solver the size can afford (ADR-0035 decision 3); it is out of the run basis because the
+    #: mesh basis already decides it.
+    cells: int = 0
     #: The energy equation (ADR-0027). Off, every field below keeps its default and the case is
     #: the flow-only case; on, they are the material at `T_ref` and the solver settings, in SI.
     energy: bool = False

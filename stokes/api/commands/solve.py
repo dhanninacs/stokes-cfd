@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from stokes.api.registry import CommandContext, ParamDef, command
-from stokes.engines.catalogue import ENERGY_ENGINE, ENGINES
+from stokes.engines.catalogue import ENERGY_ENGINE, ENGINES, solves_energy
 from stokes.engines.catalogue import engine as find_engine
 from stokes.engines.model import SETTINGS_PATH, SOLVER_PATH
 from stokes.errors import ValidationError
@@ -135,9 +135,10 @@ def _refuse_energy_on_another_engine(wanted: dict[str, Any], current: dict[str, 
     """
     engine_id = str(wanted.get("engine", current.get("engine", "of14.incompressibleFluid")))
     energy_on = bool(wanted.get("energy", current.get("energy", False)))
-    if energy_on and engine_id != ENERGY_ENGINE:
+    if energy_on and not solves_energy(engine_id):
         raise SolveInvalid(
-            f"the energy equation needs the {ENERGY_ENGINE} engine; this set-up uses {engine_id!r}",
+            f"the energy equation needs the {ENERGY_ENGINE} engine (or coupled.simple's passive "
+            f"temperature); this set-up uses {engine_id!r}",
             details={"code": "solve.invalid", "engine": engine_id, "energy": True},
         )
 

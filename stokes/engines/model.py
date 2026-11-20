@@ -112,8 +112,9 @@ def solver_specs() -> tuple[NodeSpec, ...]:
                     "bool",
                     label="Energy equation",
                     default=False,
-                    doc="Solve the energy equation (temperature). Needs the of14.fluid engine; "
-                    "works with any of its flow models, steady or transient. Inlets then take a "
+                    doc="Solve the energy equation (temperature). Needs the of14.fluid engine "
+                    "(any of its flow models, steady or transient), or coupled.simple, whose "
+                    "temperature is a passive scalar (no buoyancy). Inlets then take a "
                     "temperature.",
                 ),
                 ParamSpec(

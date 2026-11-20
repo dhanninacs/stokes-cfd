@@ -157,6 +157,14 @@ ALLOWED_FLAGS: dict[str, dict[str, FlagSpec]] = {
         ),
     },
     "gmshToFoam": {},
+    # **coupledSimpleFoam takes nothing** (ADR-0035): the case directory is its whole input, and a
+    # parallel run (`-parallel`) is a later step with its own reason.
+    "coupledSimpleFoam": {},
+    # **Only the final fields**: the coupled run's monitors are the `controlDict` functions,
+    # evaluated once on the last time (`-func`/`-funcs` would let a job name any function object).
+    "foamPostProcess": {
+        "-latestTime": FlagSpec(0, why="evaluate the monitors on the final fields only"),
+    },
     # **The one flag with a value**, and its value is pinned: `foamRun` cannot run without a
     # solver name, and any solver other than the ones Stokes writes a case for would need a
     # different case. `fluid` is the energy-capable solver of `of14.fluid` (ADR-0027 step 4).

@@ -36,6 +36,7 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Any
 
+from stokes.compile.coupled import simple as coupled_writer
 from stokes.compile.of14 import fluid as fluid_writer
 from stokes.compile.of14 import steps as solve_steps
 from stokes.compile.of14 import write as solve_write
@@ -455,11 +456,20 @@ def case_for(snap: SolveSnapshot) -> tuple[dict[str, str], list[dict[str, Any]]]
     """
     if snap.engine == fluid_writer.ENGINE:
         return fluid_writer.write(snap), fluid_writer.steps(snap)
+    if snap.engine == coupled_writer.ENGINE:
+        return coupled_writer.write(snap), coupled_writer.steps(snap)
     return solve_write(snap), solve_steps(snap)
 
 
 #: Registered executors, by the engine id they make a case for. One today.
-EXECUTORS: dict[str, type[FoamRunExecutor]] = {NAME: FoamRunExecutor}
+#: **Every built engine runs through `FoamRunExecutor`** (`case_for` picks the writer), so a
+#: re-attached job of any of them is collected by it: listing only the incompressible engine left
+#: an `of14.fluid` run re-opened after a restart as "no executor for this engine".
+EXECUTORS: dict[str, type[FoamRunExecutor]] = {
+    NAME: FoamRunExecutor,
+    fluid_writer.ENGINE: FoamRunExecutor,
+    coupled_writer.ENGINE: FoamRunExecutor,
+}
 
 
 def executor_for(engine: str) -> type[FoamRunExecutor] | None:
