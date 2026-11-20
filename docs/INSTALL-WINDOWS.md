@@ -6,7 +6,7 @@ install is **FoamWin**, a native build of OpenFOAM 14 with MS-MPI, from
 <https://dhanninacs.github.io/foamWin/>. WSL is not required.
 
 There is no installer for Stokes yet. You run it from a checkout, which takes
-about ten minutes.
+ten to thirty minutes depending on your connection (about 2 GB is downloaded).
 
 > New to this? Do steps 1 to 6 in order, then open [USAGE.md](USAGE.md).
 
@@ -35,10 +35,19 @@ git clone -b windows https://github.com/dhanninacs/stokes-cfd.git
 cd stokes-cfd
 ```
 
+The `-b windows` matters: the repository's default branch, `main`, holds only the
+documentation, so a plain `git clone` gives you no code to install.
+
 Keep the checkout on a **local drive**, in a short path such as `C:\code\stokes`.
 Network shares are many times slower and Git can refuse them; Stokes warns when a
 project path is longer than 180 characters because OpenFOAM case files can hit
 Windows' 260-character limit.
+
+**OneDrive.** Many PCs sync Desktop and Documents to OneDrive. Do not put the
+checkout there, and if your Documents folder is synced, move projects out of it
+with `STOKES_USER_HOME` (see [Where things are stored](#where-things-are-stored)):
+syncing thousands of mesh and result files is slow, can lock files while a solver
+writes them, and OneDrive paths are long.
 
 ## 2. Python environment and the front end
 
@@ -47,7 +56,7 @@ py -3.14 -m venv .venv          # or py -3.13
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
 cd web
-npm install
+npm ci
 npm run build
 cd ..
 ```
@@ -55,7 +64,12 @@ cd ..
 The extras are: `agent` (the job agent), `server` (the local web server), `ui`
 (PySide6, the window), `cad` (Open CASCADE, STEP import), `extract` (VTK, result
 fields), `explore` (design studies) and `materials` (CoolProp and Cantera). The
-first install downloads a few hundred megabytes, mostly Qt and VTK.
+first install is large: the `.venv` folder ends up at about 1.7 GB (mostly Qt,
+VTK and Open CASCADE) and `web\node_modules` at about 200 MB.
+
+Use `npm ci`, not `npm install`: it installs exactly what `package-lock.json`
+lists and never rewrites that file, so your checkout stays clean and later
+`git pull`s do not stop on a changed lockfile.
 
 `npm run build` writes `web/dist`, which the app serves. Run it again after you
 pull new commits.
@@ -79,6 +93,10 @@ view results without it.
 2. Run `OF14-win-setup.exe`, or from the extracted ZIP run
    `powershell -ExecutionPolicy Bypass -File .\setup-openfoam14.ps1`. The default
    location is `%LOCALAPPDATA%\OpenFOAM-14-win`; `-InstallDir` changes it.
+   The installer is not code-signed yet, so Windows SmartScreen may stop it with
+   "Windows protected your PC": check the SHA-256 first, then choose
+   **More info → Run anyway**, or use the ZIP, which is the build the FoamWin
+   release was validated from.
 3. Check it, from the install folder:
 
    ```powershell
@@ -93,8 +111,13 @@ view results without it.
 
 ## 4. Point Stokes at the engine
 
-Stokes finds FoamWin through one environment variable: the path of the
-`of14-env.ps1` script in the FoamWin install folder.
+If you installed FoamWin to its default folder,
+`%LOCALAPPDATA%\OpenFOAM-14-win`, Stokes finds it by itself and you can skip
+this step.
+
+For any other folder, tell Stokes with one environment variable: the path of the
+`of14-env.ps1` script in the FoamWin install folder. It also takes precedence
+over the default folder if you have more than one install.
 
 For the current PowerShell window:
 
@@ -142,7 +165,8 @@ Save this as `run-stokes.ps1` next to `.venv` and make a shortcut to
 `powershell -ExecutionPolicy Bypass -File run-stokes.ps1`:
 
 ```powershell
-$env:STOKES_FOAMWIN_ENV = "$env:LOCALAPPDATA\OpenFOAM-14-win\of14-env.ps1"
+# Only needed when FoamWin is not in its default folder:
+# $env:STOKES_FOAMWIN_ENV = "D:\path\to\OpenFOAM-14-win\of14-env.ps1"
 Set-Location $PSScriptRoot
 & .\.venv\Scripts\python.exe -m stokes.app
 ```
@@ -177,11 +201,13 @@ The app log is `.stokes\logs\app.log`; look there first when something fails.
 | Symptom | Fix |
 |---|---|
 | "running scripts is disabled" | Run PowerShell commands as shown, with `-ExecutionPolicy Bypass`, or `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
-| Mesh or Run says no engine, or the engine is not found | `STOKES_FOAMWIN_ENV` is unset or wrong. Check `Test-Path $env:STOKES_FOAMWIN_ENV`, then reopen the window from the same PowerShell session. |
+| Mesh or Run says no engine, the engine is not found, or "no tutorial folder" | FoamWin is not in its default folder and `STOKES_FOAMWIN_ENV` is unset or wrong. Check `Test-Path "$env:LOCALAPPDATA\OpenFOAM-14-win\of14-env.ps1"` or `Test-Path $env:STOKES_FOAMWIN_ENV`, then reopen the window from the same PowerShell session. |
 | "Parallel mode requires the MPI-enabled FoamWin build and Microsoft MPI" | Install MS-MPI (step 3), or set cores to 1. |
 | 3D view is blank or says it is unavailable | Update the graphics driver. On a virtual machine or remote desktop try `--browser`. |
-| `npm run build` fails on engine version | Install Node.js 22.12 or newer (`node --version`). |
-| `pip install` fails building a package | Use Python 3.13 or 3.14 64-bit; 3.12 and 32-bit builds are not supported. |
+| `npm ci` stops with `EBADENGINE` / "Unsupported engine" | Install Node.js 22.12 or newer (`node --version`). |
+| `pip install -e .` says there is no `pyproject.toml` or `setup.py` | You cloned the default `main` branch, which is documentation only. Run `git checkout windows` in the checkout (or clone again with `-b windows`). |
+| `pip install` says "requires a different Python", or fails building a package | Use Python 3.13 or 3.14 64-bit; 3.12 and 32-bit builds are not supported. `py -0p` lists the Pythons you have. |
+| `git pull` refuses because `web/package-lock.json` has local changes | An `npm install` rewrote it. Run `git checkout web/package-lock.json`, pull, then use `npm ci`. |
 | The page says the build is missing or old | Run `npm run build` in `web`. |
 | Very slow imports or Git errors | The checkout is on a network share. Clone to a local drive. |
 | A path-length warning when opening a project | Move the project to a shorter folder, for example `C:\cfd\elbow.stokes`. |
@@ -191,7 +217,7 @@ The app log is `.stokes\logs\app.log`; look there first when something fails.
 ```powershell
 git pull
 .\.venv\Scripts\python -m pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
-cd web; npm install; npm run build; cd ..
+cd web; npm ci; npm run build; cd ..
 ```
 
 ## Uninstalling

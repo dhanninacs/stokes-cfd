@@ -7,6 +7,10 @@ Changelog; versions follow semantic versioning.
 
 ### Changed
 
+- **A default FoamWin install is found without `STOKES_FOAMWIN_ENV`.** Discovery now looks in `%LOCALAPPDATA%\OpenFOAM-14-win` (and the same folder under Program Files), where FoamWin's setup installs by default; before, an unconfigured window reported no engine.
+- **The no-engine and no-tutorial-folder messages name the Windows variable.** Both said only what to do on Linux (`STOKES_OPENFOAM_BASHRC`); they now also name `STOKES_FOAMWIN_ENV`.
+- Front end: Vite is 8.3.8 (8.3.0 to 8.3.2 had a high-severity advisory for the dev server), and `web/package.json` declares Node 22.12 or newer with `engine-strict`, so an older Node stops `npm ci` with a clear message instead of failing later in the build.
+- Install guides: `npm ci` instead of `npm install` (Node 22's npm 10 rewrote `package-lock.json` and left every new checkout modified); the real download size; FoamWin is found without configuration in its default folder; notes on OneDrive-synced folders, the unsigned FoamWin installer and SmartScreen, and cloning the documentation-only `main` branch by mistake.
 - Documentation: FoamWin, the OpenFOAM 14 engine Stokes drives on Windows, now has its own project site at <https://dhanninacs.github.io/foamWin/>; the header, the Windows tech spec, the Windows FAQ, the Windows install guide and the footer link to it, and the footer keeps a separate link to the FoamWin source.
 - Documentation: the README is rewritten with the elbow case in nine screenshots (geometry, boundaries, two meshes, residuals, velocity, temperature, streamlines, Full mode) in one orientation, plus montages of the three themes in dark and light and of nine colour maps, install guides for Windows (`docs/INSTALL-WINDOWS.md`, FoamWin) and Linux (`docs/INSTALL-LINUX.md`), a usage tour (`docs/USAGE.md`) and a Buy me a coffee link (`.github/FUNDING.yml` adds GitHub's Sponsor button).
 - Found by running Fluent's mixing-elbow example (water, 0.4 m/s at 20 °C and 1.2 m/s at 40 °C, realizable k-ε, energy on) through every mesher from the Guided screens:

@@ -1,6 +1,18 @@
 # Stokes: an OpenFOAM GUI for Windows and Linux
 
-> **About this branch.** `main` carries the documentation. The code lives on two branches: [`windows`](https://github.com/dhanninacs/stokes-cfd/tree/windows) and [`linux`](https://github.com/dhanninacs/stokes-cfd/tree/linux). Source snapshots are on the [releases page](https://github.com/dhanninacs/stokes-cfd/releases).
+> [!IMPORTANT]
+> **This branch (`main`) is documentation only; there is no code to install here.**
+> Clone the branch for your platform instead:
+>
+> ```
+> git clone -b windows https://github.com/dhanninacs/stokes-cfd.git   # Windows
+> git clone -b linux   https://github.com/dhanninacs/stokes-cfd.git   # Linux
+> ```
+>
+> Already cloned without `-b`? Run `git checkout windows` (or `linux`) inside the
+> checkout. Browse the code on [`windows`](https://github.com/dhanninacs/stokes-cfd/tree/windows)
+> or [`linux`](https://github.com/dhanninacs/stokes-cfd/tree/linux); source snapshots are on
+> the [releases page](https://github.com/dhanninacs/stokes-cfd/releases).
 
 **Stokes is a desktop CFD workbench and graphical interface for OpenFOAM®
 Foundation 14.** Import a STEP file, click faces to make them inlets, outlets,
@@ -142,7 +154,7 @@ git clone -b windows https://github.com/dhanninacs/stokes-cfd.git   # or -b linu
 cd stokes-cfd
 python -m venv .venv                       # Windows: .venv\Scripts\python, Linux: .venv/bin/python
 .venv/bin/pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
-cd web && npm install && npm run build && cd ..
+cd web && npm ci && npm run build && cd ..
 .venv/bin/python -m stokes.app             # the desktop window
 ```
 
