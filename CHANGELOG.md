@@ -8,6 +8,7 @@ Changelog; versions follow semantic versioning.
 ### Changed
 
 - **A default FoamWin install is found without `STOKES_FOAMWIN_ENV`.** Discovery now looks in `%LOCALAPPDATA%\OpenFOAM-14-win` (and the same folder under Program Files), where FoamWin's setup installs by default; before, an unconfigured window reported no engine.
+- **Importing an OpenFOAM case and saving a study's points no longer fail with "Access is denied" on Windows.** Both ended in a bare rename, which Windows refuses while a virus scanner or the indexer has the just-written file open; they now retry briefly, as project saves already did (`stokes.model.persist.replace_with_retry`, now public).
 - **The no-engine and no-tutorial-folder messages name the Windows variable.** Both said only what to do on Linux (`STOKES_OPENFOAM_BASHRC`); they now also name `STOKES_FOAMWIN_ENV`.
 - Front end: Vite is 8.3.8 (8.3.0 to 8.3.2 had a high-severity advisory for the dev server), and `web/package.json` declares Node 22.12 or newer with `engine-strict`, so an older Node stops `npm ci` with a clear message instead of failing later in the build.
 - Install guides: `npm ci` instead of `npm install` (Node 22's npm 10 rewrote `package-lock.json` and left every new checkout modified); the real download size; FoamWin is found without configuration in its default folder; notes on OneDrive-synced folders, the unsigned FoamWin installer and SmartScreen, and cloning the documentation-only `main` branch by mistake.

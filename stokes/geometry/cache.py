@@ -523,7 +523,7 @@ def _replace_target(source: Path, target: Path) -> None:
 
     A pack is one large file that a reader keeps open on purpose, and on Windows a rename over a
     file something holds open fails with ``PermissionError`` even when the holder is about to
-    close it - the same trap :func:`stokes.model.persist._replace_with_retry` documents for the
+    close it - the same trap :func:`stokes.model.persist.replace_with_retry` documents for the
     project file, with a scanner or the indexer in the reader's place. The write is atomic, so
     retrying the rename keeps that promise rather than failing a save the user asked for.
     """
