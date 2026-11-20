@@ -45,6 +45,7 @@ from stokes.cases.model import is_snapshot
 from stokes.errors import StokesError
 from stokes.log import fields, get_logger
 from stokes.model.ids import is_id
+from stokes.model.persist import replace_with_retry
 
 log = get_logger(__name__)
 
@@ -58,6 +59,8 @@ SCRIPTS_AREA = "scripts"
 EXTRAS_AREA = "extras"
 MAX_CASE_BYTES = 1024 * 1024 * 1024
 MAX_CASE_FILES = 20_000
+#: Tries for moving a staged case into place; see `replace_with_retry` (12 is ~1.3 s of back-off).
+CASE_RENAME_ATTEMPTS = 12
 MAX_DEPTH = 16
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 MAX_PARSE_BYTES = 2 * 1024 * 1024
@@ -314,7 +317,10 @@ def stage(
         }
         (incoming / MANIFEST).write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
         remove_tree(home)
-        incoming.replace(home)
+        # A directory rename on Windows fails while anything (a virus scanner, the indexer) holds
+        # a file inside it open, and this tree was written a moment ago: retry, a little longer
+        # than for one file. `CASE_RENAME_ATTEMPTS` is about 1.3 s of back-off in all.
+        replace_with_retry(incoming, home, attempts=CASE_RENAME_ATTEMPTS)
         _read_only(home)
         return staged
     except OSError as exc:

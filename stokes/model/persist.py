@@ -200,7 +200,7 @@ def _write_atomic(target: Path, project: Project) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
-        _replace_with_retry(Path(tmp_name), target)
+        replace_with_retry(Path(tmp_name), target)
     except OSError as exc:
         Path(tmp_name).unlink(missing_ok=True)
         raise PersistenceError(f"cannot write {target}: {exc}") from exc
@@ -256,11 +256,16 @@ def discard_recovery(path: str | Path) -> bool:
 
 
 _REPLACE_ATTEMPTS = 6
-"""Tries for the final atomic rename; see :func:`_replace_with_retry`."""
+"""Tries for the final atomic rename; see :func:`replace_with_retry`."""
 
 
-def _replace_with_retry(source: Path, target: Path) -> None:
+def replace_with_retry(source: Path, target: Path, attempts: int = _REPLACE_ATTEMPTS) -> None:
     """``source.replace(target)``, retrying a transient Windows ``PermissionError``.
+
+    Public because every atomic write in Stokes ends in this rename and needs the same guard
+    (the case store and the study tables call it too). Renaming a freshly written *directory*
+    can take longer to clear - a scanner opens each file in it - so callers may ask for more
+    ``attempts``; the back-off grows by 20 ms per try.
 
     On Windows ``os.replace`` fails with ``PermissionError`` when anything holds the target open,
     even for a moment: an antivirus scanner, the search indexer or a backup agent opening the file
@@ -276,12 +281,12 @@ def _replace_with_retry(source: Path, target: Path) -> None:
     """
     import time  # lazy, as tempfile above: only a retrying save pays for it
 
-    for attempt in range(_REPLACE_ATTEMPTS):
+    for attempt in range(attempts):
         try:
             source.replace(target)
             return
         except PermissionError:
-            if attempt == _REPLACE_ATTEMPTS - 1:
+            if attempt >= attempts - 1:
                 raise
             # Back off a little: a scanner holding the file releases it in milliseconds, and the
             # last attempt raises the real error with the path the caller needs.

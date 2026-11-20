@@ -302,12 +302,15 @@ def write_text(path: Path, text: str) -> None:
     """Write ``text`` atomically (a temporary file in the same folder, then a replace)."""
     import tempfile  # lazy, as in stokes.model.persist: it pulls in shutil, bz2 and lzma
 
+    from stokes.model.persist import replace_with_retry
+
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.stem}-", suffix=path.suffix, dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
-        Path(temporary).replace(path)
+        # A scanner or indexer opening the new file makes a bare rename fail on Windows.
+        replace_with_retry(Path(temporary), path)
     except OSError as exc:
         Path(temporary).unlink(missing_ok=True)
         raise StudyTableError(f"cannot write {path}: {exc}") from exc
