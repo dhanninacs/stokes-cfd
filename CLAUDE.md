@@ -207,7 +207,7 @@ pip-audit
 # budgets
 pytest -q -m perf
 
-# the front end (Node 24+)
+# the front end (Node 22.12+, 24 recommended)
 cd web && npm install && npm run typecheck && npm run build
 python -m stokes.app                       # desktop window (serves web/dist in-process)
 python -m stokes.app --dev                 # window on the Vite dev server (npm run dev)

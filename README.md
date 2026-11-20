@@ -140,7 +140,7 @@ git clone -b windows https://github.com/dhanninacs/stokes-cfd.git   # or -b linu
 cd stokes-cfd
 python -m venv .venv                       # Windows: .venv\Scripts\python, Linux: .venv/bin/python
 .venv/bin/pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
-cd web && npm install && npm run build && cd ..
+cd web && npm ci && npm run build && cd ..
 .venv/bin/python -m stokes.app             # the desktop window
 ```
 
