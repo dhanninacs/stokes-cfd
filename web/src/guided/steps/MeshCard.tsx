@@ -25,6 +25,7 @@ import { baseSizeOf, chooseMeshResult, configureMesh, coresOf, layersOf, mesherO
 import type { GuidedStep } from "../guidedModel";
 import { fluidBody, meshSettings, readBodies, readCase, unmeshedFlowBoundaries } from "../guidedTree";
 import { SWITCH_LAYERS, finenessOf, lengthText, type Fineness } from "../sizing";
+import { layersNotice } from "../../panels/layersModel";
 import { useAction } from "../useAction";
 import { plainSentence } from "../words";
 
@@ -57,6 +58,7 @@ export default function MeshCard({ step }: { step: GuidedStep }) {
   const meshers = useMeshContext((c) => c.meshers);
   const mesherId = mesherOf(settings) ?? "blockmesh";
   const mesherInfo = meshers.find((m) => m.id === mesherId) ?? null;
+  const noLayers = layersNotice(mesherInfo, layers);
   // The meshes kept, one per mesher (ADR-0034): a choice only when there is more than one.
   const kept = useMemo(() => keptMeshes(tree, new Map(meshers.map((m) => [m.id, m.label]))), [tree, meshers]);
   const [coresDraft, setCoresDraft] = useState<string | null>(null);
@@ -133,9 +135,14 @@ export default function MeshCard({ step }: { step: GuidedStep }) {
         checked={layers > 0}
         label="Boundary layers"
         description={layers > 0 ? `${layers} layers on every wall` : "Thin cells along the walls"}
-        disabled={action.busy || active}
+        disabled={action.busy || active || (noLayers !== null && layers === 0)}
         onChange={(on) => void action.run(() => configureMesh({ layers: on ? SWITCH_LAYERS : 0 }))}
       />
+      {noLayers !== null && (
+        <Note tip={noLayers.tip} data-ws="guided-mesh-no-layers">
+          {noLayers.text}
+        </Note>
+      )}
       <TwoDControls settings={settings} disabled={action.busy || active} configure={(values) => void action.run(() => configureMesh(values))} />
       <label className="guided-field">
         <span>Cores</span>

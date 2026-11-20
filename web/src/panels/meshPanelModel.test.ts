@@ -579,3 +579,20 @@ describe("the Mesh page's fineness chips and the base size", () => {
     expect(layersFor(false)).toBe(0);
   });
 });
+
+describe("readMeshers: the layers flag", () => {
+  it("reads layers and layers_why, and leaves an absent flag as null", () => {
+    const got = readMeshers({
+      meshers: [
+        { id: "blockmesh", label: "blockMesh", built: true, layers: false, layers_why: "no layer step" },
+        { id: "snappy", label: "snappyHexMesh", built: true, layers: true },
+        { id: "old", label: "Old", built: true },
+      ],
+    });
+    expect(got.map((m) => [m.id, m.layers, m.layersWhy])).toEqual([
+      ["blockmesh", false, "no layer step"],
+      ["snappy", true, ""],
+      ["old", null, ""],
+    ]);
+  });
+});

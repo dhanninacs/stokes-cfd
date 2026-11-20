@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 from stokes.cores import core_count
 from stokes.log import fields, get_logger
 from stokes.mesh.errors import MeshInvalid, MeshPartExcluded
+from stokes.mesh.layers import requested_layers
 from stokes.mesh.two_d import TwoD, check_radius, from_settings, refuse_reserved, with_thickness
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, so numpy stays off the import path
@@ -124,6 +125,10 @@ class MeshSnapshot:
     #: 2026-11-20 on a 200 x 60 x 10 mm channel: 5.7 % of the fluid volume gone, silently. Empty
     #: for snappy and the cfMesh family, which mesh the shape itself.
     inner_faces: dict[str, int] = field(default_factory=dict)
+    #: The most boundary layers the settings, the body or any wall ask for
+    #: (`stokes.mesh.layers.requested_layers`). blockMesh grows none, so a count here becomes a
+    #: warning on the result instead of being dropped with no word.
+    layers_requested: int = 0
 
 
 def inner_faces_message(tag: str, count: int) -> str:
@@ -1005,6 +1010,7 @@ def build_snapshot(session: Session, settings: Node) -> MeshSnapshot:
             check_radius(grown, two, 1e-9 * _diagonal(grown))
             grown = with_thickness(grown, two)
         return MeshSnapshot(
+            layers_requested=requested_layers(project, settings),
             settings_id=str(settings.id),
             mesher=mesher,
             base_size=base_size,
@@ -1089,6 +1095,7 @@ def build_snapshot(session: Session, settings: Node) -> MeshSnapshot:
     side_kinds = {side: tag_kinds.get(name, "") for side, name in sides.items()}
     inner = inner_faces(positions, indices, faces, tag_faces, grown, tol, skip=unmapped)
     return MeshSnapshot(
+        layers_requested=requested_layers(project, settings, part_node),
         settings_id=str(settings.id),
         mesher=mesher,
         base_size=base_size,

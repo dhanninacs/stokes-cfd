@@ -35,6 +35,7 @@ snapshot builder adds ``unassigned`` itself.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from stokes.errors import StokesError
@@ -138,6 +139,22 @@ def _boundary_of(project: Any, tag_id: str) -> Any | None:
         if getattr(node, "type", "") == "boundary" and param == "tag":
             return node
     return None
+
+
+def requested_layers(project: Any, settings: Any, part: Any | None = None) -> int:
+    """The most layers anything asks for: the settings' count, the body's, or any wall's override.
+
+    For the notice a mesher that grows no layers owes the user (`stokes.mesh.catalogue`): the
+    question is only whether a request exists and how big, so a non-wall override, which
+    `effective_layers` refuses, is simply not counted here.
+    """
+    counts = [_stored_count(settings) or 0]
+    if part is not None:
+        counts.append(_stored_count(part) or 0)
+        # The snapshot build reports a non-wall override itself, with its name.
+        with contextlib.suppress(MeshInvalid):
+            counts.extend(effective_layers(project, part).values())
+    return max(counts)
 
 
 def _is_wall(boundary: Any | None) -> bool:

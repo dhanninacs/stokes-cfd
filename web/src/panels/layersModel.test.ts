@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   HELPER_ASSUMPTIONS,
   addLayersVisible,
+  layersNotice,
   addThreeLayersPayload,
   coverageView,
   helperLine,
@@ -112,5 +113,40 @@ describe("the y+ helper's lines", () => {
   it("the assumptions line is ALWAYS under the result", () => {
     expect(HELPER_ASSUMPTIONS).toContain("flat plate");
     expect(HELPER_ASSUMPTIONS).toContain("check it against your geometry");
+  });
+});
+describe("layersNotice: a mesher that grows no layers says so", () => {
+  const info = (layers: boolean | null | undefined, layersWhy = "") => ({
+    id: "m",
+    label: "M",
+    built: true,
+    domains: ["part"],
+    why: "",
+    outputStructures: [],
+    layers,
+    layersWhy,
+  });
+
+  it("says nothing when the mesher grows layers or the server does not say", () => {
+    expect(layersNotice(info(true), 3)).toBeNull();
+    expect(layersNotice(info(null), 3)).toBeNull();
+    expect(layersNotice(info(undefined), 3)).toBeNull();
+    expect(layersNotice(null, 3)).toBeNull();
+  });
+
+  it("names the request it cannot meet, with the reason as the tip", () => {
+    const notice = layersNotice(info(false, "blockMesh has no boundary-layer step."), 3);
+    expect(notice).toEqual({ text: "3 layers requested; this mesher adds none", tip: "blockMesh has no boundary-layer step." });
+    expect(layersNotice(info(false), 1)?.text).toBe("1 layer requested; this mesher adds none");
+  });
+
+  it("still says it when no layers are asked for, so the choice is informed", () => {
+    expect(layersNotice(info(false, "why"), 0)).toEqual({ text: "This mesher adds no boundary layers", tip: "why" });
+  });
+
+  it("keeps the on-screen line to eight words or fewer", () => {
+    for (const n of [0, 1, 3, 10]) {
+      expect(layersNotice(info(false), n)!.text.split(" ").length).toBeLessThanOrEqual(8);
+    }
   });
 });

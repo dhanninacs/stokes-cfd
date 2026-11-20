@@ -193,3 +193,8 @@ def test_the_layers_row_says_what_the_settings_hold(session: Session) -> None:
     assert row() == "3 layers on walls"
     session.execute("mesh.configure", values={"layers": 0})
     assert row() == "off"
+    # A mesher that grows no layers says the request is not met, rather than "off" or "on walls".
+    session.execute("mesh.configure", mesher="blockmesh", values={"layers": 3})
+    assert row() == "3 layers requested; this mesher adds none"
+    session.execute("mesh.configure", mesher="cfmesh_tet")
+    assert row() == "3 layers requested; this mesher adds none"

@@ -432,11 +432,16 @@ def _layers_row(settings: Any) -> str:
     if settings is None:
         return "off"
     layers = int(settings.params.get("layers") or 0)
-    from stokes.mesh.model import SURFACE_MESHERS
+    from stokes.mesh.catalogue import grows_layers
 
-    if layers <= 0 or settings.params.get("mesher", "snappy") not in SURFACE_MESHERS:
+    if layers <= 0:
         return "off"
-    return f"{layers} {'layer' if layers == 1 else 'layers'} on walls"
+    plural = "layer" if layers == 1 else "layers"
+    # **A request the mesher cannot meet is said, not shown as "off" or as made**: blockMesh's row
+    # said "off" with 3 set, and the tetrahedral type's said "3 layers on walls".
+    if not grows_layers(str(settings.params.get("mesher", "snappy"))):
+        return f"{layers} {plural} requested; this mesher adds none"
+    return f"{layers} {plural} on walls"
 
 
 def _sizing_row(settings: Any, project: Any) -> str:

@@ -148,6 +148,7 @@ def precheck(session: Session, settings: Node, snap: Any) -> dict[str, Any]:
     mesher = str(snap.mesher)
     domain = str(getattr(snap, "domain", "") or "")
 
+    findings.extend(_layers_unsupported(project, settings, domain_part, mesher))
     # **A tag partly inside the blockMesh box** (the pin-fin case): its inner faces have a
     # boundary but will not be in the mesh at all, which is neither "unassigned" nor fine.
     from stokes.mesh.snapshot import inner_faces_message
@@ -314,6 +315,35 @@ def _finding(
     """One finding, in the reply's shape. **The message is the whole user text**; the code is for
     the tests and the tasks module."""
     return {"code": code, "severity": severity, "message": message, "nodes": list(nodes or [])}
+
+
+def _layers_unsupported(
+    project: Any, settings: Any, part: Any, mesher: str
+) -> list[dict[str, Any]]:
+    """A finding when layers are asked for and the chosen mesher grows none.
+
+    **Said before the mesh, not after**: blockMesh dropped a layer count with no word, and the
+    tetrahedral type refused only once Generate was pressed. blockMesh still meshes (a warning);
+    the tetrahedral type refuses to (a block), so the finding says so up front.
+    """
+    from stokes.mesh.catalogue import grows_layers
+    from stokes.mesh.catalogue import mesher as mesher_spec
+    from stokes.mesh.layers import requested_layers
+
+    if grows_layers(mesher):
+        return []
+    asked = requested_layers(project, settings, part)
+    if asked <= 0:
+        return []
+    severity = "warn" if mesher == "blockmesh" else "block"
+    return [
+        _finding(
+            "mesh.layers_unsupported",
+            severity,
+            f"{asked} boundary layer{'s' if asked != 1 else ''} requested, but "
+            f"{mesher_spec(mesher).layers_why}",
+        )
+    ]
 
 
 def _domain_part_node(project: Any, settings: Any) -> Any:
