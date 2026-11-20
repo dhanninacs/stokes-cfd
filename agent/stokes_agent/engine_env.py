@@ -79,6 +79,8 @@ UTILITIES: tuple[str, ...] = (
     "foamDictionary",
     "gmsh",
     "gmshToFoam",
+    # ADR-0035: built into the user's OpenFOAM tree (`FOAM_USER_APPBIN`, on the captured PATH).
+    "coupledSimpleFoam",
 )
 
 # The ordinary environment a process needs, and nothing else.
@@ -463,6 +465,19 @@ def missing_utility_reason(env: EngineEnv, name: str) -> str:
         return (
             "Gmsh is not installed on this host. Install it (Ubuntu: sudo apt install gmsh), "
             "then restart Stokes. Or choose another mesher."
+        )
+    if name == "coupledSimpleFoam":
+        if env.native_tools:
+            return (
+                "coupledSimpleFoam is not in this FoamWin install (FoamWin releases before "
+                "v14.0.0-win.6 do not include it). Install a newer FoamWin, build it into this "
+                "one with FoamWin's scripts/build-coupled.sh, or run this case on a WSL or Linux "
+                "host where it is installed. Or choose another engine."
+            )
+        return (
+            "coupledSimpleFoam is not installed on this host. Build it from "
+            "github.com/dhanninacs/coupledSimpleFoam (./Allwmake with OpenFOAM 14 and Eigen), "
+            "then restart Stokes. Or choose another engine."
         )
     return f"{name} is not on the engine's PATH"
 

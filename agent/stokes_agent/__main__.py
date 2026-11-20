@@ -73,10 +73,31 @@ def main(argv: list[str] | None = None) -> None:
     if args.probe or not args.serve:
         sys.stdout.write(json.dumps(probe_host(), default=str) + "\n")
         return
+    _require_wire_codec()
     if args.state_dir is not None:
         asyncio.run(_serve_detached(args.port, args.state_dir, args.idle_exit))
         return
     asyncio.run(_serve(args.port))
+
+
+def _require_wire_codec() -> None:
+    """Stop before announcing an address when `msgpack` is missing, saying how to install it.
+
+    **The protocol imports it at the first message, not at start-up**, so an agent without it
+    printed its address, accepted the connection and then died on the first frame: the desktop
+    saw only a cancelled call ("the agent in Ubuntu-24.04 could not be used: CancelledError"),
+    measured on a WSL Ubuntu 24.04 whose Python had no `msgpack`. Exiting here puts the reason on
+    stderr before the address, which the WSL and SSH runners already report.
+    """
+    try:
+        import msgpack  # noqa: F401 - imported to prove the protocol can encode a frame
+    except ImportError:
+        sys.stderr.write(
+            "stokes-agent needs the Python package msgpack, which this interpreter does not have "
+            f"({sys.executable}). Install it, e.g. `sudo apt install python3-msgpack` on Ubuntu "
+            "or `python3 -m pip install msgpack`.\n"
+        )
+        raise SystemExit(2) from None
 
 
 async def _serve(port: int) -> None:

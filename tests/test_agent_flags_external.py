@@ -129,6 +129,9 @@ def test_current_profile_lists_are_unchanged() -> None:
         # converter; both pinned to one path each by `flags.POSITIONAL`.
         "gmsh",
         "gmshToFoam",
+        # ADR-0035: the coupled solver (no arguments) and the monitors after it (-latestTime).
+        "coupledSimpleFoam",
+        "foamPostProcess",
     }
     assert current == jobs.ALLOWED_UTILITIES
     assert ALLOWED_FLAGS["foamRun"]["-solver"].pattern == r"^(incompressibleFluid|fluid)$"

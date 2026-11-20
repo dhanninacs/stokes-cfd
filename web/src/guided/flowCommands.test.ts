@@ -46,6 +46,14 @@ describe("the Guided flow options", () => {
     expect(calls.map((c) => c.params)).toEqual([{ values: { engine: "of14.fluid", energy: true } }, { values: { energy: false } }]);
   });
 
+  it("keeps the coupled engine, whose temperature is passive, when heat transfer is turned on", async () => {
+    const tree = useStore.getState().tree as unknown as { children: { children: { params: Record<string, unknown> }[] }[] };
+    const settings = tree.children.flatMap((c) => c.children ?? []).find((n) => (n as unknown as { path: string }).path === "/solver/settings");
+    if (settings) settings.params.engine = "coupled.simple";
+    await setHeatTransfer(true);
+    expect(calls.map((c) => c.params)).toEqual([{ values: { energy: true } }]);
+  });
+
   it("makes the solver settings first when the project has none", async () => {
     useStore.setState({ tree: { id: "root", type: "group", name: "", path: "/", status: "ok", params: {}, children_count: 0, children: [] } as unknown as NodeSummary });
     await setCores(4);

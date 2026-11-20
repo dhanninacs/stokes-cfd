@@ -29,6 +29,17 @@ from stokes.run.errors import SolveInvalid
 #: The one engine an energy case may use (ADR-0027 decision 1). Named here so the settings node,
 #: the refusal in `solve.configure` and the check in `solve.check` say the same id.
 ENERGY_ENGINE = "of14.fluid"
+#: coupledSimpleFoam (ADR-0035): steady incompressible, run on any host that has it (Linux, WSL,
+#: or FoamWin built with its `scripts/build-coupled.sh`).
+COUPLED_ENGINE = "coupled.simple"
+#: The engines that solve a temperature: the thermal engine, and coupledSimpleFoam's passive
+#: scalar (no buoyancy, constant properties). The settings' `energy` switch is allowed on these.
+ENERGY_ENGINES: tuple[str, ...] = (ENERGY_ENGINE, COUPLED_ENGINE)
+
+
+def solves_energy(engine_id: str) -> bool:
+    """Whether ``engine_id`` can solve the energy equation in some form."""
+    return engine_id in ENERGY_ENGINES
 
 
 @dataclass(frozen=True)
@@ -67,6 +78,16 @@ ENGINES: tuple[EngineSpec, ...] = (
     ),
     EngineSpec(
         ENERGY_ENGINE, "OpenFOAM 14 · Thermal / compressible flow", True, names_for(ENERGY_ENGINE)
+    ),
+    EngineSpec(
+        COUPLED_ENGINE,
+        "coupledSimpleFoam · Coupled steady incompressible",
+        True,
+        names_for(COUPLED_ENGINE),
+        why="Solves velocity and pressure as one coupled system: steady only, one core, "
+        "laminar, k-epsilon or k-omega SST, with an optional passive temperature (no buoyancy). "
+        "Runs where coupledSimpleFoam is installed: a Linux or WSL host, or FoamWin from "
+        "v14.0.0-win.6 (serial, Eigen backend).",
     ),
 )
 

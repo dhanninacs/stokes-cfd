@@ -135,6 +135,11 @@ ALLOWED_UTILITIES = frozenset(
         # `flags.py`. `gmshToFoam` reads the one mesh file Gmsh wrote.
         "gmsh",
         "gmshToFoam",
+        # **coupledSimpleFoam** (ADR-0035): a standalone solver that reads the case Stokes wrote and
+        # takes no argument at all (`flags.py`). It never runs the `controlDict` functions, so
+        # `foamPostProcess -latestTime` evaluates the run's monitors on the final fields after it.
+        "coupledSimpleFoam",
+        "foamPostProcess",
     }
 )
 

@@ -209,14 +209,20 @@ export async function setFlowModel(model: string): Promise<void> {
   await refreshed(await configureSolve({ values: { turbulence: model } }));
 }
 
+/** The engines that solve a temperature (`stokes/engines/catalogue.py` `ENERGY_ENGINES`): the thermal one, and coupledSimpleFoam's passive scalar (ADR-0035). */
+export const ENERGY_ENGINES: readonly string[] = ["of14.fluid", "coupled.simple"];
+
 /**
- * Heat transfer on or off. The energy equation needs the thermal solver, so turning it on picks that
- * engine in the same call (the Solve settings page refuses energy on the other one); off leaves the
- * engine as it is.
+ * Heat transfer on or off. Turning it on keeps an engine that already solves a temperature
+ * (`ENERGY_ENGINES`) and otherwise picks the thermal solver in the same call (the Solve settings page
+ * refuses energy on the others); off leaves the engine as it is.
  */
 export async function setHeatTransfer(on: boolean): Promise<void> {
   await ensureSolverSettings();
-  await refreshed(await configureSolve({ values: on ? { engine: "of14.fluid", energy: true } : { energy: false } }));
+  const engine = findSolverSettings(useStore.getState().tree)?.params.engine;
+  const keeps = typeof engine === "string" && ENERGY_ENGINES.includes(engine);
+  const values = !on ? { energy: false } : keeps ? { energy: true } : { engine: "of14.fluid", energy: true };
+  await refreshed(await configureSolve({ values }));
 }
 
 /** How many processor cores the solve asks for, or null while the settings say nothing. */

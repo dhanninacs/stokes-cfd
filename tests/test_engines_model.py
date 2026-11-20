@@ -21,7 +21,7 @@ def test_the_catalogue_lists_the_built_engine_and_the_unbuilt_one() -> None:
     ids = [spec.id for spec in ENGINES]
     assert "of14.incompressibleFluid" in ids
     built = [spec.id for spec in built_engines()]
-    assert built == ["of14.incompressibleFluid", "of14.fluid"]
+    assert built == ["of14.incompressibleFluid", "of14.fluid", "coupled.simple"]  # ADR-0035
     assert all(spec.why for spec in ENGINES if not spec.built), "an unbuilt engine must say why"
 
 
