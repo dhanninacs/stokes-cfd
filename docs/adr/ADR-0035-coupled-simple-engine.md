@@ -119,6 +119,20 @@ coupled solve.
    (no setting converged without it in 200 outer iterations) and then many outer iterations. The
    solver's own large-case option (`a11` Schur approximation) stalled on the tee's polyhedral
    mesh, which is why `selfp` is used. The catalogue text says where the engine pays off.
+10. **Native Windows runs it in parallel where FoamWin has the PETSc build** (2026-11-21).
+    FoamWin's `scripts/build-coupled.sh` now also builds coupledSimpleFoam against a static
+    MinGW PETSc (hypre, C BLAS/LAPACK, Microsoft MPI SDK; `scripts/build-petsc.sh`) into
+    `bin/msmpi`, beside the serial build in `bin`, because it imports msmpi.dll. The agent
+    resolves the `bin/msmpi` build when the FoamWin handshake reports Microsoft MPI, and
+    `engine_env.coupled_has_petsc` permits an MPI coupled step only when the resolved build is
+    that one (a POSIX install is trusted as before); otherwise the step is still refused with
+    `agent.coupled_mpi_unavailable` and what to do. Measured natively on the 1M-cell square duct
+    of decision 9 (6 MS-MPI ranks): 16 outer iterations and 77 s against 70 s on WSL, with fRe
+    and the inlet pressure equal to every printed digit; native SIMPLEC had not converged after
+    1762 iterations (927 s), where on WSL it took 795.
+    Through Stokes end to end on the heated duct of decision 9 (800k cells, 6 cores, native):
+    `coupled.simple` 16 iterations, 66 s solve, 107 s run; `of14.fluid` 1051 iterations, 662 s
+    solve, 714 s run (6.7x); Nu 2.9966 and 2.9981 and fRe 14.0918 from both, as on WSL.
 
 ## Alternatives considered
 
@@ -134,10 +148,10 @@ coupled solve.
 - A Windows user runs `coupled.simple` natively on FoamWin v14.0.0-win.6 or later, or through a
   WSL host (`WslRunner`).
 - The run basis gains the coupled writer's version, so a coupled run is never reused for `of14`.
-- Parallel coupled runs need a Linux or WSL host whose coupledSimpleFoam has PETSc with hypre.
+- Parallel coupled runs need a coupledSimpleFoam with PETSc: a Linux or WSL host, or a FoamWin
+  with the `bin/msmpi` PETSc build and Microsoft MPI installed (decision 10).
 - Next steps: (3) `of14.multiRegion` with `foamMultiRun`; (4) `coupled.cht` behind its gate and
-  the GPU flag; a PETSc build of FoamWin's coupledSimpleFoam (MS-MPI SDK, PETSc and hypre
-  cross-built), which native Windows parallel coupled runs would need.
+  the GPU flag; a FoamWin release whose installer ships the PETSc build.
 
 ## Steps
 

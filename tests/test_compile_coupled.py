@@ -185,20 +185,29 @@ def test_the_steps_pass_the_agent_boundary_and_nothing_wider_does(store: Any) ->
             jobstore._check_argv(Step("x", argv), engine)
 
 
-@pytest.mark.parametrize("native_windows", [False, True])
+@pytest.mark.parametrize("install", ["posix", "foamwin_serial", "foamwin_petsc"])
 def test_an_mpi_coupled_step_runs_where_petsc_is_built(
-    store: Any, monkeypatch: pytest.MonkeyPatch, native_windows: bool
+    store: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, install: str
 ) -> None:
-    """The MPI solve passes on a POSIX host; on native Windows (FoamWin builds it without PETSc)
-    it is refused before anything starts, naming what to do instead."""
+    """The MPI solve passes on a POSIX host and on a FoamWin whose coupledSimpleFoam is the PETSc
+    build in `bin/msmpi`; with only the serial build in `bin` it is refused before anything
+    starts, naming what to do instead (ADR-0035 decision 10)."""
     from stokes_agent import jobs
     from stokes_agent.jobs import JobBadParams, Step
 
     jobstore, engine = store
     monkeypatch.setattr(jobs, "mpi_launcher", lambda env: "/bin/mpirun")
-    monkeypatch.setattr(jobs, "NATIVE_WINDOWS", native_windows)
+    if install != "posix":
+        folder = tmp_path / "bin" / ("msmpi" if install == "foamwin_petsc" else "")
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "coupledSimpleFoam.exe").write_bytes(b"")
+        tools = {
+            "foamRun": "C:/foamRun.exe",
+            "coupledSimpleFoam": str(folder / "coupledSimpleFoam.exe"),
+        }
+        engine = dataclasses.replace(engine, native_tools=tools)
     solve = Step("solve", ("coupledSimpleFoam",), ranks=6)
-    if native_windows:
+    if install == "foamwin_serial":
         with pytest.raises(JobBadParams, match="WSL or Linux host") as refused:
             jobstore._check_argv(solve, engine)
         assert refused.value.details["code"] == "agent.coupled_mpi_unavailable"
@@ -207,6 +216,18 @@ def test_an_mpi_coupled_step_runs_where_petsc_is_built(
     # Only the solver itself goes over MPI; its post-processing stays serial.
     with pytest.raises(JobBadParams, match="does not support an MPI step"):
         jobstore._check_argv(Step("monitors", ("foamPostProcess", "-latestTime"), ranks=6), engine)
+
+
+def test_foamwin_with_mpi_uses_the_petsc_build(tmp_path: Path) -> None:
+    """`bin/msmpi/coupledSimpleFoam.exe` replaces the serial build while Microsoft MPI is present;
+    a file elsewhere (or a link out of the folder) is not taken."""
+    from stokes_agent.native_env import _mpi_builds
+
+    assert _mpi_builds(tmp_path) == {}
+    (tmp_path / "msmpi").mkdir()
+    exe = tmp_path / "msmpi" / "coupledSimpleFoam.exe"
+    exe.write_bytes(b"")
+    assert _mpi_builds(tmp_path) == {"coupledSimpleFoam": str(exe)}
 
 
 def test_a_host_without_the_solver_says_where_it_runs() -> None:
