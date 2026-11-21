@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, Cpu, FolderSearch, Loader2, RefreshCw, Serve
 import { PromptDialog } from "../components/PromptDialog";
 import { useStore } from "../state/store";
 import { Button, Switch } from "../components/ui";
+import FoamWinCard from "./FoamWinCard";
 
 /**
  * Where OpenFOAM runs, and which install to use - the first section of Settings.
@@ -298,6 +299,13 @@ export default function ComputeSection() {
             {probe.why || "No OpenFOAM install was found on this host."} Use{" "}
             <strong>Add install location…</strong> to point at one, or install {SUPPORTED_LABEL}.
           </p>
+        )}
+        {/* A Windows computer with no install can get FoamWin from here (ADR-0037); the card hides itself elsewhere. */}
+        {probe !== undefined && current !== null && (
+          <FoamWinCard
+            probe={{ host: current.name, system: probe.record?.system, installs }}
+            onInstalled={() => void probeHost(current.name, true)}
+          />
         )}
         {installs.length > 0 && (
           <>

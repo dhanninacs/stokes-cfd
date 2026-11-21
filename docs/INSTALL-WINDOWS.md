@@ -10,6 +10,25 @@ ten to thirty minutes depending on your connection (about 2 GB is downloaded).
 
 > New to this? Do steps 1 to 6 in order, then open [USAGE.md](USAGE.md).
 
+## Quick setup (one script)
+
+With Python 3.13 or 3.14 and Node.js 22.12+ installed, get the source (step 1), then from the
+`stokes-cfd` folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1 -Shortcut
+```
+
+It does steps 2 to 5 for you: installs Stokes, builds the front end, and looks for an engine
+(FoamWin, or OpenFOAM 14 in a WSL distribution). If there is none it offers to download FoamWin
+from its GitHub release, checks the download's SHA-256, and installs it in your user folder (no
+administrator rights); Stokes then finds it with no setting. It writes `run-stokes.ps1` and, with
+`-Shortcut`, a "Stokes" shortcut on the desktop. `-InstallFoamWin` answers yes to the download;
+`-NoEngine` skips the engine step.
+
+You can also install FoamWin later from inside Stokes: **Settings → Compute** shows
+**Download and install FoamWin** when this computer has no OpenFOAM.
+
 ## Requirements
 
 | What | Version | Why |
@@ -84,6 +103,12 @@ Check it:
 
 Stokes needs OpenFOAM 14 to mesh and solve. You can open projects, import CAD and
 view results without it.
+
+**The easy way:** let Stokes do it. In **Settings → Compute**, a computer with no OpenFOAM
+shows **Download and install FoamWin** (or run `scripts\setup-windows.ps1`, above). It downloads
+the release's `OF14-win.zip`, refuses it unless its SHA-256 matches the one the release
+publishes, and runs FoamWin's own setup into `%LOCALAPPDATA%\OpenFOAM-14-win`. Skip to
+[step 5](#5-run-stokes) afterwards. The manual steps below do the same by hand.
 
 1. Open the FoamWin releases, <https://github.com/dhanninacs/foamWin/releases/latest>
    (v14.0.0-win.5 or newer), and download `OF14-win-setup.exe` (a GUI installer,

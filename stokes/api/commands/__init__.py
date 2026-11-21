@@ -7,6 +7,7 @@ from stokes.api.commands import (  # noqa: F401
     case_settings,
     compute,
     coverage,
+    foamwin,
     geometry,
     history,
     host,

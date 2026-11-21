@@ -54,3 +54,6 @@ Thumbs.db
 tests/perf/results.jsonl
 !tests/fixtures/**/*.log
 stokes/app/assets/THIRD-PARTY-NOTICES.md
+
+# Written per machine by scripts/setup-windows.ps1
+/run-stokes.ps1
