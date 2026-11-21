@@ -126,7 +126,7 @@ def test_the_steps_solve_then_evaluate_the_monitors() -> None:
     ("change", "error", "words"),
     [
         ({"transient": True, "delta_t": 0.01, "end_time": 1.0}, CompileUnsupported, "steady"),
-        ({"cores": 4}, CompileUnsupported, "one core"),
+        ({"cores": 0}, CompileInvalid, "cores"),
         (
             {
                 "cells": coupled.DIRECT_MAX_CELLS_3D + 1,
@@ -183,6 +183,30 @@ def test_the_steps_pass_the_agent_boundary_and_nothing_wider_does(store: Any) ->
     ):
         with pytest.raises(JobBadParams):
             jobstore._check_argv(Step("x", argv), engine)
+
+
+@pytest.mark.parametrize("native_windows", [False, True])
+def test_an_mpi_coupled_step_runs_where_petsc_is_built(
+    store: Any, monkeypatch: pytest.MonkeyPatch, native_windows: bool
+) -> None:
+    """The MPI solve passes on a POSIX host; on native Windows (FoamWin builds it without PETSc)
+    it is refused before anything starts, naming what to do instead."""
+    from stokes_agent import jobs
+    from stokes_agent.jobs import JobBadParams, Step
+
+    jobstore, engine = store
+    monkeypatch.setattr(jobs, "mpi_launcher", lambda env: "/bin/mpirun")
+    monkeypatch.setattr(jobs, "NATIVE_WINDOWS", native_windows)
+    solve = Step("solve", ("coupledSimpleFoam",), ranks=6)
+    if native_windows:
+        with pytest.raises(JobBadParams, match="WSL or Linux host") as refused:
+            jobstore._check_argv(solve, engine)
+        assert refused.value.details["code"] == "agent.coupled_mpi_unavailable"
+    else:
+        jobstore._check_argv(solve, engine)
+    # Only the solver itself goes over MPI; its post-processing stays serial.
+    with pytest.raises(JobBadParams, match="does not support an MPI step"):
+        jobstore._check_argv(Step("monitors", ("foamPostProcess", "-latestTime"), ranks=6), engine)
 
 
 def test_a_host_without_the_solver_says_where_it_runs() -> None:
@@ -250,6 +274,51 @@ def test_the_cell_limit_is_3d_only_and_unknown_size_passes() -> None:
     three_d = tuple(p for p in duct().patches if p.patch_type != "empty")
     for cells in (coupled.DIRECT_MAX_CELLS_3D, 0):
         coupled.write(dataclasses.replace(duct(), cells=cells, patches=three_d))
+
+
+def test_more_than_one_core_runs_petsc_over_mpi() -> None:
+    """Above one core: the PETSc backend with the measured settings, decomposed and reconstructed,
+    and no 3D cell limit (that limit is the serial direct solver's)."""
+    three_d = tuple(p for p in duct().patches if p.patch_type != "empty")
+    snap = dataclasses.replace(
+        duct(), cores=6, cells=coupled.DIRECT_MAX_CELLS_3D * 25, patches=three_d
+    )
+    files = coupled.write(snap)
+    assert "numberOfSubdomains 6;" in " ".join(files["system/decomposeParDict"].split())
+    block = " ".join(files["system/fvSolution"].split("COUPLED", 1)[1].split())
+    for item in (
+        "linearSolver PETSc;",
+        "pseudoTransient yes;",
+        "pseudoCo 50;",
+        "adaptiveTolerance yes;",
+        "pcReuseInterval 8;",
+        f'petscOptions "{coupled.PETSC_OPTIONS}";',
+    ):
+        assert item in block, item
+    assert "SparseLU" not in block
+    steps = coupled.steps(snap)
+    assert [s["name"] for s in steps] == ["decomposePar", "solve", "reconstructPar", "monitors"]
+    assert steps[1]["argv"] == ["coupledSimpleFoam"] and steps[1]["ranks"] == 6
+    # One core keeps the serial direct solver and its limit.
+    with pytest.raises(CompileUnsupported, match="cores to 2 or more"):
+        coupled.write(dataclasses.replace(snap, cores=1))
+
+
+def test_the_temperature_is_not_relaxed() -> None:
+    """`T 1` comes before the SIMPLE case's `".*" 0.9`, which would otherwise catch `T` (the
+    solver calls `TEqn.relax()`): relaxed, a heated duct took 267 outer iterations instead of 16."""
+    solution = " ".join(coupled.write(duct())["system/fvSolution"].split())
+    relax = solution[solution.index("relaxationFactors") :]
+    assert relax.index("T 1;") < relax.index('".*" 0.9;')
+    without = " ".join(coupled.write(duct(energy=False))["system/fvSolution"].split())
+    assert "T 1;" not in without[without.index("relaxationFactors") :]
+
+
+def test_the_petsc_options_use_selfp_and_hypre() -> None:
+    """`selfp`, not the solver's `a11` large-case option, which stalled on a snappy-style mesh."""
+    opts = coupled.PETSC_OPTIONS
+    assert "-pc_fieldsplit_schur_precondition selfp" in opts and "a11" not in opts
+    assert "-fieldsplit_1_pc_hypre_type boomeramg" in opts and "-ksp_type fbcgs" in opts
 
 
 def test_the_cell_count_does_not_move_the_run_basis() -> None:

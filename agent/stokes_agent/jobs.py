@@ -161,6 +161,18 @@ EXTERNAL = "external"
 #: The utilities an external step may run over MPI (`ranks > 1`).
 EXTERNAL_MPI = frozenset({"foamRun", "foamMultiRun", "snappyHexMesh", "checkMesh"})
 
+#: The utilities a Stokes-written step may run over MPI. coupledSimpleFoam's parallel path is its
+#: PETSc backend (ADR-0035 decision 9).
+STOKES_MPI = frozenset({"snappyHexMesh", "foamRun", "checkMesh", "coupledSimpleFoam"})
+
+#: Why a parallel coupledSimpleFoam is refused on native Windows: FoamWin builds it serial, with
+#: the Eigen backend only (`scripts/build-coupled.sh` sets `COUPLED_NO_PETSC`), and the solver
+#: would stop at its first outer iteration asking for PETSc.
+COUPLED_MPI_WINDOWS = (
+    "coupledSimpleFoam runs on one core on native Windows: FoamWin builds it without PETSc, "
+    "which its parallel runs need. Set cores to 1, or run this case on a WSL or Linux host"
+)
+
 MAX_FILE_BYTES = 512 * 1024 * 1024
 MAX_LOG_BYTES = 64 * 1024 * 1024
 
@@ -1068,8 +1080,13 @@ class JobStore:
         if step.threads > 1 and argv[0] not in THREADED_UTILITIES:
             raise JobBadParams(f"{argv[0]} does not take OpenMP threads")
         if step.ranks > 1:
-            if argv[0] not in {"snappyHexMesh", "foamRun", "checkMesh"}:
+            if argv[0] not in STOKES_MPI:
                 raise JobBadParams(f"{argv[0]} does not support an MPI step")
+            if argv[0] == "coupledSimpleFoam" and NATIVE_WINDOWS:
+                raise JobBadParams(
+                    COUPLED_MPI_WINDOWS,
+                    details={"code": "agent.coupled_mpi_unavailable", "ranks": step.ranks},
+                )
             if mpi_launcher(engine) is None:
                 raise JobMissingUtility(mpi_unavailable_reason(engine))
         if resolve_utility(engine, argv[0]) is None:

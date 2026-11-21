@@ -7,8 +7,9 @@ with three changes, and the same directory still runs under `foamRun` for a comp
 
 * `system/fvSolution` gains `COUPLED`: the settings' `iterations` as `nOuterIterations` (the solver
   runs its own outer loop; `controlDict` does not stop it), the settings' `residual_target` as
-  `residualControl` for `U` and `p` (and `T` with energy), the serial direct backend `SparseLU`,
-  and the pressure pinned at cell 0 for a closed domain.
+  `residualControl` for `U` and `p` (and `T` with energy), the backend, and the pressure pinned
+  at cell 0 for a closed domain. On one core the backend is the serial direct `SparseLU`; on more
+  it is PETSc over MPI with `PETSC_OPTIONS` and the settings beside it (ADR-0035 decision 9).
 * `system/fvSchemes` gains the two stress-term entries the coupled assembly reads,
   `div((nu*dev2(T(grad(U)))))` and `div(devTauCorrFlux)` (both in the solver's own tutorials), and
   `div(phi,T)` with energy on.
@@ -17,13 +18,15 @@ with three changes, and the same directory still runs under `foamRun` for a comp
   heat-flux wall is a `fixedGradient` of `q/kappa`, the flux the passive equation's
   `alphaEff*grad(T)` carries once multiplied by `rho*cp`.
 
-The steps are `coupledSimpleFoam`, then `foamPostProcess -latestTime`: the solver never calls the
-`controlDict` functions (its loop is not `Time::run()`), so the run's flow and pressure monitors
-are evaluated on the final fields afterwards, from the same functions an `of14` run uses.
+The steps are `coupledSimpleFoam` (decomposed, over MPI and reconstructed when `cores > 1`), then
+`foamPostProcess -latestTime`: the solver never calls the `controlDict` functions (its loop is not
+`Time::run()`), so the run's flow and pressure monitors are evaluated on the final fields
+afterwards, from the same functions an `of14` run uses.
 
-Refused by name, before a file is written: a transient run, more than one core (MPI needs the PETSc
-backend, a later step), a 3D mesh above `DIRECT_MAX_CELLS_3D` (the serial direct solver's measured
-limit), gravity with energy on (no buoyancy), and anything the `of14` writer refuses.
+Refused by name, before a file is written: a transient run, a 3D mesh above `DIRECT_MAX_CELLS_3D`
+on one core (the serial direct solver's measured limit), gravity with energy on (no buoyancy), and
+anything the `of14` writer refuses. A host whose coupledSimpleFoam has no PETSc (FoamWin) refuses
+a parallel run in the agent.
 """
 
 from __future__ import annotations
@@ -32,13 +35,14 @@ import dataclasses
 from typing import Any
 
 from stokes.compile.errors import CompileInvalid, CompileUnsupported
-from stokes.compile.foam import Dict, Entry, Raw, Word, render_file
+from stokes.compile.foam import Dict, Entry, Quoted, Raw, Word, render_file
 from stokes.compile.snapshot import SolveSnapshot
 from stokes.engines.turbulence import names_for
 
 ENGINE = "coupled.simple"
 #: Enters the run basis: a change to the case this writes marks earlier coupled runs stale.
-WRITER_VERSION = "coupled/1"
+#: `coupled/2`: MPI runs on the PETSc backend, and a looser `T` inner tolerance.
+WRITER_VERSION = "coupled/2"
 APPLICATION = "coupledSimpleFoam"
 #: The momentum models coupledSimpleFoam has been exercised with (its README): laminar, k-epsilon
 #: and k-omega SST. The catalogue offers exactly these.
@@ -52,6 +56,36 @@ TURBULENCE: tuple[str, ...] = names_for(ENGINE)
 #: PETSc ~100 s per iteration at 347k cells. A 2D mesh's fill-in is far smaller, so 2D is
 #: not limited.
 DIRECT_MAX_CELLS_3D = 80_000
+
+#: **The parallel backend's settings** (ADR-0035 decision 9), used whenever `cores > 1`: PETSc
+#: `KSPFBCGS` with a Schur field split, the velocity block ILU under block Jacobi and the pressure
+#: (Schur) block one hypre BoomerAMG V-cycle with hypre's three-dimensional settings. The inner
+#: tolerance adapts per outer iteration (Eisenstat-Walker, 1e-8..1e-2), the preconditioner is
+#: rebuilt every 8 outer iterations, and pseudo-transient continuation (`pseudoCo 50`) damps the
+#: outer loop. Measured on 6 ranks (2026-11-21, WSL): a 1M-cell square duct converged in 16 outer
+#: iterations and 70 s against SIMPLEC's 795 iterations and 280 s, with fRe identical to 4 digits;
+#: a 3D lid-driven cavity needed the damping (without it no setting converged in 200 iterations).
+#: `selfp` rather than the solver's `a11` large-case option: `a11` stalled on a snappy-style
+#: mesh (prisms and polyhedra, 53 degree non-orthogonality) where `selfp` converged.
+PETSC_OPTIONS = " ".join(
+    (
+        "-ksp_type fbcgs",
+        "-pc_type fieldsplit -pc_fieldsplit_type schur",
+        "-pc_fieldsplit_schur_fact_type upper -pc_fieldsplit_schur_precondition selfp",
+        "-pc_fieldsplit_0_fields 0,1,2 -pc_fieldsplit_1_fields 3",
+        "-fieldsplit_0_ksp_type preonly -fieldsplit_0_pc_type bjacobi",
+        "-fieldsplit_0_sub_pc_type ilu",
+        "-fieldsplit_1_ksp_type preonly -fieldsplit_1_pc_type hypre",
+        "-fieldsplit_1_pc_hypre_type boomeramg",
+        "-fieldsplit_1_pc_hypre_boomeramg_strong_threshold 0.5",
+        "-fieldsplit_1_pc_hypre_boomeramg_coarsen_type HMIS",
+        "-fieldsplit_1_pc_hypre_boomeramg_interp_type ext+i",
+        "-fieldsplit_1_pc_hypre_boomeramg_P_max 4",
+        "-fieldsplit_1_pc_hypre_boomeramg_truncfactor 0.3",
+        "-fieldsplit_1_pc_hypre_boomeramg_agg_nl 1",
+        "-fieldsplit_1_pc_hypre_boomeramg_relax_type_all SOR/Jacobi",
+    )
+)
 
 #: The incompressible writer this one builds on, and the engine id it is written for.
 _BASE_ENGINE = "of14.incompressibleFluid"
@@ -68,26 +102,38 @@ def write(snap: SolveSnapshot) -> dict[str, str]:
     files["system/fvSchemes"] = render_file("fvSchemes", fv_schemes(snap), location="system")
     if snap.energy:
         files["0/T"] = render_file("T", temperature_field(snap), cls="volScalarField", location="0")
+    # `of14.write` already added the decomposition for `cores > 1`.
     return files
 
 
 def steps(snap: SolveSnapshot) -> list[dict[str, Any]]:
-    """Solve, then evaluate the monitors on the final fields."""
+    """Solve (decomposed above one core), then evaluate the monitors on the final fields."""
+    from stokes.compile.parallel import decompose_step, reconstruct_fields_step
+
     validate(snap)
-    return [
+    run: list[dict[str, Any]] = []
+    if snap.cores > 1:
+        run.append(decompose_step())
+    run.append(
         {
             "name": "solve",
             "argv": [APPLICATION],
+            **({"ranks": snap.cores} if snap.cores > 1 else {}),
             "timeout_s": 7200,
             "parse": "foamRun",
             "parse_params": {"end_time": snap.iterations},
-        },
+        }
+    )
+    if snap.cores > 1:
+        run.append(reconstruct_fields_step())
+    run.append(
         {
             "name": "monitors",
             "argv": ["foamPostProcess", "-latestTime"],
             "timeout_s": 1800,
-        },
-    ]
+        }
+    )
+    return run
 
 
 def basis(snap: SolveSnapshot) -> str:
@@ -108,19 +154,13 @@ def validate(snap: SolveSnapshot) -> None:
             "of14.incompressibleFluid engine for a transient run",
             details={"code": "compile.unsupported", "engine": ENGINE, "transient": True},
         )
-    if snap.cores > 1:
-        raise CompileUnsupported(
-            "coupledSimpleFoam runs on one core in this version of Stokes (parallel runs need its "
-            "PETSc backend, which is not wired yet); set cores to 1",
-            details={"code": "compile.unsupported", "engine": ENGINE, "cores": snap.cores},
-        )
-    if snap.cells > DIRECT_MAX_CELLS_3D and not is_two_d(snap):
+    if snap.cores == 1 and snap.cells > DIRECT_MAX_CELLS_3D and not is_two_d(snap):
         raise CompileUnsupported(
             f"this mesh has {snap.cells:,} cells; coupledSimpleFoam's serial direct solver is "
             f"offered up to {DIRECT_MAX_CELLS_3D:,} cells in 3D (memory and time grow much faster "
             "than the cell count: 137k cells needed 26 GB and did not converge in 30 minutes). "
-            "Use a coarser mesh, or the of14.incompressibleFluid engine, which runs this size "
-            "in seconds and in parallel",
+            "Set cores to 2 or more to run it on the parallel PETSc backend (a Linux or WSL "
+            "host), use a coarser mesh, or use the of14.incompressibleFluid engine",
             details={
                 "code": "compile.unsupported",
                 "engine": ENGINE,
@@ -174,12 +214,24 @@ def coupled_dict(snap: SolveSnapshot) -> Dict:
     residuals = [Entry("U", snap.residual_target), Entry("p", snap.residual_target)]
     if snap.energy:
         residuals.append(Entry("T", snap.residual_target))
-    entries: list[Entry] = [
-        Entry("nOuterIterations", int(snap.iterations)),
-        Entry("linearSolver", Word("SparseLU")),
-        Entry("pRefCell", 0),
-        Entry("pRefValue", 0),
-    ]
+    entries: list[Entry] = [Entry("nOuterIterations", int(snap.iterations))]
+    if snap.cores > 1:
+        entries += [
+            Entry("linearSolver", Word("PETSc")),
+            Entry("pseudoTransient", Word("yes")),
+            Entry("pseudoCo", 50),
+            Entry("adaptiveTolerance", Word("yes")),
+            Entry("relTolMax", 1e-2),
+            Entry("relTolMin", 1e-8),
+            Entry("adaptiveGamma", 0.9),
+            Entry("adaptiveAlpha", 1.5),
+            Entry("pcReuseInterval", 8),
+            Entry("maxLinearIter", 500),
+            Entry("petscOptions", Quoted(PETSC_OPTIONS)),
+        ]
+    else:
+        entries.append(Entry("linearSolver", Word("SparseLU")))
+    entries += [Entry("pRefCell", 0), Entry("pRefValue", 0)]
     if snap.energy:
         entries += [
             Entry("solveEnergy", Word("yes")),
@@ -206,14 +258,47 @@ def fv_solution(snap: SolveSnapshot) -> Dict:
                     (
                         Entry("solver", Word("PBiCGStab")),
                         Entry("preconditioner", Word("DILU")),
-                        Entry("tolerance", 1e-12),
-                        Entry("relTol", 0),
+                        # A loose relative tolerance, as for p and U: `residualControl` decides
+                        # convergence, and solving T to 1e-12 every outer iteration only costs
+                        # time (the solver's BENCHMARKS.md 9.5: no reported digit changed).
+                        Entry("tolerance", 1e-10),
+                        Entry("relTol", 0.01),
                     )
                 ),
             ),
         )
+        items = _unrelaxed_temperature(items)
     items.append(Entry("COUPLED", coupled_dict(snap)))
     return Dict(tuple(items))
+
+
+def _unrelaxed_temperature(items: list[Any]) -> list[Any]:
+    """`relaxationFactors/equations` with `T 1`, ahead of the SIMPLE case's `".*" 0.9`.
+
+    coupledSimpleFoam calls `TEqn.relax()`, which takes the first matching factor, and the `of14`
+    case's `".*" 0.9` (written for SIMPLE) caught `T`. The temperature equation is linear once
+    the coupled solve has fixed the flux, so it needs no relaxation; relaxed, each outer iteration
+    moved it only part of the way. Measured on an 800k-cell heated duct (6 ranks): 267 outer
+    iterations and 472 s relaxed, 16 and 57 s unrelaxed, with the same Nusselt number.
+    """
+    out: list[Any] = []
+    for item in items:
+        if not (
+            isinstance(item, Entry)
+            and item.key == "relaxationFactors"
+            and isinstance(item.value, Dict)
+        ):
+            out.append(item)
+            continue
+        inner: list[Any] = []
+        for sub in item.value.items:
+            if isinstance(sub, Entry) and sub.key == "equations" and isinstance(sub.value, Dict):
+                kept = [e for e in sub.value.items if not (isinstance(e, Entry) and e.key == "T")]
+                inner.append(Entry("equations", Dict((Entry("T", 1), *kept))))
+            else:
+                inner.append(sub)
+        out.append(Entry("relaxationFactors", Dict(tuple(inner))))
+    return out
 
 
 def fv_schemes(snap: SolveSnapshot) -> Dict:
