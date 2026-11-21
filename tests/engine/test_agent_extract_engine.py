@@ -49,19 +49,31 @@ writeCompression off;
 """
 
 
+def _install() -> str:
+    """The install to run on: `STOKES_OPENFOAM_BASHRC` when set, else the host's default.
+
+    The default is what the agent itself picks, which on native Windows is FoamWin's
+    `of14-env.ps1` (ADR-0025), so the test needs no variable there.
+    """
+    import os
+
+    from stokes_agent.engine_env import default_bashrc, engine_id
+
+    named = os.environ.get("STOKES_OPENFOAM_BASHRC") or default_bashrc()
+    if not named:
+        pytest.skip("no supported OpenFOAM install on this host")
+    return engine_id(named)
+
+
 def mesh_cavity(store: JobStore) -> str:
     """Create a job, run `blockMesh` in it, and return its id."""
-    import subprocess
-
-    from stokes_agent.engine_env import engine_id, get_env
-
     job = store.create(
         files={
             "system/blockMeshDict": CAVITY.read_text(),
             "system/controlDict": CONTROL_DICT,
         },
         steps=[Step(name="blockMesh", argv=["blockMesh"], timeout_s=300)],
-        install=engine_id(__import__("os").environ["STOKES_OPENFOAM_BASHRC"]),
+        install=_install(),
         label="cavity",
     )
     store.start(job)
@@ -72,7 +84,6 @@ def mesh_cavity(store: JobStore) -> str:
             break
         time.sleep(0.05)
     assert store.status(job)["state"] == "done", store.status(job)
-    del subprocess, get_env
     return job
 
 
@@ -173,7 +184,7 @@ def test_the_size_probe_1m_cells(tmp_path: Path) -> None:
             "system/controlDict": CONTROL_DICT,
         },
         steps=[Step(name="blockMesh", argv=["blockMesh"], timeout_s=600)],
-        install=engine_id(__import__("os").environ["STOKES_OPENFOAM_BASHRC"]),
+        install=_install(),
         label="probe",
     )
     store.start(job)

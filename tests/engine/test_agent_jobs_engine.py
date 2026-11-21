@@ -131,7 +131,8 @@ def test_cancel_kills_a_real_solver(tmp_path: Path) -> None:
     for folder in ("0", "constant", "system"):
         for path in (pitz / folder).rglob("*"):
             if path.is_file():
-                files[str(path.relative_to(pitz))] = path.read_text()
+                # `/` on every OS: job files are POSIX relative paths, and `0\epsilon` is refused.
+                files[path.relative_to(pitz).as_posix()] = path.read_text()
     # **The dict the tutorial is meshed with.** Note that pitzDaily's function object lives in a
     # separate `system/functions` file, not in `controlDict`, and its body is an ALLOWED
     # `#includeFunc patchAverage(patch=inlet, fields=(p U))` — so it stages verbatim and no
@@ -169,14 +170,10 @@ def test_cancel_kills_a_real_solver(tmp_path: Path) -> None:
     state = _settle(store, job, timeout=30)
     assert state["state"] in ("cancelled", "interrupted"), state
     # Nothing may be left running: this is the assertion the brief asks for after every engine run.
-    import subprocess
+    from tests.engine.strays import running
 
-    strays = subprocess.run(
-        ["pgrep", "-u", str(__import__("os").getuid()), "-a", "foamRun"],
-        capture_output=True,
-        check=False,
-    )
-    assert strays.returncode != 0, f"foamRun was left running:\n{strays.stdout.decode()}"
+    strays = running("foamRun")
+    assert not strays, "foamRun was left running:\n" + "\n".join(strays)
 
 
 def test_pitzdaily_meshes_and_solves_through_the_supervisor(tmp_path: Path) -> None:
@@ -200,7 +197,7 @@ def test_pitzdaily_meshes_and_solves_through_the_supervisor(tmp_path: Path) -> N
     for folder in ("0", "constant", "system"):
         for path in (pitz / folder).rglob("*"):
             if path.is_file():
-                files[str(path.relative_to(pitz))] = path.read_text()
+                files[path.relative_to(pitz).as_posix()] = path.read_text()
     resources = _tutorial("resources/blockMesh/pitzDaily")
     if resources.is_file():
         files["system/blockMeshDict"] = resources.read_text()
