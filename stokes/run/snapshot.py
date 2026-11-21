@@ -57,6 +57,7 @@ from stokes.compile.snapshot import (
 )
 from stokes.cores import core_count
 from stokes.engines.catalogue import kinds_for
+from stokes.engines.model import RELAXATION_PARAMS
 from stokes.run.errors import SolveInvalid, SolvePartExcluded
 from stokes.run.thermal import gravity_of, thermal_values
 
@@ -136,6 +137,10 @@ def build_solve_snapshot(
         iterations=int(params.get("iterations") or 500),
         write_interval=int(params.get("write_interval") or 50),
         residual_target=float(params.get("residual_target") or 1e-3),
+        relax_pressure=_factor(params, "relax_pressure"),
+        relax_velocity=_factor(params, "relax_velocity"),
+        relax_turbulence=_factor(params, "relax_turbulence"),
+        relax_energy=_factor(params, "relax_energy"),
         nu=nu,
         rho=_rho(session, project, part_id, nu),
         patches=patches,
@@ -145,6 +150,12 @@ def build_solve_snapshot(
             if _kind_of(project, mesh_status, name) in ("velocity_inlet", "pressure_outlet")
         ),
     )
+
+
+def _factor(params: dict[str, Any], name: str) -> float | None:
+    """A relaxation factor (ADR-0036): the stored number, or None for the engine's own."""
+    value = params.get(name)
+    return None if value is None else float(value)
 
 
 def _energy_fields(
@@ -854,6 +865,10 @@ def solve_basis(snap: SolveSnapshot, mesh_basis: str, mesh_job: str, engine_stri
             physical_snapshot.pop(name, None)
     for name, off in TRANSIENT_CONTROL_DEFAULTS.items():
         if physical_snapshot.get(name) == off:
+            physical_snapshot.pop(name, None)
+    # Unset relaxation is the engine's own value, already decided by the writer's version.
+    for name in RELAXATION_PARAMS:
+        if physical_snapshot.get(name) is None:
             physical_snapshot.pop(name, None)
     for patch in physical_snapshot["patches"]:
         for name in (*THERMAL_FIELDS, *TURBULENCE_FIELDS, *FLOW_FIELDS):

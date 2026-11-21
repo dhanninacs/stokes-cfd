@@ -267,13 +267,17 @@ def fv_solution(snap: SolveSnapshot) -> Dict:
                 ),
             ),
         )
-        items = _unrelaxed_temperature(items)
+        # `1`, not `1.0`: an unset factor writes the dictionary as before (`T 1;`).
+        items = _temperature_relaxation(
+            items, 1 if snap.relax_energy is None else snap.relax_energy
+        )
     items.append(Entry("COUPLED", coupled_dict(snap)))
     return Dict(tuple(items))
 
 
-def _unrelaxed_temperature(items: list[Any]) -> list[Any]:
-    """`relaxationFactors/equations` with `T 1`, ahead of the SIMPLE case's `".*" 0.9`.
+def _temperature_relaxation(items: list[Any], factor: float | int) -> list[Any]:
+    """`relaxationFactors/equations` with `T <factor>` (1 unless the user set `relax_energy`),
+    ahead of the SIMPLE case's `".*" 0.9`.
 
     coupledSimpleFoam calls `TEqn.relax()`, which takes the first matching factor, and the `of14`
     case's `".*" 0.9` (written for SIMPLE) caught `T`. The temperature equation is linear once
@@ -294,7 +298,7 @@ def _unrelaxed_temperature(items: list[Any]) -> list[Any]:
         for sub in item.value.items:
             if isinstance(sub, Entry) and sub.key == "equations" and isinstance(sub.value, Dict):
                 kept = [e for e in sub.value.items if not (isinstance(e, Entry) and e.key == "T")]
-                inner.append(Entry("equations", Dict((Entry("T", 1), *kept))))
+                inner.append(Entry("equations", Dict((Entry("T", factor), *kept))))
             else:
                 inner.append(sub)
         out.append(Entry("relaxationFactors", Dict(tuple(inner))))

@@ -52,6 +52,8 @@ export interface ParamSchema {
   "x-ref-type"?: string;
   "x-required"?: boolean;
   "x-max-bytes"?: number;
+  /** A number that may be left empty (null): the consumer then decides, e.g. a solver relaxation factor. */
+  "x-optional"?: boolean;
   /**
    * Keep this property out of the property grid, **while the API keeps accepting it**.
    *

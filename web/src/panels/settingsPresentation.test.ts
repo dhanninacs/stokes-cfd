@@ -57,6 +57,7 @@ describe("settings presentation taxonomy", () => {
       ["Initial turbulence", ["initial_velocity", "initial_intensity", "initial_length_scale", "initial_viscosity_ratio"]],
       ["Reference conditions", ["gravity", "operating_pressure"]],
       ["Run limits", ["iterations", "residual_target"]],
+      ["Relaxation", ["relax_pressure", "relax_velocity", "relax_turbulence", "relax_energy"]],
       ["Output", ["write_interval"]],
       ["Execution", ["host", "cores"]],
       ["Result slice", ["slice_origin", "slice_normal"]],
@@ -75,6 +76,26 @@ describe("settings presentation taxonomy", () => {
     for (const name of BASIC_MESH) expect(MESH_NAMES).toContain(name);
     for (const names of Object.values(MESH_TASK_FIELDS)) for (const name of names) expect(MESH_NAMES).toContain(name);
     expect(INITIAL_TURBULENCE_SECTION).toBe("solver-initial");
+  });
+
+  it("shows the relaxation factors a steady run of the chosen engine reads", () => {
+    const segregated: SolverContext = { ...STEADY, engine: "of14.incompressibleFluid" };
+    expect(solverSettingIncluded("relax_velocity", segregated)).toBe(true);
+    expect(solverSettingIncluded("relax_pressure", segregated)).toBe(true);
+    // Turbulence and energy only when their equations are solved.
+    expect(solverSettingIncluded("relax_turbulence", segregated)).toBe(false);
+    expect(solverSettingIncluded("relax_turbulence", { ...segregated, turbulence: "kOmegaSST" })).toBe(true);
+    expect(solverSettingIncluded("relax_energy", segregated)).toBe(false);
+    expect(solverSettingIncluded("relax_energy", { ...segregated, energy: true })).toBe(true);
+    // The coupled engine relaxes neither pressure nor velocity, but does read the energy factor.
+    const coupled: SolverContext = { ...STEADY, energy: true, engine: "coupled.simple" };
+    expect(solverSettingIncluded("relax_velocity", coupled)).toBe(false);
+    expect(solverSettingIncluded("relax_pressure", coupled)).toBe(false);
+    expect(solverSettingIncluded("relax_energy", coupled)).toBe(true);
+    // A transient run writes no relaxation at all.
+    for (const name of ["relax_pressure", "relax_velocity", "relax_turbulence", "relax_energy"]) {
+      expect(solverSettingIncluded(name, { ...segregated, energy: true, turbulence: "kEpsilon", transient: true })).toBe(false);
+    }
   });
 
   it("shows time step and end time only for a transient run", () => {

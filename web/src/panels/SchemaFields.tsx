@@ -31,7 +31,7 @@ import { loadConversions } from "./explore/conversions";
 import { converterFor, hasConversion } from "./explore/format";
 import { formatNumber, prettyDisplay, prettyUnit } from "../util/units";
 import { FOCUS_TREE_EVENT } from "./treeKeyboard";
-import { enterStaysInField, fieldKindOf, nodesOfType, numberRefusal, quantityRefusal, vectorRefusal } from "./schemaFields";
+import { enterStaysInField, fieldKindOf, isOptionalNumber, nodesOfType, numberRefusal, quantityRefusal, vectorRefusal } from "./schemaFields";
 
 export interface SchemaFieldsProps {
   properties: Record<string, PropertySchema>;
@@ -455,6 +455,7 @@ function PlainCommit({
   errorId,
   error,
   className = "",
+  placeholder,
 }: {
   name: string;
   /** The applied text from the model. */
@@ -469,6 +470,8 @@ function PlainCommit({
   errorId: string;
   error?: string;
   className?: string;
+  /** Shown in an empty field: an optional number's "Automatic". */
+  placeholder?: string;
 }) {
   const [text, setText] = useState(model);
   const [localError, setLocalError] = useState("");
@@ -510,6 +513,7 @@ function PlainCommit({
           aria-describedby={shownError ? errorId : undefined}
           className={`field ${shownError ? "error" : ""} ${className}`}
           value={text}
+          placeholder={placeholder}
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}
@@ -568,9 +572,11 @@ function PlainInput({
 }) {
   const id = useId();
   const errorId = useId();
+  const optional = kind === "number" && isOptionalNumber(schema);
   const parse =
     kind === "number"
       ? (text: string): Parsed => {
+          if (optional && text.trim() === "") return { ok: true, value: null }; // empty: the engine's own value
           const refused = numberRefusal(text, false);
           return refused !== null ? { ok: false, error: refused } : { ok: true, value: Number(text.trim()) };
         }
@@ -599,6 +605,7 @@ function PlainInput({
         inputId={id}
         errorId={errorId}
         error={error}
+        placeholder={optional ? "Automatic" : undefined}
       />
     </div>
   );

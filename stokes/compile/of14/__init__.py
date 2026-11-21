@@ -453,19 +453,25 @@ def _steady_solution(snap: SolveSnapshot) -> Dict:
                     )
                 ),
             ),
-            Entry(
-                "relaxationFactors",
-                Dict(
-                    (
-                        Entry(
-                            "equations",
-                            Dict((Entry("U", 0.9), Entry('".*"', 0.9))),
-                        ),
-                    )
-                ),
-            ),
+            Entry("relaxationFactors", _steady_relaxation(snap)),
         )
     )
+
+
+def _steady_relaxation(snap: SolveSnapshot) -> Dict:
+    """SIMPLEC's factors: `U` and `".*"` (the turbulence equations) 0.9, pressure unrelaxed.
+
+    The user's factors replace these (ADR-0036): `relax_pressure` adds `fields { p ...; }`, which
+    SIMPLEC with `consistent yes` normally goes without, `relax_velocity` sets `U` and
+    `relax_turbulence` sets `".*"`. With none set the dictionary is the one written before.
+    """
+    items: list[Entry] = []
+    if snap.relax_pressure is not None:
+        items.append(Entry("fields", Dict((Entry("p", snap.relax_pressure),))))
+    velocity = 0.9 if snap.relax_velocity is None else snap.relax_velocity
+    others = 0.9 if snap.relax_turbulence is None else snap.relax_turbulence
+    items.append(Entry("equations", Dict((Entry("U", velocity), Entry('".*"', others)))))
+    return Dict(tuple(items))
 
 
 def _physical_properties(snap: SolveSnapshot) -> Dict:
