@@ -55,8 +55,8 @@ coupled solve.
 
    So no serial backend rescues a large 3D case, and the refusal points to the segregated engine.
    2D meshes (an `empty` or `wedge` patch) have far less fill-in and are not limited.
-4. **Serial first.** `cores > 1` is refused in this step with a message naming the reason (MPI
-   needs the PETSc backend and `decomposePar`, which a later step adds and validates).
+4. **Serial first** (superseded by decision 9, 2026-11-21). `cores > 1` was refused in the first
+   step, because MPI needs the PETSc backend and `decomposePar`.
 5. **Energy is the passive scalar the solver supports.** With `energy` on, `COUPLED` gets
    `solveEnergy yes` and `Pr = mu*cp/kappa` from the domain material, `0/T` is written from the
    boundaries' thermal conditions (`fixedValue` temperature, `zeroGradient`, and a heat flux as
@@ -77,6 +77,48 @@ coupled solve.
    Linux, how to build it. An agent whose Python lacks `msgpack` now stops
    before printing its address with the install command, where it used to accept the connection
    and fail on the first frame (the desktop saw only `CancelledError`).
+9. **Above one core the engine runs PETSc over MPI, with settings measured on public cases**
+   (2026-11-21). `cores > 1` writes a decomposition, runs `coupledSimpleFoam` over MPI and
+   reconstructs, and `COUPLED` gets `linearSolver PETSc` with `PETSC_OPTIONS`: `KSPFBCGS`, a
+   Schur field split (`selfp`, upper factorisation), ILU under block Jacobi on the velocity block,
+   one hypre BoomerAMG V-cycle with three-dimensional settings on the pressure block, an adaptive
+   inner tolerance (1e-8..1e-2), the preconditioner rebuilt every 8 outer iterations and
+   pseudo-transient continuation at `pseudoCo 50`. The 3D cell limit of decision 3 applies to one
+   core only. FoamWin builds the solver without PETSc, so the agent refuses a parallel coupled
+   step on native Windows with what to do instead (`agent.coupled_mpi_unavailable`).
+
+   Measured on 6 ranks of a 24-core WSL host, one run at a time, every case public and every
+   segregated run exactly what Stokes writes (SIMPLEC, relaxation 0.9, GAMG pressure):
+
+   | Case | Cells | SIMPLEC | Coupled | |
+   |---|---|---|---|---|
+   | Square duct, L = 100 Dh, Re 100 (Shah & London fRe 14.227) | 1.0M | 795 it, 280 s | 16 it, 70 s | **4.0x coupled**; fRe 14.1396 from both |
+   | Lid-driven cube, Re 400 (Ku et al. 1987) | 250k | 276 it, 22 s | 158 it, 242 s | 11x segregated |
+   | Lid-driven cube, Re 400 | 1.0M | 578 it, 261 s | 92 it, 1033 s | 4x segregated |
+   | Laminar tee (snappy-style, 53 degree non-orthogonality) | 347k | 79 it, 9 s | not converged in 30 it (37 s) | segregated |
+
+   **With heated walls, through Stokes end to end** (the same square duct on Stokes' own blockMesh,
+   800k cells, Pr 7, inlet 300 K, walls 350 K, 6 ranks; Shah & London Nu_T = 2.976):
+
+   | | `of14.fluid` (SIMPLE) | `coupled.simple` |
+   |---|---|---|
+   | Iterations | 1051 | 16 |
+   | Solve | 428 s | 55 s |
+   | Run, end to end | 447 s | 73 s (**6.1x**) |
+   | Nu_T, x = 50..90 Dh | 2.9981 (+0.74 %) | 2.9966 (+0.69 %) |
+   | Fanning fRe | 14.0918 | 14.0918 |
+   | Bulk T at the outlet | 342.77 K | 342.76 K |
+
+   The writer gives `T` a relaxation factor of 1 ahead of the SIMPLE case's `".*" 0.9`:
+   coupledSimpleFoam relaxes `T` by the usual lookup, and relaxed it needed 267 outer iterations
+   (472 s, slower than SIMPLE) where the flow had converged in 16. The convection scheme was not
+   the cause (`upwind` 272 iterations; `limitedLinear 1` 1543 and Nu 3.2 % low).
+
+   So the engine wins where SIMPLE's iteration count grows with the domain, long and large
+   through-flow, and loses on closed recirculating flow, which needs the pseudo-transient damping
+   (no setting converged without it in 200 outer iterations) and then many outer iterations. The
+   solver's own large-case option (`a11` Schur approximation) stalled on the tee's polyhedral
+   mesh, which is why `selfp` is used. The catalogue text says where the engine pays off.
 
 ## Alternatives considered
 
@@ -92,8 +134,10 @@ coupled solve.
 - A Windows user runs `coupled.simple` natively on FoamWin v14.0.0-win.6 or later, or through a
   WSL host (`WslRunner`).
 - The run basis gains the coupled writer's version, so a coupled run is never reused for `of14`.
-- Next steps: (2) the build helper; (3) `of14.multiRegion` with `foamMultiRun`; (4) `coupled.cht`
-  behind its gate and the GPU flag; parallel PETSc runs once validated.
+- Parallel coupled runs need a Linux or WSL host whose coupledSimpleFoam has PETSc with hypre.
+- Next steps: (3) `of14.multiRegion` with `foamMultiRun`; (4) `coupled.cht` behind its gate and
+  the GPU flag; a PETSc build of FoamWin's coupledSimpleFoam (MS-MPI SDK, PETSc and hypre
+  cross-built), which native Windows parallel coupled runs would need.
 
 ## Steps
 

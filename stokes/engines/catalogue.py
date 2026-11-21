@@ -84,10 +84,11 @@ ENGINES: tuple[EngineSpec, ...] = (
         "coupledSimpleFoam · Coupled steady incompressible",
         True,
         names_for(COUPLED_ENGINE),
-        why="Solves velocity and pressure as one coupled system: steady only, one core, "
-        "laminar, k-epsilon or k-omega SST, with an optional passive temperature (no buoyancy). "
-        "Runs where coupledSimpleFoam is installed: a Linux or WSL host, or FoamWin from "
-        "v14.0.0-win.6 (serial, Eigen backend).",
+        why="Solves velocity and pressure as one coupled system: steady only, laminar, "
+        "k-epsilon or k-omega SST, with an optional passive temperature (no buoyancy). "
+        "Several times faster than SIMPLE on long or large 3D through-flow cases, run on "
+        "2 or more cores. Parallel runs need a Linux or WSL host; FoamWin from v14.0.0-win.6 "
+        "runs it on one core (serial, Eigen backend).",
     ),
 )
 
