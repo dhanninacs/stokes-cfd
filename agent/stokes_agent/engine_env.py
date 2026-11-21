@@ -421,6 +421,22 @@ def resolve_utility(env: EngineEnv, name: str) -> str | None:
     return shutil.which(name, path=env.env.get("PATH", ""))
 
 
+def coupled_has_petsc(env: EngineEnv) -> bool:
+    """Whether this install's coupledSimpleFoam can run over MPI (its PETSc backend).
+
+    On FoamWin only the build in `bin/msmpi` has PETSc (`native_env` resolves it when Microsoft
+    MPI is present); the serial build in `bin` is Eigen only. A POSIX install is trusted as
+    before: the solver's PETSc backend is how coupledSimpleFoam is built on Linux.
+    """
+    if not env.native_tools:
+        return True
+    path = env.native_tools.get("coupledSimpleFoam")
+    if not path:
+        return False
+    tool = Path(path)
+    return tool.parent.name.lower() == "msmpi" and tool.is_file()
+
+
 def mpi_launcher(env: EngineEnv) -> str | None:
     """Only a captured native launcher or MPI on the captured POSIX PATH is eligible."""
     if env.native_tools:

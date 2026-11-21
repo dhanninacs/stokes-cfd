@@ -44,6 +44,22 @@ def candidates() -> list[Path]:
     )
 
 
+def _mpi_builds(appbin: Path) -> dict[str, str]:
+    """The tools built against Microsoft MPI, which replace the serial ones while MPI is present.
+
+    **coupledSimpleFoam's PETSc build** (FoamWin's `scripts/build-coupled.sh`) lives in
+    `bin/msmpi` because it imports msmpi.dll; the serial build in `bin` needs no MPI. With
+    Microsoft MPI present the PETSc build is the one used, as FoamWin's own shell does, and its
+    folder is what `engine_env.coupled_has_petsc` reads (ADR-0035 decision 10). Only a file
+    directly in that folder counts.
+    """
+    folder = appbin / "msmpi"
+    petsc = folder / "coupledSimpleFoam.exe"
+    if petsc.is_file() and petsc.resolve().parent == folder.resolve():
+        return {"coupledSimpleFoam": str(petsc)}
+    return {}
+
+
 def capture(path: Path, timeout: float) -> EngineEnv:
     """Return EngineEnv from a validated FoamWin handshake (lazy import avoids a cycle)."""
     from .engine_env import UTILITIES, EngineEnv, EngineEnvError
@@ -146,6 +162,7 @@ def capture(path: Path, timeout: float) -> EngineEnv:
                 raise ValueError("MPI-enabled Pstream is absent")
             launcher = str(executable.resolve())
             search.extend((str(libbin / "msmpi"), str(executable.parent)))
+            tools.update(_mpi_builds(appbin))
         search.extend((str(libbin / "dummy"), str(shell.parents[2])))
         env["PATH"] = os.pathsep.join(search)
         return EngineEnv(

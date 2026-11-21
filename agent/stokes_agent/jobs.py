@@ -71,6 +71,7 @@ from stokes.log import fields, get_logger
 from .engine_env import (
     EngineEnv,
     UnknownEngine,
+    coupled_has_petsc,
     engine_id,
     missing_utility_reason,
     mpi_launcher,
@@ -165,12 +166,15 @@ EXTERNAL_MPI = frozenset({"foamRun", "foamMultiRun", "snappyHexMesh", "checkMesh
 #: PETSc backend (ADR-0035 decision 9).
 STOKES_MPI = frozenset({"snappyHexMesh", "foamRun", "checkMesh", "coupledSimpleFoam"})
 
-#: Why a parallel coupledSimpleFoam is refused on native Windows: FoamWin builds it serial, with
-#: the Eigen backend only (`scripts/build-coupled.sh` sets `COUPLED_NO_PETSC`), and the solver
-#: would stop at its first outer iteration asking for PETSc.
+#: Why a parallel coupledSimpleFoam is refused on an install without its PETSc build: FoamWin's
+#: serial build has the Eigen backend only, and the solver would stop at its first outer iteration
+#: asking for PETSc. FoamWin's `scripts/build-coupled.sh` puts a PETSc build in `bin/msmpi`, used
+#: when Microsoft MPI is installed (`engine_env.coupled_has_petsc`, ADR-0035 decision 10).
 COUPLED_MPI_WINDOWS = (
-    "coupledSimpleFoam runs on one core on native Windows: FoamWin builds it without PETSc, "
-    "which its parallel runs need. Set cores to 1, or run this case on a WSL or Linux host"
+    "coupledSimpleFoam runs on one core on this FoamWin install: it has no PETSc build of the "
+    r"solver (bin\msmpi\coupledSimpleFoam.exe), or Microsoft MPI is not installed. Set cores "
+    "to 1, install a FoamWin with the PETSc build and Microsoft MPI, or run this case on a WSL "
+    "or Linux host"
 )
 
 MAX_FILE_BYTES = 512 * 1024 * 1024
@@ -1082,7 +1086,7 @@ class JobStore:
         if step.ranks > 1:
             if argv[0] not in STOKES_MPI:
                 raise JobBadParams(f"{argv[0]} does not support an MPI step")
-            if argv[0] == "coupledSimpleFoam" and NATIVE_WINDOWS:
+            if argv[0] == "coupledSimpleFoam" and not coupled_has_petsc(engine):
                 raise JobBadParams(
                     COUPLED_MPI_WINDOWS,
                     details={"code": "agent.coupled_mpi_unavailable", "ranks": step.ranks},
