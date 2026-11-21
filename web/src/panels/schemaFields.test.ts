@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { NodeSummary, PropertySchema } from "../api/types";
-import { enterStaysInField, fieldKindOf, nodesOfType, numberRefusal, quantityRefusal, vectorRefusal } from "./schemaFields";
+import { enterStaysInField, fieldKindOf, isOptionalNumber, nodesOfType, numberRefusal, quantityRefusal, vectorRefusal } from "./schemaFields";
 
 describe("fieldKindOf", () => {
   it("lets x-kind decide: quantity, ref, json", () => {
@@ -52,6 +52,16 @@ describe("fieldKindOf", () => {
 function node(id: string, type: string, name: string, path: string, children: NodeSummary[] = []): NodeSummary {
   return { id, type, name, status: "ok", params: {}, path, children_count: children.length, children };
 }
+
+describe("isOptionalNumber", () => {
+  it("is an x-optional number that also allows null", () => {
+    const relax = { type: ["number", "null"], "x-optional": true };
+    expect(isOptionalNumber(relax)).toBe(true);
+    expect(fieldKindOf(relax)).toBe("number");
+    expect(isOptionalNumber({ type: "number" })).toBe(false);
+    expect(isOptionalNumber({ type: ["number", "null"] })).toBe(false);
+  });
+});
 
 describe("nodesOfType", () => {
   // The shape of the demo project: parameters, then groups that hold the nodes of interest.

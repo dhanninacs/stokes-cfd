@@ -94,6 +94,9 @@ export function findingsTouch(findings: readonly { nodes: readonly string[] }[],
   return findings.some((f) => f.nodes.includes(settingsId));
 }
 
+/** The user's under-relaxation factors (ADR-0036); each is empty for the engine's own value. */
+export const RELAXATION_FIELDS: readonly string[] = ["relax_pressure", "relax_velocity", "relax_turbulence", "relax_energy"];
+
 export const SOLVER_SETTINGS_SECTIONS: readonly SettingsSectionSpec[] = [
   { id: "solver-model", title: "Model", description: "Choose the solver and how to model the flow and heat transfer.", fields: ["engine", "turbulence", "energy", "density_model", "molar_mass", "transient"] },
   {
@@ -105,6 +108,13 @@ export const SOLVER_SETTINGS_SECTIONS: readonly SettingsSectionSpec[] = [
   { id: INITIAL_TURBULENCE_SECTION, title: "Initial turbulence", fields: ["initial_velocity", "initial_intensity", "initial_length_scale", "initial_viscosity_ratio"] },
   { id: "solver-reference", title: "Reference conditions", description: "Set gravity and the operating pressure used by the flow model.", fields: ["gravity", "operating_pressure"], defaultOpen: false },
   { id: "solver-limits", title: "Run limits", description: "Set the iteration limit and residual target. Reaching the limit does not mean the solution has converged.", fields: ["iterations", "residual_target"] },
+  {
+    id: "solver-relaxation",
+    title: "Relaxation",
+    description: "Under-relaxation for a steady run, greater than 0 and at most 1. Leave a field empty for the solver's own value. Lower values are more stable but converge more slowly.",
+    fields: RELAXATION_FIELDS,
+    defaultOpen: false,
+  },
   { id: "solver-output", title: "Output", description: "Choose how often results are saved.", fields: ["write_interval"], defaultOpen: false },
   { id: "solver-execution", title: "Execution", description: "1 runs serially; larger counts use MPI.", fields: ["host", "cores"], defaultOpen: false },
   { id: "solver-result", title: "Result slice", description: "Position a cutting plane for inspecting the solution.", fields: ["slice_origin", "slice_normal"], defaultOpen: false },
@@ -144,6 +154,20 @@ export interface SolverContext {
   energy: boolean;
   turbulence: string;
   transient: boolean;
+  /** The engine id, when known: the coupled engine relaxes neither pressure nor velocity. */
+  engine?: string;
+}
+
+/**
+ * Which relaxation factors a run reads: none in a transient run (PIMPLE writes no relaxation); energy with the
+ * energy equation on; turbulence with a turbulence model; pressure and velocity for the segregated engines only,
+ * since the coupled engine solves them together without relaxation.
+ */
+function relaxationIncluded(name: string, context: SolverContext): boolean {
+  if (context.transient) return false;
+  if (name === "relax_energy") return context.energy;
+  if (name === "relax_turbulence") return context.turbulence !== "laminar";
+  return context.engine !== "coupled.simple";
 }
 
 const TRANSIENT_FIELDS: readonly string[] = ["delta_t", "end_time", "adjustable_time_step", "max_courant", "write_time", "time_average", "average_start"];
@@ -156,6 +180,7 @@ const ENERGY_FIELDS: readonly string[] = ["density_model", "molar_mass", "gravit
  * the rule does not know (a schema extension) stays visible. It hides only: a stored value is never cleared.
  */
 export function solverSettingIncluded(name: string, context: SolverContext): boolean {
+  if (RELAXATION_FIELDS.includes(name)) return relaxationIncluded(name, context);
   if (TRANSIENT_FIELDS.includes(name)) return context.transient;
   if (INITIAL_TURBULENCE_FIELDS.includes(name)) return context.turbulence !== "laminar";
   if (ENERGY_FIELDS.includes(name)) return context.energy;

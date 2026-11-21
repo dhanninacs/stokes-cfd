@@ -89,6 +89,11 @@ class ParamSpec:
     #: The tree's eye is the control; this keeps the parameter out of the grid without taking it
     #: out of the model.
     hidden: bool = False
+    #: **A number that may be left unset**: null is stored, null clears a set value, and the
+    #: schema says `["number", "null"]` with `x-optional`, so a form can offer an empty field.
+    #: The unset state means "the consumer decides" (a solver's relaxation factor left to the
+    #: engine). Opt-in, because a plain number with no default has always materialised 0.0.
+    optional: bool = False
 
     def __post_init__(self) -> None:
         if not NAME_RE.match(self.name):
@@ -112,6 +117,8 @@ class ParamSpec:
             if self.kind != "string":
                 raise ValidationError(f"only string parameters take a pattern ({self.name!r})")
             re.compile(self.pattern)
+        if self.optional and (self.kind != "number" or self.default is not None):
+            raise ValidationError(f"only a number with no default can be optional ({self.name!r})")
         if self.max_bytes is not None:
             if self.kind != "json":
                 raise ValidationError(f"only json parameters take max_bytes ({self.name!r})")
@@ -142,7 +149,8 @@ class ParamSpec:
                     }
                 )
             case "number":
-                schema["type"] = "number"
+                schema["type"] = ["number", "null"] if self.optional else "number"
+                schema.update({key: True for key in ("x-optional",) if self.optional})
             case "int":
                 schema["type"] = "integer"
             case "bool":

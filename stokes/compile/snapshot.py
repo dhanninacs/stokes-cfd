@@ -200,6 +200,13 @@ class SolveSnapshot:
     #: written as `UMean`, `pMean`, ... beside the instantaneous fields.
     average: bool = False
     average_start: float = 0.0
+    #: Steady runs only: the user's under-relaxation factors (ADR-0036), each in (0, 1], or None
+    #: for the engine's own value (`stokes.compile.relaxation`). Unset, they are out of the run
+    #: basis, so a project made before they existed keeps its basis.
+    relax_pressure: float | None = None
+    relax_velocity: float | None = None
+    relax_turbulence: float | None = None
+    relax_energy: float | None = None
 
     def patch(self, name: str) -> PatchCondition:
         """One patch by name, or `KeyError` — the writer validates before it gets here."""

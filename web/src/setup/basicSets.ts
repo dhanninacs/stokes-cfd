@@ -184,7 +184,10 @@ export function visibleFields(
 
 /** The "does this field mean anything now" rule of a settings page; every other type applies all its fields. */
 function appliesFor(type: string, params: Record<string, unknown>, ctx: SetupContext): (name: string) => boolean {
-  if (type === "solver_settings") return (name) => solverSettingIncluded(name, ctx);
+  if (type === "solver_settings") {
+    const context = { ...ctx, engine: typeof params.engine === "string" ? params.engine : undefined };
+    return (name) => solverSettingIncluded(name, context);
+  }
   if (type === "mesh_settings") {
     const context = {
       mesher: typeof params.mesher === "string" ? params.mesher : "blockmesh",

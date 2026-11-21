@@ -56,6 +56,32 @@ def _positive_solver_value(_node: object, value: Any) -> Any:  # Any: stored JSO
     return value
 
 
+#: The under-relaxation factors a user may set (ADR-0036). Each is optional: unset, the engine's
+#: own value is written (see `stokes.compile.relaxation`).
+RELAXATION_PARAMS: tuple[str, ...] = (
+    "relax_pressure",
+    "relax_velocity",
+    "relax_turbulence",
+    "relax_energy",
+)
+
+
+def _relaxation_factor(_node: object, value: Any) -> Any:  # Any: stored JSON (float or None)
+    """A relaxation factor is in (0, 1], or unset (None) for the engine's own value."""
+    import math
+
+    from stokes.errors import ValidationError
+
+    if value is None:
+        return value
+    if not math.isfinite(value) or not 0.0 < value <= 1.0:
+        raise ValidationError(
+            f"a relaxation factor must be greater than 0 and at most 1; got {value}",
+            details={"code": "solve.invalid", "relaxation": value},
+        )
+    return value
+
+
 if TYPE_CHECKING:  # pragma: no cover - typing only, so the import stays out of the module load
     from stokes.model.schema import NodeSpec, NodeTypeRegistry
 
@@ -271,6 +297,48 @@ def solver_specs() -> tuple[NodeSpec, ...]:
                     "checked by solve.configure rather than by the schema.",
                 ),
                 ParamSpec(
+                    "relax_pressure",
+                    "number",
+                    label="Pressure relaxation",
+                    optional=True,
+                    validate=_relaxation_factor,
+                    doc="Under-relaxation of the pressure field in a steady segregated run, "
+                    "greater than 0 and at most 1. Empty: the engine's own (none for the "
+                    "incompressible engine's SIMPLEC, 0.3 for of14.fluid, 0.2 on a "
+                    "non-orthogonal mesh). The coupled engine does not relax pressure.",
+                ),
+                ParamSpec(
+                    "relax_velocity",
+                    "number",
+                    label="Velocity relaxation",
+                    optional=True,
+                    validate=_relaxation_factor,
+                    doc="Under-relaxation of the momentum equation in a steady segregated run. "
+                    "Empty: 0.9 for the incompressible engine, 0.7 for of14.fluid (0.5 on a "
+                    "non-orthogonal mesh). Lower is more stable and slower. The coupled engine "
+                    "does not relax velocity.",
+                ),
+                ParamSpec(
+                    "relax_turbulence",
+                    "number",
+                    label="Turbulence relaxation",
+                    optional=True,
+                    validate=_relaxation_factor,
+                    doc="Under-relaxation of the turbulence equations (k, epsilon, omega, ...) "
+                    "in a steady run. Empty: 0.9, or of14.fluid's equation value.",
+                ),
+                ParamSpec(
+                    "relax_energy",
+                    "number",
+                    label="Energy relaxation",
+                    optional=True,
+                    validate=_relaxation_factor,
+                    doc="Under-relaxation of the energy or temperature equation in a steady run "
+                    "with energy on. Empty: of14.fluid's equation value, and 1 (none) for the "
+                    "coupled engine, whose temperature equation is linear once the flow is "
+                    "solved.",
+                ),
+                ParamSpec(
                     "cores",
                     "int",
                     label="Cores",
@@ -331,6 +399,7 @@ def settings_summary(node: Any) -> dict[str, Any]:
             "iterations",
             "write_interval",
             "residual_target",
+            *RELAXATION_PARAMS,
             "cores",
             "slice_origin",
             "slice_normal",

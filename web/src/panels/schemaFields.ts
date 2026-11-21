@@ -25,6 +25,11 @@ function typeNames(schema: PropertySchema): string[] {
   return Array.isArray(t) ? t : typeof t === "string" ? [t] : [];
 }
 
+/** An optional number (`x-optional`, type `["number", "null"]`): an empty field clears it to the consumer's own value. */
+export function isOptionalNumber(schema: PropertySchema): boolean {
+  return schema["x-optional"] === true && typeNames(schema).includes("null");
+}
+
 /**
  * Which field a property gets. `x-kind` decides first (quantity, json, ref); then `enum`,
  * which the server marks on a string type, before the bare types; an `array` whose default

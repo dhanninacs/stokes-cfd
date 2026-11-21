@@ -500,7 +500,7 @@ class Project:
         old_json = old.to_json() if isinstance(old, QuantityValue) else old
         if spec.kind == "json":
             old_json = copy.deepcopy(old)
-        if raw is None and spec.kind == "int" and spec.default is None:
+        if raw is None and ((spec.kind == "int" and spec.default is None) or spec.optional):
             # The clear: drop the key so readers see the empty state again. A plain parameter
             # holds no expression, so there are no dependencies to drop - the call mirrors
             # `unset_param`, without its "never held it" meaning in the docstring.
@@ -781,6 +781,8 @@ class Project:
             return copy.deepcopy(spec.default)  # a fresh value per node
         if spec.default is not None:
             return spec.default
+        if spec.optional:
+            return None  # an optional number's unset state (`ParamSpec.optional`)
         # **A plain kind with no default materialises null, not a fabricated zero** — the "empty
         # support" the layer counts need (brief M-504): `0` is a MEANING there (layers off on
         # this wall), so the empty = inherit state must be null, the same way a `ref` with no

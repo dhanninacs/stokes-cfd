@@ -462,12 +462,18 @@ def _fv_solution(snap: SolveSnapshot) -> Dict:
     entries = [Entry("solvers", Dict(tuple(solvers))), Entry("PIMPLE", Dict(tuple(pimple)))]
     if not snap.transient:
         p_relax, eq_relax = _relaxation(snap)
+
+        def chosen(user: float | None, own: float) -> float:
+            return own if user is None else user  # the user's factor, else this writer's (ADR-0036)
+
         entries.append(
             Entry(
                 "relaxationFactors",
                 Dict(
                     (
-                        Entry("fields", Dict((Entry(pressure, p_relax),))),
+                        Entry(
+                            "fields", Dict((Entry(pressure, chosen(snap.relax_pressure, p_relax)),))
+                        ),
                         # `".*"` relaxes the turbulence equations too, as the incompressible
                         # writer's `".*" 0.9` does. Without it k-omega SST went to NaN in its
                         # first omega solve on the mixing elbow (1000 smoother sweeps, then nan).
@@ -475,9 +481,9 @@ def _fv_solution(snap: SolveSnapshot) -> Dict:
                             "equations",
                             Dict(
                                 (
-                                    Entry("U", eq_relax),
-                                    Entry(energy, eq_relax),
-                                    Entry('".*"', eq_relax),
+                                    Entry("U", chosen(snap.relax_velocity, eq_relax)),
+                                    Entry(energy, chosen(snap.relax_energy, eq_relax)),
+                                    Entry('".*"', chosen(snap.relax_turbulence, eq_relax)),
                                 )
                             ),
                         ),
