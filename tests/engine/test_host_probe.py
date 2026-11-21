@@ -15,6 +15,7 @@ through the captured PATH. Those are facts about a machine, and this is the test
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -29,7 +30,8 @@ pytestmark = pytest.mark.engine
 def test_the_host_record_finds_a_supported_install() -> None:
     """One supported install, with the paths the mesh slice needs, on this host."""
     record = host_record(refresh=True)
-    assert record["system"] == "Linux", f"expected the mesh host, got {record['system']}"
+    # A Linux mesh host, or native Windows with FoamWin (ADR-0025).
+    assert record["system"] in ("Linux", "Windows"), f"expected a mesh host, got {record['system']}"
     assert record["installs"], "no OpenFOAM install found on a host that has one"
     supported = [entry for entry in record["installs"] if entry["supported"]]
     assert len(supported) >= 1, f"no SUPPORTED install: {json.dumps(record['installs'], indent=1)}"
@@ -52,8 +54,12 @@ def test_the_captured_environment_is_enough_to_run_a_utility() -> None:
     utility: if a key were missing, it would fail to find a library and every later task would
     be debugging the wrong thing."""
     env = get_env()
+    # Windows looks an argv[0] up on the PARENT's PATH, not the env given to the child, so the
+    # utility is resolved on the captured PATH first. On POSIX this finds the same file.
+    block_mesh = shutil.which("blockMesh", path=env.env.get("PATH"))
+    assert block_mesh, "blockMesh is not on the captured PATH"
     completed = subprocess.run(
-        ["blockMesh", "-help"],
+        [block_mesh, "-help"],
         capture_output=True,
         timeout=60,
         check=False,
@@ -83,10 +89,13 @@ def test_the_utility_census_matches_the_record() -> None:
         if path is None:
             continue
         assert Path(path).is_file(), f"{name} is recorded at {path}, which does not exist"
-    assert found["cartesianMesh"] is None, (
-        "cartesianMesh resolved, but the inventory says it is quarantined and unusable — if this "
-        "has gained a working one, the record and MESH-ENV.md both need updating"
-    )
+    # FoamWin ships a working cfMesh from v14.0.0-win.5, so only the Linux mesh host's quarantine
+    # is asserted.
+    if sys.platform != "win32":
+        assert found["cartesianMesh"] is None, (
+            "cartesianMesh resolved, but the inventory says it is quarantined and unusable — if "
+            "this has gained a working one, the record and MESH-ENV.md both need updating"
+        )
     # And the OpenFOAM core is definitely there: a host where none of these resolve is not a mesh
     # host.
     for name in ("blockMesh", "checkMesh", "snappyHexMesh"):
@@ -99,30 +108,22 @@ def test_no_utility_was_left_running() -> None:
     A utility left behind holds the case directory open and makes the next run fail with a lock
     which reads as a bug in our code.
     """
-    completed = subprocess.run(
-        ["pgrep", "-u", str(__import__("os").getuid()), "-a", "blockMesh|checkMesh|foamRun"],
-        capture_output=True,
-        timeout=20,
-        check=False,
-    )
-    # `pgrep` exits 1 when nothing matches, which is the success case here.
-    if completed.returncode != 0:
+    from tests.engine.strays import from_install, running
+
+    lines = running("blockMesh", "checkMesh", "foamRun")
+    if not lines:
         return
     # **Only processes from the real install count.**
     #
-    # The pattern matches by NAME, and `tests/test_agent_jobs.py` deliberately creates shell scripts
     # The pattern matches by NAME, and `tests/test_agent_jobs.py` deliberately creates shell
     # scripts called `blockMesh` in its own temp directories. Matching on the name alone
     # therefore reported a test fake as a leaked OpenFOAM utility — measured:
     # `pytest tests/engine/ tests/test_agent_jobs.py` failed with a path under
-    # failed with a path under `/tmp/pytest-of-...`, which is not an install at all.
+    # `/tmp/pytest-of-...`, which is not an install at all.
     #
     # The install root comes from the captured environment, so this also survives the
     # install moving.
-    root = Path(get_env().env["WM_PROJECT_DIR"])
-    strays = [
-        line for line in completed.stdout.decode(errors="replace").splitlines() if str(root) in line
-    ]
+    strays = from_install(lines, get_env().env["WM_PROJECT_DIR"])
     assert not strays, "a real utility was left running:\n" + "\n".join(strays)
 
 

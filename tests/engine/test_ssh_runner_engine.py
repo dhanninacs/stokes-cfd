@@ -26,7 +26,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-pytestmark = pytest.mark.engine
+pytestmark = [
+    pytest.mark.engine,
+    # The runner targets a POSIX host and this module makes THIS machine that host: a `sh`
+    # wrapper as the interpreter, `kill -TERM` on the remote, a `.ssh/authorized_keys` line. On
+    # Windows the local sshd (if any) is a Windows host, which the runner does not support.
+    pytest.mark.skipif(sys.platform == "win32", reason="needs this machine to be a POSIX ssh host"),
+]
 
 HOME = Path.home()
 TEST_DIR = HOME / ".stokes-test-ssh"

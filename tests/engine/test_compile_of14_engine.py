@@ -16,6 +16,7 @@ brackets
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -142,8 +143,11 @@ def test_the_written_duct_meshes_and_solves(tmp_path: Path) -> None:
     env = get_env(None).env
 
     def run(argv: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+        # Resolved on the captured PATH: Windows looks argv[0] up on the parent's PATH.
+        exe = shutil.which(argv[0], path=env.get("PATH"))
+        assert exe, f"{argv[0]} is not on the captured PATH"
         return subprocess.run(
-            argv,
+            [exe, *argv[1:]],
             cwd=case,
             env=dict(env),
             capture_output=True,
