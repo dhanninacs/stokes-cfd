@@ -42,6 +42,7 @@ moocore = "LGPL-2.1-or-later; unmodified; CFFI extension (_libmoocore) loaded dy
 # Packages whose metadata reports UNKNOWN or an unparseable string; licence verified by hand.
 [verified]
 # example: some-package = "MIT; verified 2026-10-02 from the repository LICENSE file"
+rendercanvas = "BSD-2-Clause; its metadata reports UNKNOWN; verified 2026-11-23 from the LICENSE of github.com/pygfx/rendercanvas; a hard dependency of wgpu (the fast extra), never imported by Stokes (docs/engineering/dependencies.md)"
 
 # JavaScript packages whose package.json lacks a parseable licence; verified by hand.
 [verified_js]
