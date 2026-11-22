@@ -59,6 +59,20 @@ describe("speedRangeOf", () => {
     expect(speedRangeOf([{ speeds: [] }])).toBeNull();
   });
 
+  it("does not let one stray sample set the range", () => {
+    // Measured on the manifold: one sample at 0.834 m/s on lines whose speeds reach 0.277. As the
+    // maximum it drew every line in the bottom third of the colour map.
+    const speeds = Array.from({ length: 2000 }, (_, i) => (0.277 * i) / 1999);
+    const range = speedRangeOf([{ speeds }, { speeds: [0.1, 0.834, 0.2] }]);
+    expect(range?.min).toBe(0);
+    expect(range?.max).toBeCloseTo(0.277, 6);
+  });
+
+  it("keeps a fast region that many samples share", () => {
+    const speeds = [...Array.from({ length: 900 }, () => 1), ...Array.from({ length: 100 }, () => 3)];
+    expect(speedRangeOf([{ speeds }])).toEqual({ min: 1, max: 3 });
+  });
+
   it("ignores a non-finite speed rather than poisoning the range", () => {
     // One NaN would make every colour `NaN`, and the lines would draw black.
     expect(speedRangeOf([{ speeds: [1, Number.NaN, 2] }])).toEqual({ min: 1, max: 2 });

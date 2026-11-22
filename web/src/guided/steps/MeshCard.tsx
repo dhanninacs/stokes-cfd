@@ -8,12 +8,13 @@
  * the result is the cell count and the mesher's own verdict on quality, and a switch draws the cell edges. The 2D
  * switch and plane picker are the settings' own `two_d` and `plane` (ADR-0031).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { Button, Switch } from "../../components/ui";
 import { cancelMesh, generateMesh, useGenerateState, useMeshContext } from "../../panels/meshRun";
 import { followsShape } from "../../panels/mesherKinds";
 import { cancelState, findMeshNodes, formatCount, formatSeconds, isActive, keptMeshes, phaseNow, progressOf, qualityRows, readResult, stateLine } from "../../panels/meshPanelModel";
+import { kCells } from "../../panels/meshReadout";
 import { useStore } from "../../state/store";
 import { currentScene } from "../../viewport/scene";
 import GuidedCard from "../GuidedCard";
@@ -21,10 +22,11 @@ import { ErrorLine, Note } from "../controls";
 import CaseMeshCard from "./CaseMeshCard";
 import FinenessSlider from "./FinenessSlider";
 import TwoDControls from "../../panels/TwoDControls";
+import MeshPreparing from "../../panels/MeshPreparing";
 import { baseSizeOf, chooseMeshResult, configureMesh, coresOf, layersOf, mesherOf, setMeshCores, setMesher } from "../commands";
 import type { GuidedStep } from "../guidedModel";
 import { fluidBody, meshSettings, readBodies, readCase, unmeshedFlowBoundaries } from "../guidedTree";
-import { SWITCH_LAYERS, finenessOf, lengthText, type Fineness } from "../sizing";
+import { SWITCH_LAYERS, finenessOf, lengthText, suggestedBase, type Fineness } from "../sizing";
 import { layersNotice } from "../../panels/layersModel";
 import { useAction } from "../useAction";
 import { plainSentence } from "../words";
@@ -37,6 +39,7 @@ export default function MeshCard({ step }: { step: GuidedStep }) {
   const meshDisplay = useStore((s) => s.meshDisplay);
   const action = useAction();
   const generate = useGenerateState();
+  const preparing = useMeshContext((c) => c.busy && c.busyStep !== "");
 
   const settings = useMemo(() => meshSettings(tree), [tree]);
   const view = useMemo(() => readResult(findMeshNodes(tree).result), [tree]);
@@ -53,6 +56,36 @@ export default function MeshCard({ step }: { step: GuidedStep }) {
   const box = useMemo(() => (fluidId === null ? null : (currentScene()?.sourceBounds(fluidId) ?? null)), [fluidId, geometry]);
   const baseSize = baseSizeOf(settings);
   const level = finenessOf(box, baseSize);
+  // An untouched 5 mm default on a model it does not suit becomes Coarse, once, before any mesh exists.
+  const suggested = suggestedBase(box, baseSize, view !== null);
+  const suggestedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (suggested === null || fluidId === null || suggestedFor.current === fluidId || active) return;
+    suggestedFor.current = fluidId;
+    void configureMesh({ base_size: suggested }).catch(() => {});
+  }, [suggested, fluidId, active]);
+  // The cell count the size is expected to give, asked as Full mode's Mesh panel asks (debounced, and
+  // only while this card is open): the number is what tells a 5-second mesh from a 20-minute one.
+  const connected = useStore((s) => s.connected);
+  const execute = useStore((s) => s.execute);
+  const [estimate, setEstimate] = useState<string>("");
+  useEffect(() => {
+    if (!connected || active || fluidId === null) return;
+    let alive = true;
+    const timer = setTimeout(() => {
+      void execute("mesh.estimate", {}, { silent: true })
+        .then((answer) => {
+          if (!alive) return;
+          const a = answer as { ok?: boolean; low?: number; high?: number; over?: boolean };
+          setEstimate(a.ok === true && typeof a.low === "number" && typeof a.high === "number" ? `about ${kCells(a.low)} to ${kCells(a.high)} in all${a.over === true ? " (over the limit)" : ""}` : "");
+        })
+        .catch(() => alive && setEstimate(""));
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [settings, fluidId, connected, active, execute]);
   const layers = layersOf(settings);
   const cores = coresOf(settings);
   const meshers = useMeshContext((c) => c.meshers);
@@ -128,9 +161,13 @@ export default function MeshCard({ step }: { step: GuidedStep }) {
           </select>
         </label>
       )}
-      {!followsShape(mesherId) && <Note tip="blockMesh fills the bounding box; snappyHexMesh and the cfMesh types follow the part's surfaces.">Meshes the bounding box, not the shape</Note>}
+      {!followsShape(mesherId) && <Note tip="blockMesh fills the bounding box; snappyHexMesh, the cfMesh types and Gmsh follow the part's surfaces.">Meshes the bounding box, not the shape</Note>}
       <FinenessSlider box={box} baseSize={baseSize} disabled={action.busy || active} onCommit={(size) => void action.run(() => configureMesh({ base_size: size }))} />
-      {baseSize !== null && <Note>{level === null ? "Custom size" : WORDS[level]} · {lengthText(baseSize)} cells</Note>}
+      {baseSize !== null && (
+        <Note>
+          {level === null ? "Custom size" : WORDS[level]} · {lengthText(baseSize)} cells{estimate !== "" && !done ? ` · ${estimate}` : ""}
+        </Note>
+      )}
       <Switch
         checked={layers > 0}
         label="Boundary layers"
@@ -180,7 +217,8 @@ export default function MeshCard({ step }: { step: GuidedStep }) {
           </Button>
         )}
       </div>
-      {!generate.enabled && !active && <Note>{generate.reason}</Note>}
+      {preparing && !active && <MeshPreparing />}
+      {!generate.enabled && !active && !preparing && <Note>{generate.reason}</Note>}
       {active && (
         <div className="mesh-bar" role="progressbar" aria-label="Mesh progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={indeterminate || progress.fraction === null ? undefined : Math.round(progress.fraction * 100)} data-indeterminate={indeterminate} data-tone="busy">
           <span style={{ width: `${Math.round((progress.fraction ?? 0) * 100)}%` }} />

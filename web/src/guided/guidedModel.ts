@@ -1,6 +1,8 @@
 /**
- * The flow strip's model: where the case stands, as six steps (Geometry, Fluid, Boundaries, Mesh, Run,
- * Results), each with a state dot and a one-line hint, and the step that comes next.
+ * The flow strip's model: where the case stands, as seven steps (Geometry, Fluid, Boundaries, Mesh, Run,
+ * Results, Optimise), each with a state dot and a one-line hint, and the step that comes next. The last
+ * is optional: it is a door to shape optimisation and parametric studies, never the step the app opens by
+ * itself.
  *
  * One pure function over what the stores already know (the tree, the last `setup.check`, the mesh
  * result, the run records, the results), so every state is tested in Node and the strip and the cards
@@ -16,12 +18,13 @@
  */
 import type { NodeSummary, SetupCheck } from "../api/types";
 import { formatCount, type MeshPhase } from "../panels/meshPanelModel";
+import type { Stage } from "../state/store";
 import { isRunActive, type RunSummary } from "../panels/runApi";
 import { stateLine, type Tone } from "../panels/runPanelModel";
 import { fluidBody, readBodies, readBoundaries, readCase, readFluidRegion, type Body, type FoamCase } from "./guidedTree";
 
-export type GuidedStepId = "geometry" | "fluid" | "boundaries" | "mesh" | "run" | "results";
-export const GUIDED_STEPS: readonly GuidedStepId[] = ["geometry", "fluid", "boundaries", "mesh", "run", "results"];
+export type GuidedStepId = "geometry" | "fluid" | "boundaries" | "mesh" | "run" | "results" | "optimise";
+export const GUIDED_STEPS: readonly GuidedStepId[] = ["geometry", "fluid", "boundaries", "mesh", "run", "results", "optimise"];
 
 export type StepState = "todo" | "attention" | "done" | "running";
 
@@ -56,6 +59,8 @@ export interface GuidedInput {
   resultsLoaded: boolean;
   /** A field colours the model. */
   fieldChosen: boolean;
+  /** Shape optimisation as the session has seen it, and how many study nodes the project holds. */
+  optimise: { running: boolean; cycles: number; finished: boolean; studies: number };
 }
 
 const LABELS: Record<GuidedStepId, string> = {
@@ -65,9 +70,10 @@ const LABELS: Record<GuidedStepId, string> = {
   mesh: "Mesh",
   run: "Run",
   results: "Results",
+  optimise: "Optimise",
 };
 
-function plural(n: number, one: string, many = `${one}s`): string {
+export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
@@ -134,6 +140,20 @@ function results(runDone: boolean, i: GuidedInput): Omit<GuidedStep, "id" | "lab
   return { state: "done", hint: "Showing the fields" };
 }
 
+/** The optional last step: running or finished shape optimisation, or the studies the project holds. */
+function optimise(runDone: boolean, o: GuidedInput["optimise"]): Omit<GuidedStep, "id" | "label"> {
+  if (!runDone) return { state: "todo", hint: "Run the case first" };
+  if (o.running) return { state: "running", hint: o.cycles > 0 ? `Cycle ${o.cycles + 1}` : "Starting" };
+  if (o.finished) return { state: "done", hint: `Optimised in ${plural(o.cycles, "cycle")}` };
+  if (o.studies > 0) return { state: "done", hint: plural(o.studies, "study", "studies") };
+  return { state: "todo", hint: "Optimise the shape or sweep a parameter" };
+}
+
+/** The first of the six set-up steps that is not done, else Results: the optional step never counts. */
+function firstOpen(steps: readonly GuidedStep[]): GuidedStepId {
+  return steps.find((step) => step.id !== "optimise" && step.state !== "done")?.id ?? "results";
+}
+
 /**
  * The first four steps of an imported OpenFOAM case. The case IS the geometry, the fluid and the
  * boundaries, so those are done the moment it is imported and say where they came from. **The
@@ -160,7 +180,7 @@ function caseSteps(found: FoamCase, i: GuidedInput): [GuidedStepId, Omit<GuidedS
   ];
 }
 
-/** The six steps, their states and hints, and the step to work on next. */
+/** The seven steps, their states and hints, and the set-up step to work on next (never the optional last). */
 export function guidedView(i: GuidedInput): GuidedView {
   const found = readCase(i.tree);
   if (found !== null) {
@@ -169,9 +189,9 @@ export function guidedView(i: GuidedInput): GuidedView {
     const sims = { ...i, runs: i.runs.filter((r) => r.kind !== "mesh") };
     const r = run(head[3][1].state === "done", sims);
     const s = results(r.state === "done", sims);
-    const steps: GuidedStep[] = [...head, ["run", r] as const, ["results", s] as const].map(([id, rest]) => ({ id, label: LABELS[id], ...rest }));
-    const active = steps.find((step) => step.state !== "done")?.id ?? "results";
-    return { steps, active };
+    const o = optimise(r.state === "done", i.optimise);
+    const steps: GuidedStep[] = [...head, ["run", r] as const, ["results", s] as const, ["optimise", o] as const].map(([id, rest]) => ({ id, label: LABELS[id], ...rest }));
+    return { steps, active: firstOpen(steps) };
   }
   const bodies = readBodies(i.tree);
   const g = geometry(i, bodies);
@@ -187,10 +207,10 @@ export function guidedView(i: GuidedInput): GuidedView {
     ["mesh", m],
     ["run", r],
     ["results", s],
+    ["optimise", optimise(r.state === "done", i.optimise)],
   ];
   const steps: GuidedStep[] = parts.map(([id, rest]) => ({ id, label: LABELS[id], ...rest }));
-  const active = steps.find((step) => step.state !== "done")?.id ?? "results";
-  return { steps, active };
+  return { steps, active: firstOpen(steps) };
 }
 
 /** The step a name or an older name refers to ("define" is Boundaries, "import" is Geometry), or null. */
@@ -204,19 +224,25 @@ export function stepFromName(name: string): GuidedStepId | null {
       return "boundaries";
     case "material":
       return "fluid";
+    case "explore":
+    case "study":
+    case "studies":
+    case "optimisation":
+      return "optimise";
     default:
       return null;
   }
 }
 
 /** The stage each step works in (the viewport draws the mesh in Mesh and the fields in Results). */
-export const STEP_STAGE: Record<GuidedStepId, "Geometry" | "Physics" | "Mesh" | "Solve" | "Results"> = {
+export const STEP_STAGE: Record<GuidedStepId, Stage> = {
   geometry: "Geometry",
   fluid: "Physics",
   boundaries: "Physics",
   mesh: "Mesh",
   run: "Solve",
   results: "Results",
+  optimise: "Explore",
 };
 
 /** The step after `id`, or null after the last. */
@@ -233,15 +259,36 @@ export function areaText(area: number): string {
   return `${fmt(area)} m²`;
 }
 
+/** How close a flat face's mean normal must be to an axis to be called "facing +X": about 2°. */
+const AXIS_COS = Math.cos((2 * Math.PI) / 180);
+
+/**
+ * The axis a flat face faces, from the server's mean normal ("+X", "−Z"), or "" when it faces none of them
+ * (a slanted face) or is curved. Read from the description, never guessed: no normal, no direction.
+ */
+export function facingText(look: { flat: boolean; normal?: readonly number[] }): string {
+  const n = look.normal;
+  if (!look.flat || n === undefined || n.length !== 3 || !n.every((v) => Number.isFinite(v))) return "";
+  const length = Math.hypot(n[0]!, n[1]!, n[2]!);
+  if (!(length > 0)) return "";
+  for (let axis = 0; axis < 3; axis++) {
+    const c = n[axis]! / length;
+    if (Math.abs(c) >= AXIS_COS) return `${c > 0 ? "+" : "−"}${"XYZ"[axis]}`;
+  }
+  return "";
+}
+
 /**
  * One row of the Boundaries card's list of faces nobody assigned. With the server's description
- * it says what the face looks like ("Face 7 · flat · 39.3 cm²"), because a bare number did not let
- * a user tell the inlet of a pipe from its outlet without picking each in turn; the flat ones
- * are the candidates for an inlet, an outlet or a symmetry plane.
+ * it says what the face looks like ("Face 7 · flat, facing +X · 39.3 cm²"), because a bare number did
+ * not let a user tell the inlet of a pipe from its outlet without picking each in turn; the flat ones
+ * are the candidates for an inlet, an outlet or a symmetry plane, and the direction tells the two ends
+ * of a pulled sketch apart. The face's number stays: it is the model's own name for the face.
  */
-export function faceRowText(id: number, look?: { area: number; flat: boolean }): string {
+export function faceRowText(id: number, look?: { area: number; flat: boolean; normal?: readonly number[] }): string {
   if (look === undefined) return `Face ${id} · not assigned`;
-  return `Face ${id} · ${look.flat ? "flat" : "curved"} · ${areaText(look.area)}`;
+  const facing = facingText(look);
+  return `Face ${id} · ${look.flat ? "flat" : "curved"}${facing !== "" ? `, facing ${facing}` : ""} · ${areaText(look.area)}`;
 }
 
 /** The two fields the Results card colours by, in plain words, by the run's own field name. */

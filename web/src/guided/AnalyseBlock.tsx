@@ -47,6 +47,8 @@ import {
   type SurfacesReply,
 } from "./analyseModel";
 import { historyAxis } from "./timeModel";
+import { useVariables } from "../panels/variablesControl";
+import { prettyUnits } from "../panels/variablesModel";
 import "./linePlot.css";
 import "./analyse.css";
 
@@ -191,7 +193,13 @@ export default function AnalyseBlock() {
     if (field === "" && shownField !== NO_FIELD) setField(shownField);
   }, [field, shownField]);
 
-  const fields = useMemo(() => (info === null ? [] : fieldChoices(info.fields, info.functions)), [info]);
+  // Every variable the run can show (stored, derived and the user's functions), from the catalogue; the
+  // surfaces' own list until the catalogue has answered.
+  const catalogue = useVariables((s) => s.reply?.variables ?? null);
+  const fields = useMemo(() => {
+    if (catalogue !== null) return catalogue.filter((v) => v.available).map((v) => ({ value: v.name, label: `${v.label}${v.units ? ` (${prettyUnits(v.units)})` : ""}` }));
+    return info === null ? [] : fieldChoices(info.fields, info.functions);
+  }, [catalogue, info]);
   const fieldValue = fields.some((f) => f.value === field) ? field : (fields[0]?.value ?? "");
 
   const common = useCallback(
@@ -230,13 +238,16 @@ export default function AnalyseBlock() {
       });
   };
 
-  // A tab opens on its answer: the first press of a tab computes it with the defaults.
+  // A tab answers as soon as it opens, and again whenever its surfaces, field, axis, bins or the slice
+  // change (a moment after the last change), so what is on screen is never an answer to an older question
+  // and an error from an earlier choice does not stay after the choice has changed.
   useEffect(() => {
-    if (info === null || tab === null || tab === "functions") return;
-    const empty = (tab === "report" && report === null) || (tab === "xy" && plot === null) || (tab === "histogram" && hist === null) || (tab === "history" && history === null);
-    if (empty && chosen.length > 0) compute();
+    if (info === null || tab === null || tab === "functions" || chosen.length === 0) return;
+    if (tab === "history" && history !== null) return;
+    const timer = window.setTimeout(compute, 250);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [info, tab]);
+  }, [info, tab, chosen, fieldValue, axis, bins, plane]);
 
   const saveFunction = () => {
     if (ask === null) return;
@@ -316,15 +327,8 @@ export default function AnalyseBlock() {
     </div>
   );
 
-  const computeButton = (
-    <div className="guided-actions">
-      <Tooltip label="Compute again with these surfaces and this field" side="top">
-        <Button onClick={compute} aria-disabled={busy || chosen.length === 0 || undefined} data-ws="analyse-compute">
-          {busy ? "Computing…" : "Compute"}
-        </Button>
-      </Tooltip>
-    </div>
-  );
+  // The answer follows the choices by itself; this says when it is on its way.
+  const computeButton = busy ? <Note tip="The server is computing the answer for these surfaces and this field">Computing…</Note> : null;
 
   return (
     <div className="analyse" data-ws="guided-analyse">

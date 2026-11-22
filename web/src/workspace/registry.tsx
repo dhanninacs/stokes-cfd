@@ -10,6 +10,7 @@ import type { Stage } from "../state/store";
 import {
   Box,
   ChartScatter,
+  Target,
   Cpu,
   Gauge,
   LayoutGrid,
@@ -26,6 +27,7 @@ import {
   AppWindow,
   FolderOpen,
   ShieldCheck,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import TreePanel from "../panels/TreePanel";
@@ -35,6 +37,8 @@ import { OutputPanel } from "../panels/OutputDrawer";
 // the two panels' default places come from the workspace document (stokes/workspace/defaults.py).
 import DesignTable from "../panels/explore/DesignTable";
 import Plots from "../panels/explore/Plots";
+import OptimisePanel from "../panels/explore/OptimisePanel";
+import FastPanel from "../panels/FastPanel";
 import "../panels/explore/actions";
 import { ModeIsland, ViewIsland } from "../app/Islands";
 import {
@@ -117,6 +121,8 @@ const MemoProperties = memo(PropertiesPanel);
 const MemoOutput = memo(OutputPanel);
 const MemoDesignTable = memo(DesignTable);
 const MemoPlots = memo(Plots);
+const MemoOptimise = memo(OptimisePanel);
+const MemoFast = memo(FastPanel);
 
 const panels = new Map<string, PanelDef>([
   [
@@ -141,6 +147,18 @@ const panels = new Map<string, PanelDef>([
   [
     "plots",
     { kind: "panel", id: "plots", title: "Plots", icon: ChartScatter, component: MemoPlots, defaultPlace: "right", width: [240, 720], height: [240, 4096], stages: ["Explore"],
+    grow: false },
+  ],
+  // Gradient-based shape optimisation of a part made with Create (ADR-0038).
+  [
+    "optimise",
+    { kind: "panel", id: "optimise", title: "Optimise", icon: Target, component: MemoOptimise, defaultPlace: "right", width: [280, 520], height: [240, 4096], stages: ["Explore"],
+    grow: false },
+  ],
+  // The GPU preview (ADR-0047): solves on this computer's GPU while the shapes are edited.
+  [
+    "fast",
+    { kind: "panel", id: "fast", title: "Fast mode", icon: Zap, component: MemoFast, defaultPlace: "right", width: [260, 480], height: [240, 4096], stages: ["Geometry", "Solve"],
     grow: false },
   ],
 ]);

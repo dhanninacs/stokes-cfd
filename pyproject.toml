@@ -39,6 +39,7 @@ extract = ["vtk>=9.4"]
 cad = ["cadquery-ocp>=7.8"]
 explore = ["pymoo>=0.6", "SALib>=1.5.1", "scikit-learn>=1.5"]
 materials = ["CoolProp>=8.0", "cantera>=3.2"]
+fast = ["wgpu>=0.33"]
 dev = [
   "msgpack>=1.1",
   "fastapi>=0.115",
@@ -49,6 +50,7 @@ dev = [
   "scikit-learn>=1.5",
   "CoolProp>=8.0",
   "cantera>=3.2",
+  "wgpu>=0.33",
   "httpx>=0.27",
   "pytest>=8",
   "hypothesis>=6",
@@ -147,13 +149,13 @@ explicit_package_bases = true
 exclude = '^tools/(bench_.*|measure_browser_load|test_interactions|test_outline|test_gui_flow|test_mesh_find|fake_results)\.py$'
 
 [[tool.mypy.overrides]]
-module = ["pint", "pint.*", "lark", "lark.*", "msgpack", "piplicenses", "vtkmodules.*", "pyqtgraph", "pyqtgraph.*", "OCP", "OCP.*", "scipy", "scipy.*", "yaml"]
+module = ["pint", "pint.*", "lark", "lark.*", "msgpack", "piplicenses", "vtkmodules.*", "pyqtgraph", "pyqtgraph.*", "OCP", "OCP.*", "scipy", "scipy.*", "yaml", "wgpu", "wgpu.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # VTK-facing modules: the `vtkmodules.*` stubs type the C++ classes but not the free functions, so
 # `vtk_to_numpy` and friends read as untyped. The alternative is a `# type: ignore` on every call.
-module = ["stokes_agent.extract", "stokes_agent.fidelity"]
+module = ["stokes_agent.extract", "stokes_agent.fidelity", "stokes_agent.meshcut", "stokes_agent.walk"]
 disallow_untyped_calls = false
 
 [[tool.mypy.overrides]]
@@ -172,6 +174,7 @@ markers = [
   "perf: performance budget tests",
   "ui: needs PySide6, runs offscreen",
   "engine: needs an OpenFOAM installation (set STOKES_ENGINE_TESTS=1)",
+  "gpu: needs a hardware GPU adapter through wgpu (skipped without one, or with STOKES_GPU_TESTS=0)",
   "slow: longer than ten seconds",
 ]
 filterwarnings = ["error::DeprecationWarning:stokes.*"]

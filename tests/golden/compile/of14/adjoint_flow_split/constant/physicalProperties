@@ -1,0 +1,15 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "constant";
+    object          physicalProperties;
+}
+
+viscosityModel  constant;
+
+nu              1.5e-05;
+
+lambda          0;
+
+alphaMax        0;

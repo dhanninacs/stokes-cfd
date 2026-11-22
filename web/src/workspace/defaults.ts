@@ -59,6 +59,12 @@ export const DEFAULT_SHORTCUTS: Record<string, string | string[]> = {
   "view.projection": "O",
   "view.mode.cycle": "V",
   "view.nav.cycle": "Shift+N",
+  // The modeller's letters (review B10): a `build` action has a handler only while the build ribbon
+  // is open, and comes first, so the same letter reaches Section, Measure or Paint otherwise.
+  "build.sketch": "S",
+  "build.pull": "P",
+  "build.move": "M",
+  "build.combine": "C",
   "view.section": "S",
   "view.measure": "M",
   // **The package-two chords** (claude-win2 approved 2026-10-17). Letters fire only while the
@@ -83,6 +89,13 @@ export const DEFAULT_SHORTCUTS: Record<string, string | string[]> = {
   "prepare.extractFluid": [],
   "prepare.boolean": [],
   "prepare.repair": [],
+  // The implicit modeller (ADR-0035): no default chords; app/CreateMenu.tsx has the handlers.
+  "create.sketch": [],
+  "create.shape": [],
+  "create.transform": [],
+  "create.combine": [],
+  "create.pattern": [],
+  "create.modify": [],
   "palette.open": "Ctrl+K",
   "history.undo": "Ctrl+Z",
   "history.redo": ["Ctrl+Y", "Ctrl+Shift+Z"],
@@ -168,7 +181,7 @@ export function defaultLayout(): LayoutSpec {
     // **The stage panels are HIDDEN, not placed** (the owner's "remove the right strip"). `hidden` is
     // where a panel that exists and is not drawn is listed, so every built-in is accounted for once -
     // which is what the preset test checks - while nothing is drawn on the right.
-    hidden: ["properties", "mesh", "conditions", "solve", "results", "plots"],
+    hidden: ["properties", "mesh", "conditions", "solve", "results", "plots", "optimise"],
   };
 }
 

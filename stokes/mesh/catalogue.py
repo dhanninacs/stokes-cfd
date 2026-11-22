@@ -54,6 +54,7 @@ class MesherSpec:
             "why": self.why,
             "output_structures": list(self.output_structures),
             "parallel": self.parallel,
+            "needs": list(mesher_needs(self.id)),
             "layers": self.layers,
             "layers_why": self.layers_why,
         }
@@ -148,21 +149,20 @@ MESHERS: tuple[MesherSpec, ...] = (
         "threads",
         layers=True,
     ),
-    # **Built** (ADR-0007 decision 5): Gmsh as a process on a generated script, reading the part's
-    # own B-rep so curved faces stay curved and each tag becomes a patch. Tetrahedra only; its
-    # threads come from `-nt`. Measured on a pipe tee at 3 mm: 69 k cells, checkMesh OK.
+    # **Gmsh, as a separate program** (ADR-0043): a `.geo` script over the per-tag surfaces, then
+    # `gmshToFoam`. Tetrahedra, with prism layers grown along the wall normals when layers are
+    # asked for. Measured on the 20x10x10 mm duct and a 10 mm pipe; the layer limit at sharp
+    # inside corners is in the driver's docstring.
     MesherSpec(
         "gmsh",
-        "Tetrahedral (Gmsh)",
+        "Tetrahedral + prism layers (Gmsh)",
         True,
         ("part",),
-        "tetrahedra from the part's own CAD surfaces, sized by curvature: fewer cells than "
-        "cfMesh's tetrahedral type. Meshes a part's own volume; needs a CAD (STEP) part.",
+        "tetrahedra that follow any shape, with prism layers on the walls: every wall grows the "
+        "same layers, and under layers each opening must be flat. Meshes a part's own volume.",
         ("tetrahedral",),
-        "threads",
-        layers=False,
-        layers_why="Gmsh cannot grow boundary layers in this version of Stokes. Choose "
-        "snappyHexMesh, hex-dominant, poly-hexcore or polyhedral for layers.",
+        "serial",
+        layers=True,
     ),
 )
 
@@ -174,6 +174,23 @@ def mesher(mesher_id: str) -> MesherSpec:
             return spec
     known = ", ".join(spec.id for spec in MESHERS)
     raise MeshInvalid(f"no mesher {mesher_id!r}; known: {known}")
+
+
+def mesher_needs(mesher_id: str) -> tuple[str, ...]:
+    """The programs a mesher runs beyond the ones every supported install has, in run order.
+
+    Taken from the cfMesh and Gmsh drivers' own tables, so the names a host is asked about are the
+    names the job will launch. blockMesh and snappyHexMesh ship with every install Stokes drives,
+    so they need nothing extra. An unknown id gives nothing rather than an error: this is a
+    question about a host, and `mesher()` is where a wrong id is refused.
+    """
+    if mesher_id == "gmsh":
+        from stokes.mesh.drivers.gmsh import PROGRAMS
+
+        return PROGRAMS
+    from stokes.mesh.drivers.cfmesh import VOLUME_STEPS
+
+    return VOLUME_STEPS.get(mesher_id, ())
 
 
 def grows_layers(mesher_id: str) -> bool:

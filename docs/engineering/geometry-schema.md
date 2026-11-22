@@ -71,7 +71,7 @@ name).
   part of six faces, not six parts. The faces are not sewn: that changes the topology, so it is a
   repair operation the user asks for (decision 5). A file that has a solid keeps its loose faces
   as the walk found them, one `shell` part each.
-- The `part` node's `family` parameter (`brep` \| `mesh`, default `brep`) is what the import read
+- The `part` node's `family` parameter (`brep` \| `mesh` \| `implicit`, default `brep`; `implicit` parts are made by the implicit operations of ADR-0035, see `implicit-schema.md`) is what the import read
   the source as, written at the import; `units` is the length unit the source declares, or the
   import's for a file without one (the mesh is in metres, scaled from it). A solid the worker
   reports as `mesh` sets the family itself, so a re-import (undo-redo, a restored project) keeps it.
@@ -434,10 +434,11 @@ with `units: "mm"`; meshes stay in metres.
 /geometry/parts/<name>       the outputs: part nodes with derived = the op id
 ```
 
-Twelve types, declared in `stokes/geometry/model.py` with every parameter their briefs name:
-`primitive`, `boolean` (T-024, built), `enclosure` (T-025, built), `extract_fluid` (T-026, built),
-`heal`, `sew`, `orient`, `solidify` (T-027, built), `cap`, `unify`, `slivers`, `defeature`
-(T-028, built). All twelve are built; a type whose module is not built yet is refused with
+Thirteen B-rep types, declared in `stokes/geometry/model.py` with every parameter their briefs
+name: `primitive`, `boolean` (T-024, built), `enclosure` (T-025, built), `extract_fluid` (T-026,
+built), `heal`, `sew`, `orient`, `solidify` (T-027, built), `cap`, `unify`, `slivers`, `defeature`
+(T-028, built) and `transform` (built). All thirteen are built (the implicit modeller's types are in
+`implicit-schema.md`); a type whose module is not built yet is refused with
 `geometry.op_invalid` "not built yet", and
 `operation.types` says `built: false`. `OPERATION_TYPES` gives what the framework needs besides
 the parameters: `min_inputs` (a primitive takes none), `part_params` (json lists of further
@@ -462,6 +463,7 @@ parts the run reads, loaded, hidden and watched like the inputs: a boolean's `to
 | `unify` | | `linear_tolerance` (length, 1e-6 m: the distance within which two faces count as one surface); `angular_tolerance` (angle, 1e-3 rad: the angle within which they do); `keep` (a tag reference: faces that stay apart — `ShapeUpgrade_UnifySameDomain.KeepShapes` needs their edges with them, which the run adds, because a face alone in the map is still merged on this OCP). `ShapeUpgrade_UnifySameDomain(shape, True, True, False)`. One output `<first input>_unified`, its faces following `History()`. Report: `faces_before`, `faces_after`, `edges_before`, `edges_after` (the edges are `TopExp.MapShapes`, each once) |
 | `slivers` | | `size` (length, 1e-4 m: the face size and edge length below which a sliver goes); `holes` (bool, false: also remove every inner wire whose loop bounds less than `size²`, through `ShapeUpgrade_RemoveInternalWires`). `ShapeFix_FixSmallFace` (`FixSpotFace`, `FixStripFace`), then `ShapeFix_Wireframe` (`ModeDropSmallEdges`), then a `ShapeFix_Shape` at OCCT's default precision; the three share one re-shape context, so the faces follow it. One output `<first input>_slivered`. Report: `spot_faces`, `strip_faces`, `small_edges` and `wires_removed` (this OCP returns the shape from `FixSpotFace`/`FixStripFace` rather than OCCT's flag, so the faces each step dropped are counted as the change in the face count), `faces_before`, `faces_after` |
 | `defeature` | | `faces` (json members: the faces to remove, resolved against the inputs); `unify` (bool, true: unify the faces the removal left on one surface, its history merged into the defeaturing's with `BRepTools_History.Merge`, so a tag reaches the merged face). `BRepAlgoAPI_Defeaturing` with `SetRunParallel(False)` and `SetToFillHistory(True)`. One output `<first input>_defeatured`; `geometry.op_failed` when OCCT cannot remove them (this OCP binds no `BRepAlgoAPI_Algo.DumpWarnings`, so the error carries no OCCT text), and `geometry.op_invalid` when no face was picked. Report: `faces_removed`, `faces_before`, `faces_after` |
+| `transform` | | the parameters of `implicit_transform`, with the same meaning: `kind` translate \| rotate \| mirror \| scale; `offset` (vector of lengths: translate); `axis` x \| y \| z (rotate: the axis turned about; mirror: the plane's normal); `angle` (angle, 0: rotate, counter-clockwise looking down the axis); `centre` (vector of lengths: the fixed point of rotate and scale, a point on the mirror plane); `factor` (dimensionless, 1: the uniform scale, above 0). `BRepBuilderAPI_Transform` with `Copy` set. One output **per input**, named after it; the topology is kept, so face, edge and vertex ids map one to one and every tag follows the body. A mesh-only part is refused (`geometry.mesh_only`): its triangles are not moved yet. Report: `kind`, `check_before`, `check_after` (one per output) |
 
 An array with a dimension is stored in SI; `operation.create` also takes its items as quantity
 text (`"20 [mm]"`). The op node's status: `new` until its first run ends, `ok`, `stale` (a

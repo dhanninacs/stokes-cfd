@@ -35,6 +35,17 @@ def stop_function() -> FuncInclude:
     return FuncInclude(STOP_FUNC, "Stop writes the current iteration and ends the run")
 
 
+def purge_write(snap: SolveSnapshot) -> int:
+    """How many written times the solver keeps: every one for a transient run, the last two of a
+    steady one.
+
+    A transient run's written times are its result (playback, the animation export, a time
+    series), and the user chose how often it writes; keeping only two left playback with two
+    frames. A steady run's iterations are not a result, and a long one must not fill the disk.
+    """
+    return 0 if snap.transient else 2
+
+
 def transient_write(snap: SolveSnapshot) -> list[Entry]:
     """`writeControl`/`writeInterval`, and the adaptive step's `adjustTimeStep`/`maxCo`.
 

@@ -1,0 +1,48 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "system";
+    object          controlDict;
+}
+
+application     adjointFoam;
+
+startFrom       startTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         400;
+
+deltaT          1;
+
+writeControl    timeStep;
+
+writeInterval   400;
+
+purgeWrite      2;
+
+writeFormat     ascii;
+
+writePrecision  8;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable false;
+
+functions
+{
+    #includeFunc stopAtFile(action=writeNow)  // Stop writes the current iteration and ends the run
+    #includeFunc patchFlowRate(patch=inlet)  // volumetric flow rate through inlet
+    #includeFunc patchAverage(patch=inlet, fields=(p))  // area-averaged p (p/rho) on inlet
+    #includeFunc patchFlowRate(patch=out1)  // volumetric flow rate through out1
+    #includeFunc patchAverage(patch=out1, fields=(p))  // area-averaged p (p/rho) on out1
+    #includeFunc patchFlowRate(patch=out2)  // volumetric flow rate through out2
+    #includeFunc patchAverage(patch=out2, fields=(p))  // area-averaged p (p/rho) on out2
+}

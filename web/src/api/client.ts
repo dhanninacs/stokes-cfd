@@ -49,6 +49,22 @@ export type EventListener = (event: string, data: Record<string, unknown>) => vo
 export type StatusListener = (connected: boolean) => void;
 
 /**
+ * Hands one server event to every listener, each on its own. **A listener that throws must not
+ * cost the others their event** (the store, the results and the Optimise panel all listen on the
+ * same socket), and its error is logged with the event's name and the stack, so the host's log
+ * says where it happened rather than only "Uncaught TypeError" (Windows walkthrough, 2026-11-13).
+ */
+export function dispatchEvent(listeners: Iterable<EventListener>, event: string, data: Record<string, unknown>): void {
+  for (const fn of [...listeners]) {
+    try {
+      fn(event, data);
+    } catch (err) {
+      console.error(`[stokes] a listener of ${event} failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    }
+  }
+}
+
+/**
  * Read a `/api/geometry/batch` reply.
  *
  * The other half of the format is `_batch_frame` in `stokes/server/app.py`: a uint32 count,
@@ -171,7 +187,7 @@ export class StokesClient {
       // project, so a first connect shows it at once. A client that reconnects already holds the
       // project, and acting on it would reset the run, the study and the tree's expansion for nothing.
       if (msg.event === "project.opened" && data.replay === true && this.dropped) return;
-      this.eventListeners.forEach((fn) => fn(msg.event as string, data));
+      dispatchEvent(this.eventListeners, msg.event, data);
       return;
     }
     const id = msg.id as number | undefined;

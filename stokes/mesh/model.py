@@ -56,10 +56,13 @@ MESHERS: tuple[str, ...] = (
 #: The meshers served by the cfMesh driver (ADR-0032): one joined surface, `system/meshDict`.
 CFMESH_MESHERS: tuple[str, ...] = ("cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex")
 
+#: The meshers served by the Gmsh driver (ADR-0043): one STL per tag, a `.geo` script.
+GMSH_MESHERS: tuple[str, ...] = ("gmsh",)
+
 #: The meshers that follow the part's own surfaces - one surface per boundary tag, per-surface
 #: sizes and wall layers - as opposed to blockMesh's bounding box. The basis, the task rows and the
 #: front end's sizing and layer pages all ask this one question.
-SURFACE_MESHERS: tuple[str, ...] = ("snappy", *CFMESH_MESHERS, "gmsh")
+SURFACE_MESHERS: tuple[str, ...] = ("snappy", *CFMESH_MESHERS, *GMSH_MESHERS)
 
 #: Where the domain comes from. ``region`` joins this with snappy (T-150), which is why it is an
 #: enum and not a boolean.

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 _INCOMP = "of14.incompressibleFluid"
 _FLUID = "of14.fluid"
 _BOTH = (_INCOMP, _FLUID)
-#: coupledSimpleFoam (ADR-0035): the models its README says were exercised - laminar, k-epsilon and
+#: coupledSimpleFoam (ADR-0044): the models its README says were exercised - laminar, k-epsilon and
 #: k-omega SST. It builds the same incompressible momentum-transport family, so others would
 #: construct, but they are untested with the coupled block and are not offered.
 _COUPLED = "coupled.simple"
@@ -50,7 +50,9 @@ def _les(name: str, fields: tuple[str, ...] = ()) -> TurbulenceSpec:
 
 
 MODELS: tuple[TurbulenceSpec, ...] = (
-    TurbulenceSpec("laminar", "laminar", (*_BOTH, _COUPLED), (), ()),
+    # Laminar is also the one model of the adjoint engine (ADR-0038): its legacy solver diverges
+    # with a frozen turbulence model (measured on FoamWin, 2026-11-12).
+    TurbulenceSpec("laminar", "laminar", (*_BOTH, "of14.adjoint", _COUPLED), (), ()),
     _ras("kEpsilon", ("k", "epsilon"), engines=(*_BOTH, _COUPLED)),
     _ras("RNGkEpsilon", ("k", "epsilon")),
     _ras("realizableKE", ("k", "epsilon")),

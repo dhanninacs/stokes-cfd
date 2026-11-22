@@ -210,7 +210,7 @@ describe("SettingsNodeFields server render", () => {
       const basic = html.slice(0, html.indexOf('data-ws="advanced"'));
       expect(basic).toContain("Flow model");
       expect(basic).toContain("Iterations");
-      expect(basic).not.toContain("Residual target");
+      expect(basic).toContain("Residual target");
       expect(basic).not.toContain("Execution");
       expect(html).toMatch(/<details class="basic-advanced" data-ws="advanced" data-type="solver_settings">/);
       expect(html).toContain("Residual target");

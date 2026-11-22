@@ -42,6 +42,10 @@ STEP_TO_TASKS: dict[str, tuple[str, ...]] = {
     "symmetryType": ("volume",),
     # The tetrahedral and hex-dominant types' snap (`cfmesh.SNAP_STEP`), one per planar plane.
     "flattenSymmetry": ("volume",),
+    # ADR-0043: Gmsh, its conversion and the patch types it needs set.
+    "gmsh": ("volume",),
+    "gmshToFoam": ("volume",),
+    "patchType": ("volume",),
     "checkMesh": ("quality",),
 }
 
@@ -586,6 +590,8 @@ def _region_parts(tag: Any) -> set[str]:
         return set()
     found = set()
     for member in stored if isinstance(stored, list) else []:
-        if isinstance(member, dict) and member.get("faces") is None and member.get("part"):
+        # A whole body is stored as `"faces": "all"` (`dump_members`); an absent key reads the same.
+        whole = isinstance(member, dict) and member.get("faces") in (None, "all")
+        if whole and member.get("part"):
             found.add(str(member["part"]))
     return found

@@ -157,6 +157,8 @@ def job_path(job_dir: Path, rel: object) -> Path:
 #: ``postProcessing/``.
 POSTPROCESSING_PREFIX = "postProcessing/"
 _POST_PUNCTUATION = "(),=%"
+#: A region's folder under ``postProcessing/``: an OpenFOAM word.
+_REGION_SEGMENT = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 
 
 def check_result_path(rel: object) -> str:
@@ -166,6 +168,9 @@ def check_result_path(rel: object) -> str:
 
     * only the **segment directly after** ``postProcessing/`` may contain the punctuation — a
     file deeper in that tree is written by OpenFOAM and has an ordinary name;
+    * a multi-region case (ADR-0042) writes ``postProcessing/<region>/<name>/<time>/<file>``:
+      when the first segment is a plain region word and the next carries a ``(``, that next one
+      is the function name, and it alone may carry the punctuation;
     * ``..`` is still refused as a segment, and a leading ``/`` with it;
     * **containment on the resolved path still applies**, which is the check that actually stops an
       escape — a symlinked directory walked through is refused by `job_path` whatever this function
@@ -186,11 +191,14 @@ def check_result_path(rel: object) -> str:
         if not segment:
             raise JobPathError(f"{rel!r} has an empty component")
     # Every segment except the function name must be a plain name; the function name may carry the
-    # punctuation OpenFOAM itself put there.
-    for segment in (segments[0], *segments[2:]):
-        if not REL_PATH_RE.match(segment):
+    # punctuation OpenFOAM itself put there. It is the first segment, or the second after a region.
+    at = 1
+    if len(segments) > 3 and _REGION_SEGMENT.match(segments[1]) and "(" in segments[2]:
+        at = 2
+    for index, segment in enumerate(segments):
+        if index != at and not REL_PATH_RE.match(segment):
             raise JobPathError(f"{rel!r} has a component that is not a plain name: {segment!r}")
-    name = segments[1]
+    name = segments[at]
     if not name or any(ch in name for ch in "/\\"):
         raise JobPathError(f"{rel!r} has an unusable function name")
     if re.search(r"%(?![0-9A-F]{2})", name):

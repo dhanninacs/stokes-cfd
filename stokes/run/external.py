@@ -70,6 +70,7 @@ SOLVERS = frozenset(
         "laplacianFoam",
         "shallowWaterFoam",
         "adjointShapeOptimisationFoam",
+        "adjointFoam",
         "financialFoam",
         "dsmcFoam",
         "mdFoam",

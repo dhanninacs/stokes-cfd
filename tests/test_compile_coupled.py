@@ -1,4 +1,4 @@
-"""The `coupled.simple` engine (ADR-0035): catalogue, writer, steps, agent boundary, refusals.
+"""The `coupled.simple` engine (ADR-0044): catalogue, writer, steps, agent boundary, refusals.
 
 The real solve is `tests/engine/test_coupled_heated_duct_engine.py` (heatedDuct, Nu = 7.54).
 """
@@ -191,7 +191,7 @@ def test_an_mpi_coupled_step_runs_where_petsc_is_built(
 ) -> None:
     """The MPI solve passes on a POSIX host and on a FoamWin whose coupledSimpleFoam is the PETSc
     build in `bin/msmpi`; with only the serial build in `bin` it is refused before anything
-    starts, naming what to do instead (ADR-0035 decision 10)."""
+    starts, naming what to do instead (ADR-0044 decision 10)."""
     from stokes_agent import jobs
     from stokes_agent.jobs import JobBadParams, Step
 

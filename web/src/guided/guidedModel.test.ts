@@ -65,6 +65,7 @@ function input(over: Partial<GuidedInput> = {}): GuidedInput {
     runs: [],
     resultsLoaded: false,
     fieldChosen: false,
+    optimise: { running: false, cycles: 0, finished: false, studies: 0 },
     ...over,
   };
 }
@@ -77,16 +78,16 @@ const PIPE = [
 ];
 
 describe("the flow strip's steps", () => {
-  it("lists the six steps in the order of the work", () => {
+  it("lists the seven steps in the order of the work", () => {
     expect(guidedView(input()).steps.map((s) => s.id)).toEqual([...GUIDED_STEPS]);
-    expect(guidedView(input()).steps.map((s) => s.label)).toEqual(["Geometry", "Fluid", "Boundaries", "Mesh", "Run", "Results"]);
+    expect(guidedView(input()).steps.map((s) => s.label)).toEqual(["Geometry", "Fluid", "Boundaries", "Mesh", "Run", "Results", "Optimise"]);
   });
 
   it("an empty project waits for an import", () => {
     const view = guidedView(input());
     expect(view.active).toBe("geometry");
     expect(view.steps[0]).toMatchObject({ state: "todo", hint: "Import a CAD file" });
-    expect(states(input())).toEqual({ geometry: "todo", fluid: "todo", boundaries: "todo", mesh: "todo", run: "todo", results: "todo" });
+    expect(states(input())).toEqual({ geometry: "todo", fluid: "todo", boundaries: "todo", mesh: "todo", run: "todo", results: "todo", optimise: "todo" });
   });
 
   it("no project says so, and an import in flight is running", () => {
@@ -170,8 +171,54 @@ describe("the flow strip's steps", () => {
     expect(guidedView(input(finished)).steps[5]).toMatchObject({ state: "todo", hint: "Show the fields of the run" });
     expect(guidedView(input({ ...finished, resultsLoaded: true })).steps[5].state).toBe("attention");
     const all = guidedView(input({ ...finished, resultsLoaded: true, fieldChosen: true }));
-    expect(all.steps.every((s) => s.state === "done")).toBe(true);
+    expect(all.steps.slice(0, 6).every((s) => s.state === "done")).toBe(true);
+    // The optional step is never the one the app opens by itself.
+    expect(all.steps[6]).toMatchObject({ id: "optimise", state: "todo" });
     expect(all.active).toBe("results");
+  });
+
+  describe("the optional Optimise step", () => {
+    const ran = { ...SETUP_DONE, meshPhase: "done" as const, meshCells: 10, runs: [{ state: "done" as const, stale: false, iterations: 5, converged: true }], resultsLoaded: true, fieldChosen: true };
+    const optimise = (over: Partial<GuidedInput["optimise"]>, base: Partial<GuidedInput> = ran) => guidedView(input({ ...base, optimise: { running: false, cycles: 0, finished: false, studies: 0, ...over } }));
+
+    it("waits for a finished run", () => {
+      expect(guidedView(input()).steps[6]).toMatchObject({ id: "optimise", label: "Optimise", state: "todo", hint: "Run the case first" });
+      expect(optimise({ running: true }, SETUP_DONE).steps[6]).toMatchObject({ state: "todo", hint: "Run the case first" });
+    });
+
+    it("is todo with its invitation once the run is done", () => {
+      expect(optimise({}).steps[6]).toMatchObject({ state: "todo", hint: "Optimise the shape or sweep a parameter" });
+    });
+
+    it("is running, with the cycle under way", () => {
+      expect(optimise({ running: true }).steps[6]).toMatchObject({ state: "running", hint: "Starting" });
+      expect(optimise({ running: true, cycles: 2 }).steps[6]).toMatchObject({ state: "running", hint: "Cycle 3" });
+    });
+
+    it("is done when an optimisation finished, saying how many cycles", () => {
+      expect(optimise({ finished: true, cycles: 1 }).steps[6]).toMatchObject({ state: "done", hint: "Optimised in 1 cycle" });
+      expect(optimise({ finished: true, cycles: 6, studies: 2 }).steps[6]).toMatchObject({ state: "done", hint: "Optimised in 6 cycles" });
+    });
+
+    it("is done when the project holds studies, and running wins over both", () => {
+      expect(optimise({ studies: 1 }).steps[6]).toMatchObject({ state: "done", hint: "1 study" });
+      expect(optimise({ studies: 3 }).steps[6]).toMatchObject({ state: "done", hint: "3 studies" });
+      expect(optimise({ running: true, finished: true, cycles: 1, studies: 3 }).steps[6].state).toBe("running");
+    });
+
+    it("never becomes the active step, even with every set-up step done and itself todo", () => {
+      expect(optimise({}).active).toBe("results");
+      expect(guidedView(input({ ...ran, resultsLoaded: false })).active).toBe("results");
+      expect(guidedView(input({ ...SETUP_DONE })).active).toBe("mesh");
+    });
+
+    it("an imported case has the step too", () => {
+      const caseTree = node("root", "group", "/", {}, [node("cs", "group", "/cases", {}, [node("c1", "foam_case", "/cases/cavity", { solver: "incompressibleFluid", status: "ready" })])]);
+      const base = { tree: caseTree, runs: [{ state: "done" as const, stale: false, iterations: 9, converged: true }], resultsLoaded: true, fieldChosen: true };
+      expect(optimise({ studies: 1 }, base).steps[6]).toMatchObject({ id: "optimise", state: "done", hint: "1 study" });
+      expect(optimise({}, base).active).toBe("results");
+      expect(guidedView(input({ tree: caseTree })).steps[6]).toMatchObject({ state: "todo", hint: "Run the case first" });
+    });
   });
 });
 
@@ -251,12 +298,16 @@ describe("step names", () => {
     expect(stepFromName("define")).toBe("boundaries");
     expect(stepFromName("import")).toBe("geometry");
     expect(stepFromName("material")).toBe("fluid");
+    expect(stepFromName("study")).toBe("optimise");
+    for (const name of ["explore", "studies", "optimisation", "optimise"]) expect(stepFromName(name)).toBe("optimise");
     expect(stepFromName("nonsense")).toBeNull();
   });
 
   it("chains the steps and names the stage each works in", () => {
     expect(nextStepId("geometry")).toBe("fluid");
-    expect(nextStepId("results")).toBeNull();
+    expect(nextStepId("results")).toBe("optimise");
+    expect(nextStepId("optimise")).toBeNull();
+    expect(STEP_STAGE.optimise).toBe("Explore");
     expect(STEP_STAGE.boundaries).toBe("Physics");
     expect(STEP_STAGE.results).toBe("Results");
   });
@@ -306,6 +357,11 @@ describe("the faces nobody assigned", () => {
     expect(faceRowText(2, { area: 0.0039270, flat: true })).toBe("Face 2 · flat · 39.3 cm²");
     expect(faceRowText(5, { area: 0.0412, flat: false })).toBe("Face 5 · curved · 412 cm²");
     expect(faceRowText(1, { area: 2.45e-5, flat: true })).toBe("Face 1 · flat · 24.5 mm²");
+    // The direction a flat face faces, from the server's mean normal: the two ends of a pulled sketch.
+    expect(faceRowText(3, { area: 0.0012, flat: true, normal: [0, 0, -1] })).toBe("Face 3 · flat, facing −Z · 12 cm²");
+    expect(faceRowText(4, { area: 0.0012, flat: true, normal: [0.9995, 0.01, 0] })).toBe("Face 4 · flat, facing +X · 12 cm²");
+    expect(faceRowText(6, { area: 0.0012, flat: true, normal: [0.7071, 0.7071, 0] })).toBe("Face 6 · flat · 12 cm²");
+    expect(faceRowText(8, { area: 0.0012, flat: false, normal: [0, 0, 1] })).toBe("Face 8 · curved · 12 cm²");
   });
 });
 
@@ -346,6 +402,7 @@ describe("an imported OpenFOAM case", () => {
       ["mesh", "todo"],
       ["run", "todo"],
       ["results", "todo"],
+      ["optimise", "todo"],
     ]);
     expect(view.steps[0].hint).toBe("cavity · incompressibleFluid");
     expect(view.steps[1].hint).toBe("From the case");

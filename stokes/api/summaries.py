@@ -110,6 +110,20 @@ def _head(project: Project, node: Node, path: str, seen: TypeQuantities) -> dict
                 displays[spec.name] = _display(stored.value, dim.si_unit, unit)
         if displays:
             data["displays"] = displays
+    # The components of vectors and maps (ADR-0037) are quantities under dotted names.
+    components = [k for k in params if "." in k and isinstance(node.params.get(k), QuantityValue)]
+    if components:
+        displays = data.setdefault("displays", {})
+        node_spec = project.registry.get(node.type)
+        for name in components:
+            stored = node.params.get(name)
+            if not isinstance(stored, QuantityValue):
+                continue
+            dim = project.param_dimension(node, node_spec.param(name))
+            unit = dim.unit_for(project.display_units) or None
+            displays[name] = _display(stored.value, dim.si_unit, unit)
+        if not displays:
+            del data["displays"]
     return data
 
 

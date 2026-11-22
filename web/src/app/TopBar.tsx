@@ -5,6 +5,7 @@ import { TOPBAR_ITEMS } from "../workspace/registry";
 import { useWorkspace, useWorkspaceReady } from "../workspace/store";
 import type { StageStyle, TopbarItemSpec } from "../workspace/types";
 import { host } from "./host";
+import { FastToggle } from "../fast/FastToggle";
 import { TreeToggle } from "../guided/GuidedControls";
 import { TopBarStrip } from "../guided/GuidedLayer";
 import { TrafficLights, engineLabel } from "./topbarItems";
@@ -195,15 +196,36 @@ export default function TopBar({ hosted }: { hosted: boolean }) {
   }, [fit, shape]);
 
   // The whole bar is the drag region: any press that is not on a control moves the window.
+  //
+  // **The move starts when the pointer moves, not on the press** (walkthrough 2026-11-18): a press
+  // handed the mouse to the system's move loop at once, which swallowed the second click of a
+  // double-click, so double-clicking the bar never maximised as it does on every Windows window. A
+  // press now only arms the move; three pixels of travel with the button held start it, and a press
+  // that does not travel is an ordinary click, so `dblclick` reaches `onDoubleClick` below.
+  const armed = useRef<{ x: number; y: number } | null>(null);
   const onPointerDown = (e: PointerEvent<HTMLElement>) => {
-    if (hosted && e.button === 0 && !isInteractive(e.target)) host.startMove();
+    armed.current = hosted && e.button === 0 && !isInteractive(e.target) ? { x: e.clientX, y: e.clientY } : null;
+  };
+  const onPointerMove = (e: PointerEvent<HTMLElement>) => {
+    const from = armed.current;
+    if (from === null) return;
+    if ((e.buttons & 1) === 0) {
+      armed.current = null;
+      return;
+    }
+    if (Math.abs(e.clientX - from.x) + Math.abs(e.clientY - from.y) < 3) return;
+    armed.current = null;
+    host.startMove();
+  };
+  const disarm = () => {
+    armed.current = null;
   };
   const onDoubleClick = (e: MouseEvent<HTMLElement>) => {
     if (hosted && !isInteractive(e.target)) host.toggleMaximize();
   };
 
   return (
-    <header ref={bar} className="topbar" data-strip={stripShown || undefined} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick}>
+    <header ref={bar} className="topbar" data-strip={stripShown || undefined} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={disarm} onPointerLeave={disarm} onDoubleClick={onDoubleClick}>
       <div className="topbar-left">
         {ready && plan.lights && <TrafficLights />}
         {ready && renderCell(plan.left)}
@@ -213,6 +235,7 @@ export default function TopBar({ hosted }: { hosted: boolean }) {
 
       <div className="topbar-right">
         {/* Guided mode's Tree button (and Ctrl+B): the tree and Details are put away until asked for. */}
+        {ready && <FastToggle />}
         {ready && <TreeToggle />}
         {ready && renderCell(plan.right)}
       </div>

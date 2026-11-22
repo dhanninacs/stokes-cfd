@@ -1,0 +1,8 @@
+# Windows without the Microsoft compiler: build with the LLVM-based toolchain and its bundled
+# linker,
+#   cargo +stable-x86_64-pc-windows-gnullvm build --release --locked
+# These settings apply to the x86_64-pc-windows-gnullvm target only; Linux (and MSVC) builds are
+# unaffected. The binary then needs the toolchain's libunwind.dll beside it or on PATH.
+[target.x86_64-pc-windows-gnullvm]
+linker = "rust-lld"
+rustflags = ["-Clinker-flavor=ld.lld", "-Clink-self-contained=yes"]

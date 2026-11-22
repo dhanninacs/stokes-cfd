@@ -10,6 +10,8 @@ export type BulkAction = "show" | "hide" | "simulate" | "colour" | "delete";
 export interface ChosenRow {
   id: string;
   type: string;
+  /** The node's own name, which the list shows instead of its id (an id is "n_d574fc4b"). */
+  name?: string;
 }
 
 /** The actions valid for a selection of these types, in the order the pane shows them. */

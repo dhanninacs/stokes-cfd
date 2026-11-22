@@ -60,6 +60,8 @@ stokes/            the Python core and host (proprietary)
   geometry/        STEP import (ADR-0014) and M1 selections (ADR-0020: model, selection, topology, fingerprints,
                    checks, export); step (OCP only inside functions), worker (spawned process),
                    store (per-session meshes + events), commands (ImportStep), transport (codec v1/v2), cache, sample part
+  implicit/        implicit geometry (ADR-0035, proposed): expression graph, numpy evaluator, frames,
+                   builders, mesher runner and its checked output reader; stdlib + numpy only   headless
   workspace/       the user-arranged interface (ADR-0015): schema, presets, merge, store   headless
   explore/         design-exploration numerics (ADR-0016): domain/space, sampling, surrogates,
                    sensitivity, pareto, optimise/ (scipy, pymoo, SALib, scikit-learn imported
@@ -74,7 +76,7 @@ web/               the front end (TypeScript, React, three.js) — a client of t
                    theme (custom tokens inline on <html>), Customise mode, Display settings, theme editor
   DESIGN.md        the design contract every UI change is reviewed against
 agent/stokes_agent/  stokes-agent: protocol, server, client, probe   headless, VTK allowed
-native/            C++ kernels (nanobind), built separately
+native/            C++ kernels (nanobind), built separately; implicit-mesh/ is a separate Rust program (ADR-0035)
 tools/             gates and audits (run them, do not bypass them)
 tests/             pytest; perf/ for budgets; fixtures/ public data only
 docs/              decisions (00–06), ADRs, engineering references
@@ -280,6 +282,80 @@ and an explicit spec; T0 time is the scarce resource.
   by kill-on-close Job Objects. Integration-checked on this host with a
   two-rank laminar cavity (blockMesh → decomposePar → foamRun -parallel →
   reconstructPar, reconstructed `U`/`p`/`phi` at 0.025 s and 0.05 s).
+- **Implicit modeller (ADR-0035, proposed; M1.5):** slice 1 is in on the Python side:
+  `stokes.implicit`, the `implicit_primitive`, `implicit_transform` and `implicit_boolean`
+  operations (parts with `family: implicit`), the runner and mesh cache, the Rust licence gate and
+  the `implicit mesher` CI job. The Rust mesher in `native/implicit-mesh` builds and passes its
+  tests on this host (Rust 1.99.1, gnullvm; see its README); copy the binary to its `bin/`. Tests
+  fall back to the numpy reference mesher in `tests/implicit/` without it. The mesher removes the
+  folded triangles dual contouring leaves (`src/unfold.rs`; none left on the bodies measured), and
+  the display mesh shades smooth with sharp creases. In the app: the Create menu (viewport toolbar,
+  Guided Geometry card, palette `create.*`) and kind-aware forms (`web/src/state/implicitFields.ts`). Contract:
+  `docs/engineering/implicit-schema.md`. **ADR-0036 (proposed)** adds the 2D sketcher (`web/src/sketch/`,
+  drawn profiles in `stokes.implicit.profile2d`), split, offset and shell, linear and polar patterns
+  and blended booleans (`stokes.implicit.modify`), and the bottom build ribbon (Sketch, Shape,
+  Transform, Pattern, Combine, Modify). **ADR-0039 (proposed)** makes it direct (`web/src/direct/`):
+  the sketch is registered to the 3D view (camera pinned face-on), Finish pulls at once, a Pull
+  handle with a client-side ghost sets the depth, implicit outputs show a coarse pass first. GUI walkthroughs: `web/build_sketch_gui.mjs`,
+  `web/build_elbow_gui.mjs`, `web/e2e_adjoint_gui.mjs` (Playwright, against a server on an empty project; the second
+  runs the whole path from the start screen to an applied adjoint optimisation, about ten minutes), and
+  `web/e2e_manifold_gui.mjs` (the flow-split manifold to its applied, re-tagged final geometry; `--until-start` stops
+  once the first cycle runs).
+- **Parametric geometry and shape optimisation (ADR-0037, ADR-0038, proposed):** vectors, counts and
+  sketch dimensions are quantities with expressions; `implicit.normal_velocity`/`implicit.gradient`
+  give shape derivatives. FoamWin ships Foundation's `adjointShapeOptimisationFoam`: stable for
+  laminar flow only (measured), so `stokes.compile.of14.adjoint` refuses turbulence. The wall
+  sensitivity is read by the agent from the solved ASCII case (`stokes_agent.sensitivity`, `job.sensitivity`): the solver's own
+  `shapeSensitivity` when `adjointFoam` wrote it, else reconstructed from U and Ua (`source`, ADR-0041 decision 8). The Optimise panel
+  (Explore) runs `shape.optimise`; its CFD cycle is not yet wired to the run queue. The merged
+  Foundation+ESI adjoint is to be a separate open-source GPL program, driven through files only.
+  **ADR-0041 (proposed):** the flow split's adjoint runs that program (`adjointFoam`, bundled as a
+  separate GPL program and probed; G30) where the host has it; finite differences stay its default. Phase C (2026-11-15): the wall gradient on snapped cells was not the main error; an opt-in `sensitivityWallGradient leastSquares` was added to `adjointFoam`; V2 and V3 still fail, so the adjoint stays unchecked and experimental. The flow strip has an optional seventh step, Optimise, after Results (shape optimisation, parametric study); it never opens by itself.
+- **Meshing (2026-11-18):** cfMesh (hex-dominant, tetrahedral, polyhedral, poly-hexcore) runs through the app on both hosts, checked through the GUI on a 20x10x10 mm duct at 1.5 mm cells with identical cell counts on both. Native Windows needs FoamWin v14.0.0-win.5 or later (an older install has no cfMesh programs and Stokes refuses with "cartesianMesh is not on the engine's PATH"). On Linux the agent sources OpenFOAM with the account's `USER`, so a cfMesh built into `~/OpenFOAM/$USER-14` is found. The Mesh card lists a mesher the selected host lacks as "not available", naming the missing program. **Gmsh (ADR-0043, 2026-11-20)** is a driver too: a `.geo` script (held by the agent to a closed grammar, `stokes_agent/geo_lint.py`) and `gmshToFoam`, tetrahedra with optional prism layers on the walls; measured on the duct and a pipe, the layers fold at sharp inside corners above about 0.6 of the wall cell.
+- **Coupled solver, relaxation factors, FoamWin download (2026-11-21; ADR-0044, ADR-0045, ADR-0046):**
+  the `coupled.simple` engine runs coupledSimpleFoam (`stokes/compile/coupled/simple.py`): serial
+  `SparseLU` up to 80,000 3D cells, PETSc over MPI with two or more cores (Linux, WSL, and native
+  Windows where FoamWin has its `bin/msmpi` build). It reproduces the heatedDuct Nu = 7.54 and ran a
+  heated square duct about 6x faster end to end than `of14.fluid`. Steady runs take user
+  under-relaxation factors (`relax_*`, empty for the engine's own; ADR-0045). On a Windows computer
+  with no engine, Settings > Compute offers to download FoamWin from its GitHub release, checked
+  against the published SHA-256, and `scripts/setup-windows.ps1` sets up a checkout (ADR-0046).
+  These came from a session on the public `stokes-cfd` repository (2026-11-20/21) and were ported
+  here; that repository numbered the three ADRs 0035 to 0037.
+- **Fast mode (2026-11-22; ADR-0047, proposed):** a GPU lattice-Boltzmann preview in the server
+  (`stokes.fast`, `wgpu` only in `stokes.fast.device`; commands `fast.*`, routes `/api/fast/*`, panel
+  `web/src/panels/FastPanel.tsx`, layer `web/src/viewport/fastLayer.ts`; contract
+  `docs/engineering/fast-schema.md`). The fluid's implicit field compiles to WGSL; ports come from the
+  tags. Validated on the square duct (fRe within 1.5 %); `gpu`-marked tests skip without an adapter.
+  **Reviewed against measurements the same day (the ADR's addendum):** the equilibrium is the
+  incompressible one on the density's deviation, the turbulent preview's collision is regularised, a
+  slow viscous flow holds tau at 1, inlets are calibrated to their flow rate at any angle, outlets are
+  an equilibrium layer, frames report the flow balance (square duct fRe -0.05 %, tilted ducts within
+  1 %). The plane draws in every stage (`isOverlaySource`), the top bar has a Fast button, and
+  `web/walk_fast.mjs` walks the panel end to end.
+  **Second addendum (the same day):** a case is zones (every body the regions hold; fluids never mix,
+  solids conduct), the temperature is solved by finite volumes on the lattice's cells with the
+  streams' figures as the Results table has them (`stokes/fast/zones.py`,
+  `tests/test_fast_thermal.py`: duct Nu -0.2 %, layered slab exact, counter-flow +4 %), the
+  turbulent preview has a shear-improved closure, a steady run holds. **A fine lattice core's duty
+  is not validated** (the gyroid plate reads about three times the solved case's): the addendum has
+  the numbers and the causes. **Third addendum:** walls keep each cell's mass, the density is not
+  capped, the temperature catches up once the flow is steady, the status has each fluid's cells
+  across (`resolution`) and the panel says under-resolved below ten. The plate exchanger still
+  reads twice the pressure drop and three times the duty (1.2 mm throats, 5.5 cells, cell Reynolds
+  number about 200 there); a coarse gyroid core without a throat reads +16 %. Backflow through an
+  outlet is not fixed.
+  Next slices: buoyancy, forces, imported bodies, planes at any angle, a run record for the Results stage.
+- **GUI pass and modeller additions (2026-11-19):** `implicit_lattice` (gyroid, Schwarz P, diamond; sheet or
+  network; Create > Modify > Lattice; contract in `docs/engineering/implicit-schema.md`) and the sketcher's Fillet
+  (`web/src/sketch/model.ts`, `filletCorners`). The mesh snapshot's inside-point search is vectorised
+  (`stokes/geometry/inside.py`: 10 s to 0.2 s per model edit on a sketch body). The Run card has the residual
+  target and the Mesh card the expected cell count; the tree's Explore section opens Shape optimisation, the
+  design table and the plots. The GUI walks run with an installed Chrome (`STOKES_WALK_CHANNEL=chrome`) and
+  record with an installed ffmpeg (`STOKES_WALK_VIDEO`); `web/record_bend_walkthrough.mjs` and
+  `web/cut_walkthrough.mjs` make the sketch-to-optimised-bend video. **The implicit mesher binary is not in the
+  repository**: a checkout without `native/implicit-mesh/bin/` cannot build a sketch or a shape (the app now says
+  so in a toast); build it as that folder's README says. coupledSimpleFoam is an engine since ADR-0044.
 - **Handover:** `docs/HANDOVER.md` is the entry point for a new session or model.
 - **Working copy:** develop in a local clone (the owner uses
   `C:\Users\<you>\code\Stokes`); the network-share copy is a mirror only. On

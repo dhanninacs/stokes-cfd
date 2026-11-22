@@ -1,4 +1,4 @@
-"""coupledSimpleFoam's heated duct through Stokes: Nu = 7.54 (ADR-0035 step 5, M5's exit test).
+"""coupledSimpleFoam's heated duct through Stokes: Nu = 7.54 (ADR-0044 step 5, M5's exit test).
 
     STOKES_ENGINE_TESTS=1 STOKES_COUPLED_HOST=wsl:Ubuntu-24.04 \\
         python -m pytest -q tests/engine/test_coupled_heated_duct_engine.py

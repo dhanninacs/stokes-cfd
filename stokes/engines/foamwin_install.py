@@ -1,6 +1,6 @@
 """Download and install FoamWin, the native Windows OpenFOAM 14, for a user with no engine.
 
-ADR-0037.
+ADR-0046.
 
 A Windows user who downloads Stokes and has neither FoamWin, WSL with OpenFOAM, nor a remote host
 cannot mesh or solve. This module fetches FoamWin's portable release (`OF14-win.zip`) from its

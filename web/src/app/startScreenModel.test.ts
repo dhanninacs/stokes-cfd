@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ago, folderOf, monogram, recentCards } from "./startScreenModel";
+import { ago, canonicalPath, dedupeRecent, folderOf, monogram, parentFolder, recentCards, recentLocations } from "./startScreenModel";
 
 describe("ago", () => {
   const now = Date.parse("2026-11-03T12:00:00Z");
@@ -45,5 +45,38 @@ describe("monogram", () => {
     expect(monogram("")).toBe("");
     expect(monogram("x")).toBe("X");
     expect(monogram("42")).toBe("42");
+  });
+});
+
+describe("recent projects told apart", () => {
+  it("keys a path once however it is spelled", () => {
+    expect(canonicalPath(String.raw`D:\Work\Projects\duct.stokes` + "\\")).toBe(canonicalPath("d:/work/projects//duct.stokes"));
+    expect(canonicalPath("/srv/Runs/./pipe.stokes/")).toBe("/srv/Runs/pipe.stokes");
+    expect(canonicalPath("/srv/Runs/pipe.stokes")).not.toBe(canonicalPath("/srv/runs/pipe.stokes"));
+    expect(canonicalPath(String.raw`\\server\share\a.stokes`)).toBe("//server/share/a.stokes");
+  });
+
+  it("keeps the first row of each project, in order", () => {
+    const rows = [
+      { path: String.raw`D:\a\Projects\duct.stokes`, n: 1 },
+      { path: String.raw`C:\b\Projects\duct.stokes`, n: 2 },
+      { path: "d:/a/projects/duct.stokes", n: 3 },
+    ];
+    expect(dedupeRecent(rows).map((r) => r.n)).toEqual([1, 2]);
+  });
+
+  it("goes up as many folders as two projects of one name need, and gives the whole folder for a list", () => {
+    const rows = [
+      { name: "duct", path: String.raw`D:\audit\Projects\duct.stokes` },
+      { name: "duct", path: String.raw`C:\code\Projects\duct.stokes` },
+      { name: "pipe", path: String.raw`C:\code\Projects\pipe.stokes` },
+    ];
+    const at = recentLocations(rows);
+    expect(at.get(rows[0]!.path)).toBe("audit/Projects");
+    expect(at.get(rows[1]!.path)).toBe("code/Projects");
+    expect(at.get(rows[2]!.path)).toBe("Projects");
+    expect(parentFolder(String.raw`C:\code\Projects\duct.stokes`)).toBe(String.raw`C:\code\Projects`);
+    expect(parentFolder("/srv/runs/pipe.stokes/")).toBe("/srv/runs");
+    expect(parentFolder("pipe.stokes")).toBe("");
   });
 });

@@ -1,3 +1,5 @@
+import { GEOMETRY_UNIT_SYSTEM, implicitShows, implicitTitle, isImplicitOperation, optionLabel } from "../state/implicitFields";
+import { BodyShapeCard, OPERATION_LISTS, OperationBodies } from "./BodyShapeCard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MousePointerClick, TriangleAlert } from "lucide-react";
 import type { NodeStatus, NodeSummary } from "../api/types";
@@ -32,6 +34,8 @@ import { useCaseCard } from "./CaseCard";
 import { FOCUS_PROPERTIES_EVENT } from "./treeKeyboard";
 import { Note } from "../components/Note";
 import DetailsMoreButton from "./DetailsMoreButton";
+import EditSketchButton from "../sketch/EditSketchButton";
+import { drawnSketchOf } from "../sketch/drawnSketch";
 
 /** The parameters of a part that the import fills in. They are facts about the file, so they are shown as text and never edited. */
 const PART_FACTS: ReadonlySet<string> = new Set(["source", "solid", "units", "family", "triangles", "faces", "bbox"]);
@@ -65,7 +69,18 @@ const PICKER_FIELDS: Record<string, ReadonlySet<string>> = {
 };
 
 /** Metres per unit of the length units a display system can name. */
-const METRES_PER: Record<string, number> = { m: 1, mm: 1e-3, cm: 1e-2, um: 1e-6, km: 1e3, in: 0.0254, ft: 0.3048 };
+const METRES_PER: Record<string, number> = { m: 1, mm: 1e-3, cm: 1e-2, um: 1e-6, "µm": 1e-6, km: 1e3, in: 0.0254, ft: 0.3048 };
+
+/**
+ * The unit a part's size is printed in: the scale bar's (review finding A5), so the size and the
+ * length drawn in the view are read in one unit; the project's length unit while the view has no
+ * scale bar.
+ */
+export function sizeUnit(scaleLabel: string | null | undefined, projectUnit: string): string {
+  const suffix = scaleLabel?.trim().split(/\s+/).pop() ?? "";
+  if (suffix !== "" && METRES_PER[suffix] !== undefined && scaleLabel !== suffix) return suffix;
+  return METRES_PER[projectUnit] !== undefined ? projectUnit : "m";
+}
 
 function count(value: unknown): string {
   return typeof value === "number" && value > 0 ? value.toLocaleString() : "—";
@@ -74,7 +89,7 @@ function count(value: unknown): string {
 /**
  * The read-only parameters of a part: its file and which solid of it this is, the units that file
  * declared, how many triangles and B-rep faces its mesh has, and the size of its bounding box in the
- * project's length unit.
+ * scale bar's unit.
  */
 function PartFacts({ node }: { node: NodeSummary }) {
   const unitsSchema = useStore((s) => s.units);
@@ -88,9 +103,9 @@ function PartFacts({ node }: { node: NodeSummary }) {
   // The bounding box is minimum then maximum corner in metres; its size is shown in the project's length unit.
   const raw = params.bbox;
   const box = Array.isArray(raw) && raw.length === 6 && raw.every((v) => typeof v === "number" && Number.isFinite(v)) ? (raw as number[]) : null;
-  const symbol = (system && unitsSchema?.dimensions.length?.display[system]) || "m";
-  const scale = METRES_PER[symbol] ?? 1;
-  const unit = METRES_PER[symbol] ? symbol : "m";
+  const scaleLabel = useStore((s) => s.scaleBar?.label ?? null);
+  const unit = sizeUnit(scaleLabel, (system && unitsSchema?.dimensions.length?.display[system]) || "m");
+  const scale = METRES_PER[unit] ?? 1;
   const size = box ? [box[3] - box[0], box[4] - box[1], box[5] - box[2]].map((v) => formatNumber(v / scale, 4)).join(" × ") : null;
   const corners = box ? `from ${box.slice(0, 3).map((v) => formatNumber(v / scale, 4)).join(", ")} to ${box.slice(3).map((v) => formatNumber(v / scale, 4)).join(", ")} ${unit}` : "";
 
@@ -195,6 +210,9 @@ function EmptyState() {
  */
 function titleFor(node: NodeSummary, label: string | undefined): string {
   if (node.type === "project") return "Project";
+  // An implicit operation is called what it makes or does ("Cylinder", "Subtract"), not its type.
+  const implicit = implicitTitle(node.type, node.params as Record<string, unknown>);
+  if (implicit !== null) return implicit;
   if (node.type !== "group") return label ?? node.type;
   // A path a user reads as a folder: a top-level group, or one of the fixed sub-folders.
   return isFolderNode(node) ? "Folder" : (label ?? node.type);
@@ -281,6 +299,8 @@ export default function PropertiesPanel() {
     return kept.length === 0 ? null : Object.fromEntries(kept);
   }, [isPart, schema]);
   const pickerOwned = node === null ? undefined : PICKER_FIELDS[node.type];
+  // An implicit operation's page counts in millimetres and degrees, as its card did (review A5).
+  const implicitOp = node !== null && isImplicitOperation(node.type);
   // Boundary, region, material and body pages show a few Basic fields and the rest under Advanced. The field
   // levels follow the boundary's kind and the run's physics (`setup/basicSets.ts`); other pages show all.
   const conditionKinds = useStore((s) => s.conditionKinds);
@@ -298,7 +318,11 @@ export default function PropertiesPanel() {
     !(isPart && PART_TECHNICAL.has(name)) &&
     !(pickerOwned?.has(name) ?? false) &&
     !study.hidden.has(name) &&
-    !foamCase.hidden.has(name);
+    !foamCase.hidden.has(name) &&
+    // An implicit operation shows only the parameters its kind reads (ADR-0035), and its lists of
+    // bodies by name above the fields rather than as id lists (`OperationBodies`).
+    !(implicitOp && OPERATION_LISTS.has(name)) &&
+    (node === null || implicitShows(node.type, node.params as Record<string, unknown>, name));
   const include = (name: string): boolean => owned(name) && (levels === null || levels[name] !== "hidden");
   const includeAt = (level: "basic" | "advanced") => (name: string): boolean => owned(name) && levels?.[name] === level;
   const namesAt = (level: "basic" | "advanced"): string[] =>
@@ -363,8 +387,14 @@ export default function PropertiesPanel() {
    * comes to this page to change: the fields below are the node's stored values, and these are what a mesh
    * and a solve read. A region gets its Material, a boundary its condition (`region.set`, `boundary.assign`).
    */
+  // A drawn sketch opens in the sketcher (ADR-0036); a body's page has its own Edit (`BodyShapeCard`).
+  const drawn = isPart ? null : drawnSketchOf(tree, node);
   const verbs =
-    node !== null && (isRegion || isBoundary) ? (
+    node !== null && drawn !== null ? (
+      <div className="flex flex-col gap-1.5" data-ws="node-verbs">
+        <EditSketchButton opId={drawn.id} params={drawn.params as Record<string, unknown>} />
+      </div>
+    ) : node !== null && (isRegion || isBoundary) ? (
       <div className="flex flex-col gap-1.5" data-ws="node-verbs">
         {isRegion && <MaterialPicker regionId={node.id} currentId={materialOf(node)} />}
         {isBoundary && <ConditionPicker boundaryId={node.id} current={conditionOf(node)} />}
@@ -384,6 +414,8 @@ export default function PropertiesPanel() {
         onEdit={dropFieldError}
         include={include_}
         errors={fieldErrors}
+        unitSystem={implicitOp ? GEOMETRY_UNIT_SYSTEM : undefined}
+        optionLabel={implicitOp ? optionLabel : undefined}
         /*
           **A property whose method computes its value shows a dash** (verdict leftover 3):
           measured as "density 0 kg/m³" for air, whose method is `ideal_gas` - the stored
@@ -498,6 +530,7 @@ export default function PropertiesPanel() {
                   basic={
                     <>
                       {isPart && <BodyRoleChips node={node} />}
+                      {isPart && <BodyShapeCard node={node} />}
                       {node.type === "material" && <MaterialReadout node={node} onChange={() => setReveal((n) => n + 1)} />}
                       {verbs}
                       {basicNames.length > 0 && fields(includeAt("basic"), `${node.id}:basic`)}
@@ -515,6 +548,8 @@ export default function PropertiesPanel() {
               ) : (
                 <>
                   {verbs}
+                  {isPart && <BodyShapeCard node={node} />}
+                  {implicitOp && <OperationBodies node={node} />}
                   {schema && mode !== null && (
                     <SettingsNodeFields
                       key={`${node.id}:settings`}

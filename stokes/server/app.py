@@ -54,6 +54,7 @@ from stokes.geometry.errors import MeshFormatError
 from stokes.log import get_logger
 from stokes.run.artifacts import ArtifactError
 from stokes.run.store import SliceBusy
+from stokes.server.fast_routes import add_fast_routes
 from stokes.server.mesh_routes import add_mesh_routes
 from stokes.server.rpc import RpcHub
 
@@ -631,8 +632,9 @@ def _derived_payload(
     finite = values[np.isfinite(values)]
     low = float(finite.min()) if finite.size else 0.0
     high = float(finite.max()) if finite.size else 0.0
-    clean = np.where(np.isfinite(values), values, low).astype(np.float32)
-    return field_payload(clean, field, units, low, high)
+    # **No value stays no value**: a NaN (a wall-only field on an inlet, a vertex the formula cannot
+    # evaluate) is sent as NaN, which the client draws in the surface's own colour - not as the low end.
+    return field_payload(values.astype(np.float32), field, units, low, high)
 
 
 def add_results_routes(
@@ -945,6 +947,7 @@ def create_app(
 
     add_results_routes(app, run_store, check, derived)  # after the mesh routes (T-216)
     add_iso_route(app, run_store, check)
+    add_fast_routes(app, session, check)  # the GPU preview's plane (ADR-0047)
     # **The same id rule the results routes use**: a path parameter becomes a filename inside the
     # cache, so it is checked against `ID_RE` before any lookup - here through a closure over the
     # module's own check rather than a second, subtly different regex.

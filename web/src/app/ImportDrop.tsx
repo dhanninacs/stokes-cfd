@@ -12,14 +12,16 @@
  * and the hint's button. The listeners are the window's: a drag over a side panel is still a drag over the
  * window the file would otherwise navigate away from, so every file drop is taken or refused here.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { FileUp, X } from "lucide-react";
 import { latestProgress } from "../state/parts";
 import { useStore } from "../state/store";
+import { useGuidedMode } from "../guided/modeStore";
 import { Button } from "../components/ui";
 import { runAction } from "./actions";
 import { importFileObject } from "./importBridge";
 import { useUpload } from "./upload";
+import { currentGhost, subscribeGhost } from "../direct/ghostState";
 import { chooseFile, dragHasFiles, progressFraction, progressText, showImportHint } from "./uploadModel";
 import "./importDrop.css";
 
@@ -27,6 +29,11 @@ export default function ImportDrop() {
   const project = useStore((s) => s.project);
   const tree = useStore((s) => s.tree);
   const importProgress = useStore((s) => s.importProgress);
+  // The sketcher covers the viewport: the hint would sit over its drawing.
+  const sketching = useStore((s) => s.sketch !== null);
+  // A body on its way (an operation running, or the ghost a Finish shows until the body arrives): not an empty project.
+  const ghost = useSyncExternalStore(subscribeGhost, currentGhost);
+  const operating = useStore((s) => Object.keys(s.operations).length > 0);
   const pushToast = useStore((s) => s.pushToast);
   const upload = useUpload();
   const [dragging, setDragging] = useState(false);
@@ -68,7 +75,9 @@ export default function ImportDrop() {
 
   const importing = useMemo(() => latestProgress(importProgress) !== null, [importProgress]);
   const uploading = upload.phase === "uploading";
-  const hint = showImportHint({ hasProject: project !== null, tree, uploading, importing });
+  const modelling = useStore((s) => s.buildRibbon);
+  const guided = useGuidedMode() === "guided";
+  const hint = showImportHint({ hasProject: project !== null, tree, uploading, importing, building: operating || ghost?.phase === "build", modelling, guided });
   const fraction = progressFraction(upload.loaded, upload.total);
 
   return (
@@ -81,14 +90,20 @@ export default function ImportDrop() {
           </span>
         </div>
       )}
-      {hint && !dragging && (
+      {hint && !dragging && !sketching && (
         <div className="import-hint glass" data-ws="import-hint" role="note">
           <FileUp size={22} aria-hidden="true" />
           <div className="import-hint-title">Drop a CAD file here</div>
           <div className="muted import-hint-text" title="Or open the project menu and choose Import geometry. STEP, IGES, BREP, STL, OBJ and 3MF are read.">Reads STEP, IGES, BREP, STL, OBJ, 3MF.</div>
-          <Button className="import-hint-button" onClick={() => runAction("project.importStep")} data-ws="import-hint-button">
-            Import geometry…
-          </Button>
+          <div className="import-hint-actions">
+            <Button className="import-hint-button" onClick={() => runAction("project.importStep")} data-ws="import-hint-button">
+              Import geometry…
+            </Button>
+            {/* Or build it here (ADR-0035): the build ribbon. */}
+            <Button className="import-hint-button" onClick={() => useStore.getState().setBuildRibbon(true)} data-ws="import-hint-create">
+              Create shape…
+            </Button>
+          </div>
         </div>
       )}
       {uploading && (

@@ -112,6 +112,9 @@ class Session:
         self.registry = registry
         self.project: Project | None = None
         self.project_path: Path | None = None
+        #: A private session works on a scratch copy (a shape optimisation's cycle): its
+        #: projects are never added to the recent list.
+        self.private = False
         #: The project's revision as of the last write to disk, or -1 when it has never been
         #: saved. **The dirty test**, and it is a comparison rather than a boolean because the model
         #: is the one that knows: `Project.revision` counts every `_mark`, which is every path

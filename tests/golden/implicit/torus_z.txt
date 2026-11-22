@@ -1,0 +1,15 @@
+_0 var-x
+_1 square _0
+_2 var-y
+_3 square _2
+_4 add _1 _3
+_5 sqrt _4
+_6 const 10.0
+_7 sub _5 _6
+_8 square _7
+_9 var-z
+_10 square _9
+_11 add _8 _10
+_12 sqrt _11
+_13 const 2.0
+_14 sub _12 _13

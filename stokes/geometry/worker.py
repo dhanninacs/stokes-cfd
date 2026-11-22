@@ -177,6 +177,8 @@ class ShapeResult:
     """input part -> input edge id -> output edge ids"""
     history_vertices: dict[str, dict[int, tuple[int, ...]]] = field(default_factory=dict)
     """input part -> input vertex id -> output vertex ids"""
+    family: str = "brep"
+    """The output part's family: ``brep``, or ``implicit`` from an implicit operation (ADR-0035)."""
 
 
 @dataclass(frozen=True)
@@ -894,7 +896,15 @@ def _shape(message: dict[str, Any]) -> ShapeResult:
         report if isinstance(report, dict) else {},
         history_edges,
         history_vertices,
+        _family(message),
     )
+
+
+def _family(message: dict[str, Any]) -> str:
+    family = message.get("family", "brep")
+    if family not in ("brep", "implicit"):
+        raise GeometryWorkerError("the geometry worker sent an unknown part family")
+    return str(family)
 
 
 def _finished(message: dict[str, Any]) -> OperationRun:

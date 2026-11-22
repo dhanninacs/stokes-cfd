@@ -38,9 +38,9 @@ export async function copyTableText(text: string): Promise<boolean> {
 const CSV_FILTER = "CSV files (*.csv);;All files (*)";
 
 /** Saves `text` as a file named `name`: through the host's dialog and writer, or as a browser download. Resolves to the file's name, or null when cancelled or refused. */
-export async function saveTextFile(name: string, text: string): Promise<string | null> {
+export async function saveTextFile(name: string, text: string, title = "Export the monitors"): Promise<string | null> {
   if (host.canSaveFiles) {
-    const path = await host.pickSaveFile("Export the monitors", name, CSV_FILTER);
+    const path = await host.pickSaveFile(title, name, CSV_FILTER);
     if (!path) return null;
     return (await host.writeTextFile(path, text)) ? basename(path) : null;
   }

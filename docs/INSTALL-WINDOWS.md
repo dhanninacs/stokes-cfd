@@ -115,6 +115,14 @@ publishes, and runs FoamWin's own setup into `%LOCALAPPDATA%\OpenFOAM-14-win`. S
    about 86 MB) or `OF14-win.zip` (portable, about 131 MB), plus `SHA256SUMS.txt`
    to check the download. That release includes cfMesh and the Scotch and METIS
    partitioners. If its README differs from this page, follow its README.
+
+   cfMesh needs v14.0.0-win.5 (31 October 2026) or later. To check an install,
+   look for `cartesianMesh.exe` in `OpenFOAM-14\platforms\linuxmingw-w64GccDPInt32Opt\bin`
+   under the install folder (the folder that holds `of14-env.ps1`);
+   an older install, such as the 20 October build, does not have it. Stokes then
+   lists the cfMesh meshers as "not available" in the Mesh card and panel, naming
+   the missing program, and refuses a cfMesh mesh with "cartesianMesh is not on
+   the engine's PATH". snappyHexMesh and blockMesh do not need cfMesh.
 2. Run `OF14-win-setup.exe`, or from the extracted ZIP run
    `powershell -ExecutionPolicy Bypass -File .\setup-openfoam14.ps1`. The default
    location is `%LOCALAPPDATA%\OpenFOAM-14-win`; `-InstallDir` changes it.
@@ -133,7 +141,7 @@ publishes, and runs FoamWin's own setup into `%LOCALAPPDATA%\OpenFOAM-14-win`. S
    download page for MS-MPI). Without it Stokes runs on one core and says so;
    asking for more cores without MS-MPI fails with a clear message rather than
    falling back silently.
-5. **For the Gmsh mesher** (tetrahedral, *Tetrahedral (Gmsh)* in the mesher list),
+5. **For the Gmsh mesher** (*Tetrahedral + prism layers (Gmsh)* in the mesher list),
    FoamWin's ZIP has a `gmsh` folder, but its installer (v14.0.0-win.5) does not
    copy it. Copy it into the install folder yourself:
 
@@ -141,8 +149,8 @@ publishes, and runs FoamWin's own setup into `%LOCALAPPDATA%\OpenFOAM-14-win`. S
    Copy-Item -Recurse .\gmsh "$env:LOCALAPPDATA\OpenFOAM-14-win\"
    ```
 
-   Run that from the extracted ZIP. Stokes looks for `gmsh\gmsh.exe` beside
-   `of14-env.ps1` and nowhere else. The other meshers do not need it.
+   Run that from the extracted ZIP. Stokes looks for `gmsh.exe` inside the
+   install folder (the one holding `of14-env.ps1`) and nowhere else. The other meshers do not need it.
 
 ## 4. Point Stokes at the engine
 
@@ -237,12 +245,13 @@ The app log is `.stokes\logs\app.log`; look there first when something fails.
 |---|---|
 | "running scripts is disabled" | Run PowerShell commands as shown, with `-ExecutionPolicy Bypass`, or `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
 | Mesh or Run says no engine, the engine is not found, or "no tutorial folder" | FoamWin is not in its default folder and `STOKES_FOAMWIN_ENV` is unset or wrong. Check `Test-Path "$env:LOCALAPPDATA\OpenFOAM-14-win\of14-env.ps1"` or `Test-Path $env:STOKES_FOAMWIN_ENV`, then reopen the window from the same PowerShell session. |
+| A cfMesh mesher is "not available", or Mesh says "cartesianMesh is not on the engine's PATH" | The FoamWin install is older than v14.0.0-win.5 and has no cfMesh. Install v14.0.0-win.5 or newer (step 3). |
 | "Parallel mode requires the MPI-enabled FoamWin build and Microsoft MPI" | Install MS-MPI (step 3), or set cores to 1. |
 | 3D view is blank or says it is unavailable | Update the graphics driver. On a virtual machine or remote desktop try `--browser`. |
 | `npm ci` stops with `EBADENGINE` / "Unsupported engine" | Install Node.js 22.12 or newer (`node --version`). |
 | `pip install -e .` says there is no `pyproject.toml` or `setup.py` | You cloned the default `main` branch, which is documentation only. Run `git checkout windows` in the checkout (or clone again with `-b windows`). |
 | `pip install` says "requires a different Python", or fails building a package | Use Python 3.13 or 3.14 64-bit; 3.12 and 32-bit builds are not supported. `py -0p` lists the Pythons you have. |
-| Gmsh meshing fails with "Gmsh was not found in the FoamWin install's gmsh folder" | Copy the `gmsh` folder from the FoamWin ZIP into the install folder (step 3, item 5), then restart Stokes. |
+| The Gmsh mesher is "not available", or a Gmsh mesh is refused because `gmsh` is not found | Stokes did not find `gmsh\gmsh.exe` in the FoamWin install folder. Copy the `gmsh` folder from the FoamWin ZIP into the install folder (step 3, item 5), then restart Stokes. |
 | `git pull` refuses because `web/package-lock.json` has local changes | An `npm install` rewrote it. Run `git checkout web/package-lock.json`, pull, then use `npm ci`. |
 | The page says the build is missing or old | Run `npm run build` in `web`. |
 | Very slow imports or Git errors | The checkout is on a network share. Clone to a local drive. |

@@ -823,6 +823,14 @@ button {
   pointer-events: auto;
   box-shadow: 2px 0 8px rgb(0 0 0 / 12%);
 }
+/* Both panels hidden puts two handles on the same edge: one above the middle, one below, where they
+   were drawn on top of each other ("Tree" over "Info"). */
+.edge-handle[data-edge-handle="tree"] {
+  margin-top: -68px;
+}
+.edge-handle[data-edge-handle="details"] {
+  margin-top: 4px;
+}
 .edge-handle:hover,
 .edge-handle:focus-visible {
   background: var(--accent);
@@ -1310,6 +1318,11 @@ body.is-resizing-rows * {
 .island[data-compact="true"] .btn:not(.icon) {
   padding: 0 9px;
 }
+/* One step before icons only: the words stay, in less padding. */
+.island[data-compact="tight"] .btn:not(.icon) {
+  gap: 5px;
+  padding: 0 7px;
+}
 .ctx-toolbar {
   position: absolute;
   top: 0;
@@ -1587,6 +1600,13 @@ body.is-resizing-rows * {
 .segmented button:hover {
   color: var(--text);
 }
+/* A body's role (Fluid, Solid, Hole, Leave out) in a 250 px Properties pane: equal thirds wrapped
+   "Leave out" onto two lines. Each chip takes what its word needs. */
+[data-ws="body-role"] .segmented button {
+  flex: 1 1 auto;
+  padding: 0 7px;
+  white-space: nowrap;
+}
 .segmented button[aria-disabled="true"] {
   cursor: default;
   opacity: 0.55;
@@ -1627,6 +1647,10 @@ body.is-resizing-rows * {
     var(--shadow-pop),
     inset 0 1px 0 var(--highlight);
   animation: fade-in 160ms ease-out;
+}
+.bottom-stack.ribbon-open {
+  /* Above the build ribbon (its dock is 58 px up and about 84 px tall), not over its tools. */
+  bottom: 150px;
 }
 .bottom-stack {
   position: absolute;
@@ -2922,4 +2946,42 @@ body.is-resizing-rows * {
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+/* ------------------------------------------------------------------ the operation card's bodies (review B8) */
+/* What a transform or a combine acts on, named, with the swap beside the pair: a two-column list of
+   role and body, the swap spanning the rows at the right. */
+.operation-roles {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 4px;
+  font-size: 12.5px;
+}
+.operation-role-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.operation-roles > .muted:nth-of-type(1),
+.operation-roles > .muted:nth-of-type(2) {
+  font-size: 11.5px;
+}
+.operation-roles > .operation-role-name:first-of-type {
+  grid-column: 2 / 4;
+}
+.operation-role-swap {
+  grid-column: 3;
+  grid-row: 1 / 3;
+}
+.operation-roles:has(.operation-role-swap) > .operation-role-name:first-of-type {
+  grid-column: 2;
+}
+
+/* While an operation card is open the scale bar steps left of it, so it never sits on the card's
+   close button (review finding A8). */
+.viewport-bg:has(.operation-card) .scale-bar {
+  right: calc(var(--slot-right, 0px) + 12px + 320px + 12px);
 }

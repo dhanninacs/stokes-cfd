@@ -242,6 +242,7 @@ class AgentServer:
         self.register("job.list", self._job_list)
         self.register("job.delete", self._job_delete)
         self.register("job.read", self._job_read)
+        self.register("job.sensitivity", self._job_sensitivity)
         self.register("job.outputs", self._job_outputs)
         self.register("log.tail", self._log_tail)
         self.register("extract.surfaces", self._extract_surfaces)
@@ -251,6 +252,7 @@ class AgentServer:
         self.register("iso.cut", self._iso_cut)
         self.register("stream.trace", self._stream_trace)
         self.register("vector.sample", self._vector_sample)
+        self.register("mesh.cut", self._mesh_cut)
         self.register("artifact.get", self._artifact_get)
 
     # ------------------------------------------------------------------ extraction
@@ -522,6 +524,9 @@ class AgentServer:
         max_points: int = 1000,
         seed_patches: list[str] | None = None,
         seed_count: int = 50,
+        follow_walls: bool = False,
+        terminal_fraction: float = 1e-4,
+        max_steps: int = 20000,
     ) -> dict[str, Any]:
         """Streamlines of a solved case's velocity through its 3-D volume (ADR-0030).
 
@@ -530,11 +535,24 @@ class AgentServer:
         in metres, or `seed_patches` names boundary patches (the inlets) to spread `seed_count`
         seeds over; the step is in cells and the length in metres (`stokes_agent.trace`). Refused
         before any read: bad seeds, a bad direction, a non-positive length, patch names that are
-        not names.
+        not names. `follow_walls` slides lines along walls (`stokes_agent.walk`) instead of
+        stopping them there; `terminal_fraction` of the largest speed stops a line, and `max_steps`
+        caps its steps.
         """
         import numpy as np
 
         from stokes_agent import extract, trace
+
+        if not isinstance(follow_walls, bool):
+            raise AgentBadParams("follow_walls must be true or false")
+        if (
+            isinstance(terminal_fraction, bool)
+            or not isinstance(terminal_fraction, int | float)
+            or not 0.0 <= float(terminal_fraction) < 1.0
+        ):
+            raise AgentBadParams("terminal_fraction must be a fraction from 0 to 1")
+        if isinstance(max_steps, bool) or not isinstance(max_steps, int) or max_steps < 1:
+            raise AgentBadParams("max_steps must be a positive whole number")
 
         patches: list[str] | None = None
         if seed_patches:
@@ -566,6 +584,9 @@ class AgentServer:
                     engine=engine,
                     seed_patches=patches,
                     seed_count=int(seed_count),
+                    follow_walls=follow_walls,
+                    terminal_fraction=float(terminal_fraction),
+                    max_steps=min(int(max_steps), trace.MAX_STEPS),
                     direction=direction,
                     max_length=max_length,
                     step_cells=float(step_cells),
@@ -602,6 +623,35 @@ class AgentServer:
             try:
                 return sample.sample_case(store.job_dir(job), int(count), time=time, engine=engine)
             except (sample.SampleInvalid, ValueError) as exc:
+                raise AgentBadParams(str(exc), details={"job": job}) from exc
+
+        return await asyncio.to_thread(work)
+
+    async def _mesh_cut(self, job: str, plane: dict[str, Any]) -> dict[str, Any]:
+        """The finished mesh's cells where a plane cuts them, by region (`meshcut.cut_mesh`).
+
+        For the Mesh stage's section. Any finished job with a mesh will do, a mesh job or a run; the
+        plane is checked by the same `_slice_plane` the results slice uses.
+        """
+        from stokes_agent import meshcut
+
+        wanted = _slice_plane(plane)
+
+        def work() -> dict[str, Any]:
+            store = self._job_store()
+            state = store.status(job)
+            if state.get("state") != "done":
+                raise AgentNotReady(
+                    f"the job is {state.get('state')!r}; its mesh can be cut once it is done",
+                    details={"job": job, "state": state.get("state")},
+                )
+            try:
+                return meshcut.cut_mesh(
+                    store.job_dir(job),
+                    [float(v) for v in wanted["origin"]],
+                    [float(v) for v in wanted["normal"]],
+                )
+            except ValueError as exc:
                 raise AgentBadParams(str(exc), details={"job": job}) from exc
 
         return await asyncio.to_thread(work)
@@ -1121,6 +1171,92 @@ class AgentServer:
 
         try:
             return await asyncio.to_thread(work)
+        except JobBadParams as exc:
+            raise _translate(exc) from exc
+        except JobError as exc:
+            raise _translate(exc) from exc
+
+    async def _job_sensitivity(
+        self,
+        job: str,
+        nu: float,
+        walls: list[str] | None = None,
+        ports: list[str] | None = None,
+        time: str = "latest",
+        adjoint: bool = True,
+    ) -> dict[str, Any]:
+        """The adjoint wall sensitivity and the pressure-loss objective of a finished adjoint job
+        (ADR-0038 decision 3), computed here, where the case is: per wall face the centre, the
+        normal out of the fluid, the area and s; and J. Walls default to every `wall` patch, and the
+        ports (inlets and outlets) to every other patch that is not a constraint. ``flows`` gives
+        each port's volumetric flow (outward positive), its backflow share and its mean pressure
+        (ADR-0040). With ``adjoint`` false (an ordinary run, no Ua) the wall arrays are empty.
+        ``source`` says where s came from (ADR-0041 decision 8): ``solver`` when the time holds the
+        solver's own ``shapeSensitivity``, ``reconstructed`` when it was computed here from U and
+        Ua, None without an adjoint."""
+        from stokes_agent.foamascii import FoamReadError
+        from stokes_agent.sensitivity import (
+            latest_time,
+            port_flows,
+            power_loss,
+            wall_sensitivity,
+        )
+
+        if not (isinstance(nu, int | float) and nu > 0):
+            raise JobBadParams("nu must be a positive number")
+        names = [*(walls or []), *(ports or [])]
+        if not all(isinstance(n, str) and n.isidentifier() for n in names):
+            raise JobBadParams("walls and ports are lists of patch names")
+
+        def work() -> dict[str, Any]:
+            case = self._job_store().job_dir(job)
+            at = latest_time(case) if time == "latest" else time
+            if not at.replace(".", "", 1).isdigit():
+                raise JobBadParams("time is a written time or 'latest'")
+            from stokes_agent.foamascii import read_mesh
+
+            mesh = read_mesh(case)
+            constraint = {"empty", "wedge", "symmetry", "symmetryPlane", "cyclic", "processor"}
+            wall_names = walls or [p.name for p in mesh.patches if p.type == "wall"]
+            port_names = ports or [
+                p.name for p in mesh.patches if p.type not in constraint and p.type != "wall"
+            ]
+            objective = power_loss(case, at, port_names, mesh=mesh)
+            flows = {
+                name: flow.to_json()
+                for name, flow in port_flows(case, at, port_names, mesh=mesh).items()
+            }
+            if not adjoint:
+                return {
+                    "time": at,
+                    "objective": objective,
+                    "flows": flows,
+                    "source": None,
+                    "patches": [],
+                    "sizes": [],
+                    "centres": [],
+                    "normals": [],
+                    "areas": [],
+                    "values": [],
+                }
+            found = wall_sensitivity(case, at, float(nu), wall_names, mesh=mesh)
+            return {
+                "time": at,
+                "objective": objective,
+                "flows": flows,
+                "source": found.source,
+                "patches": list(found.patches),
+                "sizes": list(found.sizes),
+                "centres": found.centres.ravel().tolist(),
+                "normals": found.normals.ravel().tolist(),
+                "areas": found.areas.tolist(),
+                "values": found.values.tolist(),
+            }
+
+        try:
+            return await asyncio.to_thread(work)
+        except FoamReadError as exc:
+            raise _translate(JobBadParams(exc.message)) from exc
         except JobBadParams as exc:
             raise _translate(exc) from exc
         except JobError as exc:

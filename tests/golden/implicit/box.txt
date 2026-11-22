@@ -1,0 +1,20 @@
+_0 var-x
+_1 const -1.0
+_2 add _0 _1
+_3 abs _2
+_4 const 5.0
+_5 sub _3 _4
+_6 var-y
+_7 const -2.0
+_8 add _6 _7
+_9 abs _8
+_10 const 10.0
+_11 sub _9 _10
+_12 max _5 _11
+_13 var-z
+_14 const -3.0
+_15 add _13 _14
+_16 abs _15
+_17 const 15.0
+_18 sub _16 _17
+_19 max _12 _18

@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 STUDIES_PATH = "/studies"
 STUDY_GROUPS: tuple[str, ...] = ("variables", "responses", "objectives", "constraints")
 """The groups ``study.create`` gives every study, in this order."""
+STUDY_ENGINES: tuple[str, ...] = ("function", "geometry")
+"""How a study evaluates its points (ADR-0037)."""
 STUDY_TYPES: tuple[str, ...] = ("sweep", "doe")
 SAMPLERS: tuple[str, ...] = (
     "full_factorial",
@@ -89,6 +91,16 @@ def study_specs() -> tuple[NodeSpec, ...]:
                 choices=SAMPLERS,
                 default="full_factorial",
                 doc="How a doe study places its points; a sweep always takes the full factorial.",
+            ),
+            ParamSpec(
+                "engine",
+                "enum",
+                label="Engine",
+                choices=STUDY_ENGINES,
+                default="function",
+                doc="function: the points are evaluated from expressions alone. geometry: each "
+                "point rebuilds the parts made with Create and its responses may read what they "
+                "measure (geometry.parts.duct.volume, ...area, ...extent.x).",
             ),
             ParamSpec(
                 "seed",

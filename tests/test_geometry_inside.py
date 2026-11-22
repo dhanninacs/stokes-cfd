@@ -284,3 +284,59 @@ def test_both_passes_failing_reports_the_total_tested() -> None:
     found = inside_point_or_coarse(verts, faces, (0, 0, 0, 1, 1, 1))
     assert not found.found
     assert found.tested == LATTICE**3 + COARSE_LATTICE**3
+
+
+# ------------------------------------------------------------------ fast path = slow path
+
+
+def _reference_point(
+    verts: np.ndarray, faces: np.ndarray, bbox: tuple[float, ...], lattice: int, outside: bool
+) -> tuple[tuple[float, float, float] | None, float]:
+    """`inside_point` as it was first written: one candidate at a time, three rays each, in
+    plain Python. Slow (10 s for a 14 k-triangle body), which is why it is only the reference."""
+    tris = [tuple(map(tuple, verts[t])) for t in faces]
+    x0, y0, z0, x1, y1, z1 = bbox
+    span = (x1 - x0, y1 - y0, z1 - z0)
+    lo = (x0 + span[0] / (2 * lattice), y0 + span[1] / (2 * lattice), z0 + span[2] / (2 * lattice))
+    step = (span[0] / lattice, span[1] / lattice, span[2] / lattice)
+    best: tuple[float, float, float] | None = None
+    best_clear = -1.0
+    for i in range(lattice):
+        for j in range(lattice):
+            for k in range(lattice):
+                cand = (lo[0] + i * step[0], lo[1] + j * step[1], lo[2] + k * step[2])
+                if is_inside(tris, cand) == outside:
+                    continue
+                clear = math.sqrt(
+                    min(
+                        ((a[0] + b[0] + c[0]) / 3 - cand[0]) ** 2
+                        + ((a[1] + b[1] + c[1]) / 3 - cand[1]) ** 2
+                        + ((a[2] + b[2] + c[2]) / 3 - cand[2]) ** 2
+                        for a, b, c in tris
+                    )
+                )
+                if clear > best_clear:
+                    best, best_clear = cand, clear
+    return best, best_clear
+
+
+@pytest.mark.parametrize("outside", [False, True])
+@pytest.mark.parametrize("lattice", [LATTICE, COARSE_LATTICE])
+def test_the_vectorised_finder_picks_the_point_the_per_candidate_one_did(
+    lattice: int, outside: bool
+) -> None:
+    """The finder was rewritten to project once per lattice line (it took 10 s per model edit).
+    Same votes, same clearance, same point, on the shapes whose answers are known, the box whose
+    diagonal miscounts included."""
+    shapes = [
+        (box_mesh(0, 0, 0, 2, 3, 4), (0.0, 0.0, 0.0, 2.0, 3.0, 4.0)),
+        (box_mesh(0, 0, 0, 2, 3, 4), (-1.0, -1.0, -1.0, 3.0, 4.0, 5.0)),
+        (sphere_mesh(0.5, -0.25, 1.0, 1.5), (-1.0, -1.75, -0.5, 2.0, 1.25, 2.5)),
+        (pipe_mesh(2.0, 1.2, 3.0), (-2.0, -2.0, 0.0, 2.0, 2.0, 3.0)),
+    ]
+    for (verts, faces), bbox in shapes:
+        want, want_clear = _reference_point(verts, faces, bbox, lattice, outside)
+        got = inside_point(verts, faces, bbox, outside=outside, lattice=lattice)
+        assert got.point == want
+        if want is not None:
+            assert got.clearance == pytest.approx(want_clear, rel=1e-12)

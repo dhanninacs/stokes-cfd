@@ -73,7 +73,7 @@ versions are listed as "found, unsupported in this release" with the reason.
 
 ### The build helper
 
-**Planned, not built yet (ADR-0035 step 2, M5).** Until it lands, `coupled.simple` runs on a
+**Planned, not built yet (ADR-0044 step 2, M5).** Until it lands, `coupled.simple` runs on a
 Linux or WSL host where coupledSimpleFoam was built by hand (`./Allwmake` in its repository), and
 a host without it says so. The design: `stokes engine install coupled` (also offered as "Build
 now" in the Solver tree) runs inside the chosen environment through the agent:
@@ -158,7 +158,7 @@ first-class.
 | `of14.fluid` | `foamRun -solver fluid` | compressible, buoyant, full energy | OF14 | free | |
 | `of14.multiRegion` | `foamMultiRun` | conjugate heat transfer | OF14 | free | |
 | `of14.VoF` | `foamRun -solver incompressibleVoF` / `compressibleVoF` | free surface, phase change | OF14 | free, v1.5 | |
-| `coupled.simple` | `coupledSimpleFoam` (ADR-0035; serial Eigen now, PETSc MPI later; Linux or WSL hosts) | steady incompressible, laminar or RANS (k-ε, k-ω SST exercised), optional passive-scalar energy, pseudo-transient; Eigen serial or PETSc MPI | OF14 | free | not: transient, non-conformal patches, wedge, fvModels, MRF, multiphase |
+| `coupled.simple` | `coupledSimpleFoam` (ADR-0044; serial Eigen now, PETSc MPI later; Linux or WSL hosts) | steady incompressible, laminar or RANS (k-ε, k-ω SST exercised), optional passive-scalar energy, pseudo-transient; Eigen serial or PETSc MPI | OF14 | free | not: transient, non-conformal patches, wedge, fvModels, MRF, multiphase |
 | `coupled.cht` | `coupledSimpleFoam` cht branch | multi-region CHT | OF14 | free, when gated | |
 | `coupled.gpu` | CUDA build via the `-gpu` layer | as `coupled.simple` | OF14 | free, flagged by hardware | one GPU is worth about ten CPU cores on the reference case |
 | `fluent` | PyFluent session (meshing and solver) | Fluent's own models mapped from the Stokes tree; v1 covers the same physics list as OF14 | fluent | **paid** | user's licensed Fluent 2024 R2 SP05 or later |

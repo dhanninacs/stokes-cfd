@@ -20,7 +20,7 @@ export const ISO_COMMAND = "run.iso_surface";
 export const ISO_EVENTS = { ready: "run.iso_ready", failed: "run.iso_failed" } as const;
 
 /** The fields a contour can be cut through (`stokes.run.iso.ISO_FIELDS`): one component each. */
-export const ISO_FIELDS: readonly string[] = ["U_mag", "T", "p"];
+export const ISO_FIELDS: readonly string[] = ["U_mag", "T", "p", "Q", "vorticity_mag", "k", "omega", "epsilon", "nut"];
 
 /**
  * How long the control waits for the event before asking again, and how much longer each time after. The
@@ -235,3 +235,28 @@ export interface IsoDrawn {
 }
 
 export const NO_ISO_DRAWN: IsoDrawn = { state: "none", key: "", triangles: 0, message: "" };
+
+/**
+ * A set of iso-surfaces of one field, the 3-D contours CFD-Post and Tecplot draw: `values` evenly spaced
+ * through the field's range, each its own surface coloured by its value and seen through the ones in front
+ * (`opacity`). Drawn by the viewport's `ContourLayer`; the single `IsoView` surface is the one-level case.
+ */
+export interface ContourSet {
+  run: string;
+  field: string;
+  units: string;
+  values: number[];
+  opacity: number;
+}
+
+/** The scene source of contour level `index`: a mesh source, so it is never taken for a part. */
+export function contourSource(index: number): string {
+  return `mesh:contour:${index}`;
+}
+
+/** `count` values evenly spaced inside the field's range (its ends are a point, not a surface), four digits each. */
+export function contourValues(field: { min: number; max: number }, count: number): number[] {
+  const n = Math.max(1, Math.min(32, Math.round(count)));
+  if (!(field.max > field.min)) return [];
+  return Array.from({ length: n }, (_, i) => Number((field.min + ((i + 1) / (n + 1)) * (field.max - field.min)).toPrecision(4)));
+}

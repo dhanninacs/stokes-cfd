@@ -9,6 +9,7 @@
  */
 import { useMemo, useState } from "react";
 import { useStore } from "../../state/store";
+import { bodyRegions } from "../../guided/guidedTree";
 import { bodiesPayload, roleOf, slotReason, type Role } from "./bodiesModel";
 import { Note } from "../../components/Note";
 
@@ -73,8 +74,16 @@ export default function BodiesPage() {
     }
   };
 
+  // A body in a region is what its region is (ADR-0042): a second fluid, the solid between two fluids.
+  const regions = useMemo(() => bodyRegions(tree), [tree]);
+  const roleFor = (part: { id: string; params: Record<string, unknown> }): Role => {
+    const own = roleOf(part, domainPart, enclosure);
+    const region = regions.get(part.id);
+    return region !== undefined && own !== "left_out" && own !== "hole" ? region.kind : own;
+  };
+
   const multi = chosenIds.length > 1;
-  const slotTaken = parts.some((p) => roleOf(p, domainPart, enclosure) === "fluid") || parts.some((p) => roleOf(p, domainPart, enclosure) === "hole");
+  const slotTaken = parts.some((p) => roleFor(p) === "fluid") || parts.some((p) => roleFor(p) === "hole");
 
   return (
     <div className="task-page" data-ws="task-bodies">
@@ -88,7 +97,8 @@ export default function BodiesPage() {
       )}
       <ul className="task-rows">
         {parts.map((part) => {
-          const role = roleOf(part as { id: string; params: Record<string, unknown> }, domainPart, enclosure);
+          const role = roleFor(part as { id: string; params: Record<string, unknown> });
+          const region = regions.get(part.id);
           const chosen = chosenIds.includes(part.id);
           return (
             <li key={part.id} className="task-row">
@@ -118,8 +128,13 @@ export default function BodiesPage() {
                   );
                 })}
               </div>
-              {role === "solid" && (
-                <span className="muted task-row-note" title="Kept out of this fluid mesh until multi-region meshing." aria-description="Kept out of this fluid mesh until multi-region meshing.">Solid · not meshed</span>
+              {role === "solid" && region === undefined && (
+                <span className="muted task-row-note" title="A solid with no material is kept out of the mesh. Give it a material to solve the heat in it with the fluid." aria-description="A solid with no material is kept out of the mesh. Give it a material to solve the heat in it with the fluid.">Solid · not meshed</span>
+              )}
+              {region !== undefined && role !== "left_out" && role !== "hole" && (
+                <span className="muted task-row-note" title="Meshed and solved as its own region, with the walls it shares with other bodies." data-ws="body-region-note">
+                  {region.materialName ?? "No material"} · meshed
+                </span>
               )}
             </li>
           );

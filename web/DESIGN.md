@@ -536,10 +536,17 @@ Rules that follow:
 - A row of mutually exclusive choices is one segmented control (a recessed
   `--track` with a raised segment), never a row of separate pills: `.segmented`
   in panels and `.guided-chips` in the guided cards.
-- The guided step strip in the top bar is one line in every state: a 16 px
-  status mark (done is `--ok-soft` behind an `--ok` check, not a filled disc),
-  the label, and the hint only in the tooltip, so the strip keeps its size
-  when the step changes and never pushes the project name into compaction.
+- The guided step strip in the top bar is one line in every state: a row of
+  compact segments, each a small mark (the step number in monospace when not
+  started, an `--ok` check when done, a warning triangle when it needs
+  attention, an accent spinner while running), the label, and a 2 px piece of
+  one continuous progress line under it (2026-11-20; it replaced the 16 px
+  discs joined by dashes). The open step's label is bold over a faint accent
+  wash; the hint is only in the tooltip, so the strip keeps its size when the
+  step changes and never pushes the project name into compaction.
+  2026-11-17: the strip has seven steps; the seventh, Optimise, is optional (a door to shape
+  optimisation and parametric studies), is never the step the app opens by itself, and hides its
+  label with the others when the bar narrows.
 - Colour: the accent appears in at most three places on a screen at rest
   (active chip, selection, primary button). Status colours are 7 px dots and
   thin bars, never filled badges.
@@ -566,8 +573,9 @@ rather than decoration:
   tabular figures. The bar's fit pass reruns when the pill appears and when it grows. Checked on a real
   two-rank solve of the elbow case on Windows (2026-11-04): fill, count and sparkline follow the run, and Stop
   returns the plain Run pill.
-- **The step rail**: the 14 × 2 px connector after a done step fills with `--ok` at 70 %, running into the
-  accent where it reaches the open step.
+- **The step rail**: each segment's own 2 px line, 3 px apart from the next, so the row reads as one track: grey
+  hairline not started, `--ok` done, amber needing attention, a sweeping accent band while running (none under
+  reduced motion), solid accent for the open step, dashed for the optional Optimise.
 - **The studio backdrop**: under the transparent canvas, `.viewport-bg` stacks a static SVG grain (9 % alpha),
   a vignette (`--vp-vignette`, black 28 % in the dark themes, ink 8 % in the light ones) and the theme's radial
   floor. Nothing in the WebGL render changes.

@@ -5,9 +5,10 @@
  * their labels, is the island layer's (workspace/IslandLayer.tsx); Appearance itself is
  * workspace/WorkspacePanel.tsx.
  */
+import { useCreateMenu } from "./CreateMenu";
 import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { setMouseScheme } from "./actions";
-import { ChevronDown, Circle, Crosshair, Cuboid, Eye, Grid2x2, Hand, Hexagon, Lasso, LocateFixed, Maximize2, Mouse, MousePointer2, Orbit, Paintbrush, Palette, Ruler, Scissors, Spline, SquareDashed, type LucideIcon } from "lucide-react";
+import { ChevronDown, Circle, Crosshair, Cuboid, Eye, Grid2x2, Hand, Hexagon, Lasso, LocateFixed, Maximize2, Mouse, MousePointer2, Orbit, Paintbrush, Palette, Ruler, Scissors, Shapes, Spline, SquareDashed, type LucideIcon } from "lucide-react";
 import { meshPatchesOf } from "../state/meshPatches";
 import { useStore, type NavMode, type PickMode, type ViewMode } from "../state/store";
 import { Button, IconButton } from "../components/ui";
@@ -97,6 +98,10 @@ export function ModeIsland({ ref }: { ref?: Ref<HTMLDivElement> }) {
   const paint = useShortcut("selection.paint");
   const display = useShortcut("view.mode.cycle");
   const navKeys = useShortcut("view.nav.cycle");
+  // The implicit modeller's menu (ADR-0035): this instance registers the create.* actions.
+  const create = useCreateMenu();
+  const ribbon = useStore((s) => s.buildRibbon);
+  const setBuildRibbon = useStore((s) => s.setBuildRibbon);
 
   const pickItems: MenuItemSpec[] = [
     { type: "heading", id: "heading", label: "Pick mode" },
@@ -204,6 +209,13 @@ export function ModeIsland({ ref }: { ref?: Ref<HTMLDivElement> }) {
 
   return (
     <div ref={ref} className="island island-modes glass pill-group" role="toolbar" aria-label="Modes" data-ws-island="modes">
+      <Tooltip label={ribbon ? "Close the build ribbon" : "Create geometry: the build ribbon of sketches, shapes, transforms and booleans"} describe={false}>
+        <Button ref={create.buttonRef} variant="ghost" active={ribbon} aria-pressed={ribbon} aria-label="Create" data-ws="create-geometry" onClick={() => setBuildRibbon(!ribbon)}>
+          <Shapes size={14} /> <span className="island-label">Create</span>
+        </Button>
+      </Tooltip>
+      {create.menu}
+      <div className="divider" />
       <Tooltip label={`Pick mode: ${picked.label}`} hint={mode.hint} disabled={pickOpen} describe={false}>
         <Button ref={pickButton} variant="ghost" aria-label={`Pick mode: ${picked.label}`} aria-haspopup="menu" aria-expanded={pickOpen} aria-keyshortcuts={mode.keys} onClick={() => setPickOpen((was) => !was)}>
           <PickIcon size={14} /> <span className="island-label">{picked.label}</span> <ChevronDown size={12} className="-mr-0.5 opacity-70" />

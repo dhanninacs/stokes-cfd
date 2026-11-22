@@ -37,6 +37,7 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 from stokes.compile.coupled import simple as coupled_writer
+from stokes.compile.of14 import adjoint as adjoint_writer
 from stokes.compile.of14 import fluid as fluid_writer
 from stokes.compile.of14 import steps as solve_steps
 from stokes.compile.of14 import write as solve_write
@@ -129,6 +130,13 @@ class FoamRunExecutor:
         copy_from: dict[str, Any] | None = None
         if mesh_job:
             copy_from = {"job": mesh_job, "paths": ["constant/polyMesh"]}
+            if snap.regions:
+                # **Every region's own mesh, and where each cell of the whole mesh went**
+                # (ADR-0042): the split wrote them in the mesh job, beside the whole mesh.
+                copy_from["paths"] += [
+                    "constant/cellToRegion",
+                    *(f"constant/{region.name}/polyMesh" for region in snap.regions),
+                ]
         if resume_job:
             from stokes.compile.of14.control import resume_control_text
 
@@ -387,8 +395,19 @@ def _read_monitors(runner: Any, job: str, snap: SolveSnapshot | None) -> dict[st
     # `time p T`. Asking for `fields=(p)` there missed the file (ADR-0027 step 5).
     averaged = ("p_mean", "T_mean") if snap.energy else ("p_mean",)
     fields = "".join(key.split("_")[0] for key in averaged)
+    # **A multi-region case writes each function under its region** (ADR-0042, measured):
+    # `postProcessing/<region>/patchFlowRate(patch=<patch>,region=<region>)/0/...`.
+    region_of = {
+        name: region.name
+        for region in snap.regions
+        if region.fluid is not None
+        for name in region.fluid.monitor_patches
+    }
     for patch in snap.monitor_patches:
         entry: dict[str, Any] = {}
+        region = region_of.get(patch)
+        folder = f"postProcessing/{region}" if region else "postProcessing"
+        tail = f",region={region}" if region else ""
         for keys, function, args in (
             (("flow_rate",), "patchFlowRate", f"patch={patch}"),
             # **No space after the comma.** The real directory is
@@ -399,7 +418,7 @@ def _read_monitors(runner: Any, job: str, snap: SolveSnapshot | None) -> dict[st
             (averaged, "patchAverage", f"patch={patch},fields=({fields})"),
         ):
             for time_dir in _time_dirs():
-                path = f"postProcessing/{function}({args})/{time_dir}/surfaceFieldValue.dat"
+                path = f"{folder}/{function}({args}{tail})/{time_dir}/surfaceFieldValue.dat"
                 values = _last_values(runner, job, path, len(keys))
                 if values is not None:
                     entry.update(zip(keys, values, strict=True))
@@ -454,8 +473,14 @@ def case_for(snap: SolveSnapshot) -> tuple[dict[str, str], list[dict[str, Any]]]
     writer, which refuses an engine it does not know. The catalogue still marks `of14.fluid`
     unbuilt, so no run reaches the first branch until ADR-0027 step 5.
     """
+    if snap.regions:
+        from stokes.compile.of14 import multi_region
+
+        return multi_region.write(snap), multi_region.steps(snap, snap.region_order)
     if snap.engine == fluid_writer.ENGINE:
         return fluid_writer.write(snap), fluid_writer.steps(snap)
+    if snap.engine == adjoint_writer.ENGINE:
+        return adjoint_writer.write_adjoint(snap), adjoint_writer.adjoint_steps(snap)
     if snap.engine == coupled_writer.ENGINE:
         return coupled_writer.write(snap), coupled_writer.steps(snap)
     return solve_write(snap), solve_steps(snap)
@@ -469,6 +494,8 @@ EXECUTORS: dict[str, type[FoamRunExecutor]] = {
     NAME: FoamRunExecutor,
     fluid_writer.ENGINE: FoamRunExecutor,
     coupled_writer.ENGINE: FoamRunExecutor,
+    # ADR-0038: the adjoint case runs like any other; only its writer differs (`case_for`).
+    "of14.adjoint": FoamRunExecutor,
 }
 
 

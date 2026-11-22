@@ -95,7 +95,7 @@ from .jobpaths import (
     result_path,
     tree_bytes,
 )
-from .lint import POLYMESH_PREFIX, Finding, lint_file, lint_job
+from .lint import CELL_TO_REGION, Finding, is_mesh_path, lint_file, lint_job
 from .lint_external import ProbedInstall, lint_file_external, lint_job_external
 from .parsers import PARSERS
 
@@ -112,6 +112,12 @@ ALLOWED_UTILITIES = frozenset(
         "snappyHexMesh",
         "surfaceFeatures",
         "foamRun",
+        # **The adjoint of ADR-0038**: Foundation 14's own legacy solver, run on a case Stokes
+        # wrote (`stokes.compile.of14.adjoint`); it takes no argument and reads only the case.
+        "adjointShapeOptimisationFoam",
+        # ADR-0041: the open-source adjoint (a separate GPL program, driven through files only),
+        # for the flow split; it takes no argument either.
+        "adjointFoam",
         "decomposePar",
         "reconstructPar",
         # The 2D snappy recipe (ADR-0031 decision 5): extrude the slab's front to one layer; it
@@ -129,13 +135,20 @@ ALLOWED_UTILITIES = frozenset(
         # edit of `constant/polyMesh/boundary` (`flags.py`).
         "improveSymmetryPlanes",
         "foamDictionary",
-        # **Gmsh and its converter** (ADR-0007 decision 5, `stokes.mesh.drivers.gmsh`). Gmsh reads
-        # one script whose every line `lint_gmsh` re-checks against a closed grammar (a Gmsh
-        # script can run shell commands), plus the STEP beside it; both paths are pinned in
-        # `flags.py`. `gmshToFoam` reads the one mesh file Gmsh wrote.
+        # **Multi-region conjugate cases** (ADR-0042): `topoSet` reads the case's own
+        # `system/topoSetDict` and rebuilds each fluid cell zone from its openings,
+        # `splitMeshRegions` writes `constant/<region>/polyMesh` from the cell zones (its two
+        # arguments are pinned in `flags.py`), and `foamMultiRun` solves the regions the
+        # `controlDict` names; it takes no argument.
+        "topoSet",
+        "splitMeshRegions",
+        "foamMultiRun",
+        # **Gmsh** (ADR-0043): a separate GPL program run on the case's own script, which
+        # `geo_lint` holds to a closed grammar, and OpenFOAM's converter of the mesh it saves. Both
+        # take one pinned path (`flags.POSITIONAL`).
         "gmsh",
         "gmshToFoam",
-        # **coupledSimpleFoam** (ADR-0035): a standalone solver that reads the case Stokes wrote and
+        # **coupledSimpleFoam** (ADR-0044): a standalone solver that reads the case Stokes wrote and
         # takes no argument at all (`flags.py`). It never runs the `controlDict` functions, so
         # `foamPostProcess -latestTime` evaluates the run's monitors on the final fields after it.
         "coupledSimpleFoam",
@@ -163,13 +176,13 @@ EXTERNAL = "external"
 EXTERNAL_MPI = frozenset({"foamRun", "foamMultiRun", "snappyHexMesh", "checkMesh"})
 
 #: The utilities a Stokes-written step may run over MPI. coupledSimpleFoam's parallel path is its
-#: PETSc backend (ADR-0035 decision 9).
+#: PETSc backend (ADR-0044 decision 9).
 STOKES_MPI = frozenset({"snappyHexMesh", "foamRun", "checkMesh", "coupledSimpleFoam"})
 
 #: Why a parallel coupledSimpleFoam is refused on an install without its PETSc build: FoamWin's
 #: serial build has the Eigen backend only, and the solver would stop at its first outer iteration
 #: asking for PETSc. FoamWin's `scripts/build-coupled.sh` puts a PETSc build in `bin/msmpi`, used
-#: when Microsoft MPI is installed (`engine_env.coupled_has_petsc`, ADR-0035 decision 10).
+#: when Microsoft MPI is installed (`engine_env.coupled_has_petsc`, ADR-0044 decision 10).
 COUPLED_MPI_WINDOWS = (
     "coupledSimpleFoam runs on one core on this FoamWin install: it has no PETSc build of the "
     r"solver (bin\msmpi\coupledSimpleFoam.exe), or Microsoft MPI is not installed. Set cores "
@@ -233,7 +246,11 @@ MESHERS = frozenset(
         "polyDualMesh",
         "improveSymmetryPlanes",
         "foamDictionary",
-        # Gmsh writes `constant/geometry/mesh.msh`; the converter writes the polyMesh.
+        # ADR-0042: `topoSet` rewrites the cell zones of the mesh the job just made, and
+        # `splitMeshRegions` writes each region's own mesh from it.
+        "topoSet",
+        "splitMeshRegions",
+        # ADR-0043: the conversion of Gmsh's mesh writes `constant/polyMesh`.
         "gmshToFoam",
     }
 )
@@ -261,6 +278,11 @@ _ACTION_KEYS = ("source", "target")
 #: The mesh action (`stokes_agent.flatten`): snap a planar symmetry patch onto its plane, as far as
 #: the cells around it allow. Takes a patch name and nothing else, and any job may use it.
 FLATTEN_OP = "flatten"
+#: The run action of a multi-region case (`stokes_agent.regions`, ADR-0042): write the fields of
+#: the whole mesh from the regions', so every reader of one mesh works on the result.
+MERGE_OP = "merge_regions"
+#: Keep each fluid zone to the cells its openings reach, before the split (`stokes_agent.zones`).
+PRUNE_OP = "prune_zones"
 FLATTEN_PATCH_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 STATES = ("queued", "running", "cancelling", "done", "failed", "cancelled", "interrupted")
 
@@ -1025,6 +1047,43 @@ class JobStore:
             if not FLATTEN_PATCH_RE.match(patch):
                 raise JobBadParams(f"step {step.name!r}: {patch!r} is not a patch name")
             return
+        if op == PRUNE_OP:
+            # Zone names to patch names, each a plain word: the action rewrites this job's own
+            # `constant/polyMesh/cellZones` and names no path.
+            zones = action.get("zones")
+            good = (
+                set(action) == {"op", "zones"}
+                and isinstance(zones, dict)
+                and 0 < len(zones) <= 64
+                and all(
+                    isinstance(z, str)
+                    and FLATTEN_PATCH_RE.match(z)
+                    and isinstance(ps, list)
+                    and len(ps) <= 256
+                    and all(isinstance(p, str) and FLATTEN_PATCH_RE.match(p) for p in ps)
+                    for z, ps in zones.items()
+                )
+            )
+            if not good:
+                raise JobBadParams(
+                    f"step {step.name!r}: prune_zones takes zone names to lists of patch names"
+                )
+            return
+        if op == MERGE_OP:
+            # Region names only, each a plain word: the action reads and writes this job's own
+            # time folders and names no path.
+            names = action.get("regions")
+            good = (
+                set(action) == {"op", "regions"}
+                and isinstance(names, list)
+                and 0 < len(names) <= 64
+                and all(isinstance(n, str) and FLATTEN_PATCH_RE.match(n) for n in names)
+            )
+            if not good:
+                raise JobBadParams(
+                    f"step {step.name!r}: merge_regions takes a list of region names"
+                )
+            return
         if profile != EXTERNAL:
             raise JobBadParams(
                 f"step {step.name!r} is a file action, which only an external job takes"
@@ -1312,7 +1371,7 @@ class JobStore:
         for item in files:
             name = item.relative_to(job_dir).as_posix()
             recorded = manifest.get(name)
-            if not name.startswith(POLYMESH_PREFIX) or not _is_size(recorded):
+            if not is_mesh_path(name) or not _is_size(recorded):
                 continue
             original = source_dir / name
             if item.stat().st_size == recorded and original.stat().st_size == recorded:
@@ -1607,8 +1666,8 @@ class JobStore:
         """
         action = step.action or {}
         op = str(action.get("op"))
-        if op == FLATTEN_OP:
-            return self._run_flatten(job_dir, step, str(action.get("patch")))
+        if op in (FLATTEN_OP, MERGE_OP, PRUNE_OP):
+            return self._run_mesh_action(job_dir, step, op, action)
         source_rel = str(action.get("source") or "")
         target_rel = str(action.get("target") or "")
         try:
@@ -1638,6 +1697,60 @@ class JobStore:
                 raise JobBadParams(f"file action {op!r} has no target")
         except (JobError, OSError) as exc:
             return "failed", {"code": "agent.file_action", "message": f"{op}: {exc}"}
+        return "done", None
+
+    def _run_mesh_action(
+        self, job_dir: Path, step: Step, op: str, action: dict[str, Any]
+    ) -> tuple[str, dict[str, str] | None]:
+        """The actions a mesh or solve job may take on its own mesh and fields, by `op`."""
+        if op == FLATTEN_OP:
+            return self._run_flatten(job_dir, step, str(action.get("patch")))
+        if op == MERGE_OP:
+            return self._run_merge(job_dir, step, [str(n) for n in action.get("regions") or []])
+        zones = {str(z): [str(p) for p in ps] for z, ps in (action.get("zones") or {}).items()}
+        return self._run_prune(job_dir, step, zones)
+
+    def _run_prune(
+        self, job_dir: Path, step: Step, zones: dict[str, list[str]]
+    ) -> tuple[str, dict[str, str] | None]:
+        """Keep each fluid zone to the pieces its openings reach (`stokes_agent.zones`).
+
+        **Never fails the job**: a mesh whose zones cannot be read is split as snappy left it, which
+        is what every multi-region mesh did before this step; the reason is in the step's log.
+        """
+        from .zones import prune_zones
+
+        try:
+            message = prune_zones(job_dir, zones)
+        except Exception as exc:  # a mesh that cannot be pruned is still a mesh
+            log.warning("zone prune failed", extra=fields(error=str(exc)[:200]))
+            message = f"prune: not made: {type(exc).__name__}: {exc}"
+        try:
+            (job_dir / f"log.{step.name}").write_text(message + "\n", encoding="utf-8")
+        except OSError:
+            log.debug("prune log not written")
+        return "done", None
+
+    def _run_merge(
+        self, job_dir: Path, step: Step, regions: list[str]
+    ) -> tuple[str, dict[str, str] | None]:
+        """Write the whole-mesh fields of a multi-region run (`stokes_agent.regions`, ADR-0042).
+
+        **Never fails the job**: the regions' own fields are the result and are on disk either
+        way; a merge that could not be made leaves the views of the whole mesh without fields,
+        and the reason is in the step's log.
+        """
+        from .regions import merge_regions
+
+        try:
+            message = merge_regions(job_dir, regions)
+        except Exception as exc:  # the solve is done; a failed merge must not undo it
+            log.warning("region merge failed", extra=fields(error=str(exc)[:200]))
+            message = f"merge: not made: {type(exc).__name__}: {exc}"
+        try:
+            (job_dir / f"log.{step.name}").write_text(message + "\n", encoding="utf-8")
+        except OSError:
+            log.debug("merge log not written")
         return "done", None
 
     def _run_flatten(
@@ -1787,19 +1900,33 @@ class JobStore:
     def _polymesh_state(self, job_dir: Path) -> dict[str, tuple[int, int]]:
         """Every regular file under `constant/polyMesh` as ``name -> (size, mtime_ns)``."""
         found: dict[str, tuple[int, int]] = {}
-        base = job_dir / "constant" / "polyMesh"
-        if base.is_symlink() or not base.is_dir():
+        constant = job_dir / "constant"
+        if constant.is_symlink() or not constant.is_dir():
             return found
-        for root, _dirs, names in os.walk(base, followlinks=False):
-            for name in names:
-                item = Path(root) / name
-                if item.is_symlink():
-                    continue
-                try:
-                    info = item.stat()
-                except OSError:
-                    continue
-                found[item.relative_to(job_dir).as_posix()] = (info.st_size, info.st_mtime_ns)
+        # The whole mesh, each region's own (ADR-0042: `constant/<region>/polyMesh`), and the
+        # split's cell-to-region list.
+        bases = [constant / "polyMesh"]
+        with contextlib.suppress(OSError):
+            bases += [entry / "polyMesh" for entry in sorted(constant.iterdir()) if entry.is_dir()]
+        for base in bases:
+            if base.is_symlink() or base.parent.is_symlink() or not base.is_dir():
+                continue
+            for root, _dirs, names in os.walk(base, followlinks=False):
+                for name in names:
+                    item = Path(root) / name
+                    if item.is_symlink():
+                        continue
+                    try:
+                        info = item.stat()
+                    except OSError:
+                        continue
+                    rel = item.relative_to(job_dir).as_posix()
+                    if is_mesh_path(rel):
+                        found[rel] = (info.st_size, info.st_mtime_ns)
+        single = job_dir / CELL_TO_REGION
+        if single.is_file() and not single.is_symlink():
+            info = single.stat()
+            found[CELL_TO_REGION] = (info.st_size, info.st_mtime_ns)
         return found
 
     def _record_polymesh(self, job_dir: Path, before: dict[str, tuple[int, int]]) -> None:
@@ -2898,7 +3025,7 @@ def _trusted_of(state: dict[str, Any]) -> dict[str, int]:
     return {
         name: size
         for name, size in raw.items()
-        if isinstance(name, str) and name.startswith(POLYMESH_PREFIX) and _is_size(size)
+        if isinstance(name, str) and is_mesh_path(name) and _is_size(size)
     }
 
 

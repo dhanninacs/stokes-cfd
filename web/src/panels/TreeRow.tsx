@@ -92,6 +92,9 @@ const ROW_ICONS: Record<RowKind, typeof Box> = {
   "result-probe": Target,
   "result-report": Image,
   "result-lod": Layers,
+  "explore-optimise": Target,
+  "explore-table": Ruler,
+  "explore-plots": ChartLine,
 };
 
 /**

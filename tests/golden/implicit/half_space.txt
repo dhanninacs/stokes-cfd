@@ -1,0 +1,5 @@
+_0 var-z
+_1 const 5.0
+_2 sub _0 _1
+_3 const 1.0
+_4 mul _2 _3

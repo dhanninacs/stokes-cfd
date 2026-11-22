@@ -102,6 +102,14 @@ export interface SliceContext {
 }
 
 export class SliceLayer {
+  /** What each slice source is coloured with now (one value per cut vertex), for the hover readout. */
+  private painted = new Map<string, FieldValues | null>();
+
+  /** The values a slice source is coloured with, or null (banded, not coloured, or not this layer's). */
+  valuesOf(source: string): FieldValues | null {
+    return this.painted.get(source) ?? null;
+  }
+
   private readonly cuts = new Map<string, Cut>();
   private readonly values = new Map<string, Cached>();
   private readonly shown = new Map<string, Shown>();
@@ -174,7 +182,7 @@ export class SliceLayer {
     for (const id of [...this.shown.keys()]) if (!wanted.has(id)) this.removeSlice(id);
     if (context !== null) for (const spec of slices) this.syncSlice(spec, context);
     // An iso-surface lies inside the body as a slice does: the same "fade the walls" setting shows it.
-    const isoInside = context !== null && state.isoDrawn?.state === "shown" && state.iso?.visible === true;
+    const isoInside = context !== null && ((state.isoDrawn?.state === "shown" && state.iso?.visible === true) || (state.contours !== null && (state.contoursDrawn?.shown ?? 0) > 0));
     // Streamlines and volume arrows fill the fluid: the same setting fades the walls to show them.
     const inside = context !== null && ((state.streamlines?.lines.length ?? 0) > 0 || (volumeArrowsShown(state.arrows) && state.vectorCloud?.phase === "ready"));
     this.fadeWalls(wallsFaded({ setting: state.slices.fadeWalls, slices: slices.length, iso: isoInside, midBuried: context !== null && midBuried, inside }), walls);
@@ -296,6 +304,7 @@ export class SliceLayer {
       range === null ? "" : `${range.min}|${range.max}`,
       look.map,
       look.reverse,
+      look.clip,
       spec.fill,
       spec.bands,
       spec.lines,
@@ -321,6 +330,9 @@ export class SliceLayer {
         ? reducedValues
         : null;
     this.paint(spec, source, cut, held, usable, range, values, field);
+    // The values the cut is coloured with, for the hover readout; a banded fill is drawn on a mesh of its own
+    // pieces, whose vertices are not the cut's, so it has none.
+    this.painted.set(source, spec.fill && !spec.bands ? usable : null);
     // **The raw vector goes to the arrows** - the magnitudes that colour the cut carry no direction.
     /*
       **The arrows take `values`, the RAW cache entry** - not `usable`, which is reduced to one number
@@ -448,7 +460,7 @@ export class SliceLayer {
   private tintOf(values: FieldValues | null, range: Range | null, vertices: number, spec: SliceSpec, field: string): Uint8Array | null {
     if (values === null || range === null) return null;
     const look = legendOf(useStore.getState().results.view);
-    const tint = patchTint(values, range, vertices, 0, look.map, look.reverse);
+    const tint = patchTint(values, range, vertices, 0, look.map, look.reverse, look.clip);
     if (tint === null) useStore.getState().log("error", `results: ${field} on ${sliceName(spec)} has ${values.count} values for ${vertices} vertices; it keeps its own colour`);
     return tint;
   }
@@ -647,12 +659,12 @@ export class SliceLayer {
       }
     }
     const look = legendOf(context.view);
-    const stamp = [field, range === null ? "" : `${range.min}|${range.max}`, look.map, look.reverse, pending ? "pending" : values === null ? "none" : "values"].join("|");
+    const stamp = [field, range === null ? "" : `${range.min}|${range.max}`, look.map, look.reverse, look.clip, pending ? "pending" : values === null ? "none" : "values"].join("|");
     if (held.stamp === stamp) return;
     held.stamp = stamp;
     // **The cap follows the same rule**: its values come through the same cache, so they are reduced
     // before a tint can read them - `patchTint` is one byte per vertex.
-    const tint = values === null || range === null ? null : patchTint(reducedForTint(values, field), range, cut.vertices, 0, look.map, look.reverse);
+    const tint = values === null || range === null ? null : patchTint(reducedForTint(values, field), range, cut.vertices, 0, look.map, look.reverse, look.clip);
     this.scene.setSourceVertexTint(CAP_SOURCE, tint);
   }
 

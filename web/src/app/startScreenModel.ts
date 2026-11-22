@@ -57,3 +57,64 @@ export function monogram(name: string): string {
   if (digits !== undefined && word.length > digits.length) return (word[0]! + digits).toUpperCase();
   return word.slice(0, 2).toUpperCase();
 }
+
+/**
+ * A project path as one key per project: separators made `/`, repeated and trailing ones dropped, `.` parts
+ * removed, and a Windows path (a drive letter or a UNC share) compared without case, as its file system does. The
+ * server keys its list by the resolved path; this catches what reaches the screen spelled two ways all the same
+ * (Windows walkthrough, 2026-11-13: rows that only their case or slashes told apart).
+ */
+export function canonicalPath(path: string): string {
+  const windows = /^[A-Za-z]:[\\/]/.test(path) || path.includes("\\");
+  const unc = path.startsWith("\\\\") || path.startsWith("//");
+  const parts = path.split(/[\\/]+/).filter((p) => p !== "" && p !== ".");
+  const joined = (unc ? "//" : path.startsWith("/") ? "/" : "") + parts.join("/");
+  return windows ? joined.toLowerCase() : joined;
+}
+
+/** The recent rows with one row per project (the first, the most recent, of each canonical path), in order. */
+export function dedupeRecent<T extends { path: string }>(rows: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const key = canonicalPath(row.path);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+/** The folder a project is in, whole, with the path's own separators: the second line of a list row. */
+export function parentFolder(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const cut = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return cut > 0 ? trimmed.slice(0, cut) : "";
+}
+
+/**
+ * The location each recent card shows under its name: the parent folder's name, or, for projects that share a name
+ * and a parent folder's name, as many folders up as it takes to tell them apart ("code/Projects" and
+ * "audit/Projects"). The full path is the card's tooltip.
+ */
+export function recentLocations(rows: readonly { name: string; path: string }[]): Map<string, string> {
+  const folders = (path: string) => path.split(/[\\/]+/).filter(Boolean).slice(0, -1);
+  const tail = (path: string, depth: number) => folders(path).slice(-depth).join("/");
+  const out = new Map<string, string>();
+  const groups = new Map<string, { name: string; path: string }[]>();
+  for (const row of rows) {
+    const key = row.name.toLowerCase();
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  for (const group of groups.values()) {
+    let depth = 1;
+    const deepest = Math.max(...group.map((r) => folders(r.path).length), 1);
+    while (depth < deepest) {
+      const tails = group.map((r) => tail(r.path, depth).toLowerCase());
+      if (new Set(tails).size === tails.length) break;
+      depth++;
+    }
+    for (const row of group) out.set(row.path, tail(row.path, depth));
+  }
+  return out;
+}

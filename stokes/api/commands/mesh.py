@@ -217,7 +217,14 @@ def mesh_body_role(  # noqa: PLR0912 - one branch per refusal and per role, each
             old_ref = settings.params.get(field)
             if old_ref:
                 old_holder = project.find(str(old_ref))
-                if old_holder is not None and old_holder.id != first.id:
+                # A hidden implicit part is a step another implicit operation consumed (ADR-0035):
+                # it stays out of the simulation rather than coming back as a solid.
+                step = (
+                    old_holder is not None
+                    and old_holder.params.get("family") == "implicit"
+                    and old_holder.params.get("visible") is False
+                )
+                if old_holder is not None and old_holder.id != first.id and not step:
                     changes.append(SetParam(old_holder.id, "simulate", True))
         for node in nodes:
             changes.append(SetParam(node.id, "simulate", True))
@@ -523,6 +530,12 @@ def mesh_generate(
     **A host that cannot mesh does not raise**: the result is written `skipped` with the reason,
     so a
     journal recorded on a machine with OpenFOAM replays on one without.
+
+    **On the server's session thread it returns `state: "preparing"` at once** and the snapshot,
+    probe, compile, stage and start steps run on a worker that emits `mesh.preparing` (one per
+    step, with the seconds so far and, while staging, the bytes sent) and ends with
+    `mesh.prepared`; `mesh.cancel` stops it between steps. `wait=true` (off that thread) runs the
+    same steps on the caller's thread and then waits for the job, as before.
     """
     from stokes.api.commands.compute import default_host
     from stokes.errors import ValidationError
@@ -536,15 +549,21 @@ def mesh_generate(
         or (str(settings.params.get("host") or "") if settings is not None else "")
         or default_host(ctx)
     )
-    if wait and GeometryStore.of(ctx.session).blocks_session():
+    on_session_thread = GeometryStore.of(ctx.session).blocks_session()
+    if wait and on_session_thread:
         raise ValidationError("wait=true would block the server; follow the mesh.* events")
     # **`dict(...)`, so the declared return type is real.** `MeshService.generate` is a session
     # extension
     # reached through `Any`, and mypy cannot see through it: an explicit copy says the command
     # returns a
     # JSON object rather than leaving it to be inferred as `Any` from a branch.
-    info = dict(service.generate(project, chosen, force, result_id))
-    ctx.record(result_id=str(info["result"]))
+    # **On the session thread the preparation goes to a worker** (ADR-0024 addendum 2026-11-14):
+    # the snapshot's STL export and the staging upload took seconds to minutes on the server's
+    # event loop. The answer is `state: "preparing"` with the result id the worker will use, which
+    # is the id journaled, so a replay (inline, off that thread) makes the same node.
+    info = dict(service.generate(project, chosen, force, result_id, background=on_session_thread))
+    if info.get("result"):
+        ctx.record(result_id=str(info["result"]))
     if wait:
         service.wait(None)
         info = dict(service.status())

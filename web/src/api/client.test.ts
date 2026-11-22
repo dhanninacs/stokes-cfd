@@ -43,6 +43,23 @@ describe("StokesClient replies", () => {
     await expect(call).rejects.toThrow("could not be read");
   });
 
+  it("gives every listener the event when one of them throws, and logs the stack", async () => {
+    const { client, socket } = await connected();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const heard: string[] = [];
+    client.onEvent(() => {
+      // What a listener reading an array the event does not carry does.
+      const data = {} as { cycles: number[] };
+      heard.push(String(data.cycles.length));
+    });
+    client.onEvent((event) => heard.push(event));
+    socket.reply(JSON.stringify({ event: "shape.cycle", data: {} }));
+    expect(heard).toEqual(["shape.cycle"]);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(String(error.mock.calls[0]?.[0])).toContain("a listener of shape.cycle failed");
+    error.mockRestore();
+  });
+
   it("resolves an ordinary reply", async () => {
     const { client, socket } = await connected();
     const call = client.call("run.list");

@@ -64,11 +64,37 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     is really a missing dependency teaches people to ignore the gate.
     """
     _skip_what_this_host_cannot_test(items)
+    _skip_gpu_tests_without_a_gpu(items)
     if os.environ.get("STOKES_ENGINE_TESTS") == "1":
         return
     skip = pytest.mark.skip(reason="engine test: set STOKES_ENGINE_TESTS=1 to run")
     for item in items:
         if "engine" in item.keywords:
+            item.add_marker(skip)
+
+
+def _skip_gpu_tests_without_a_gpu(items: list[pytest.Item]) -> None:
+    """Skip every `gpu` test (Fast mode, ADR-0047) unless a hardware adapter opens: CI has none, and
+    a GPU that is not there is a missing dependency, not a failure. `STOKES_GPU_TESTS=0` skips them
+    on a machine that has one. The adapter is probed once, only when a `gpu` test was collected."""
+    wanted = [item for item in items if "gpu" in item.keywords]
+    if not wanted:
+        return
+    reason = ""
+    if os.environ.get("STOKES_GPU_TESTS") == "0":
+        reason = "gpu test: STOKES_GPU_TESTS=0"
+    else:
+        from stokes.errors import StokesError
+        from stokes.fast.device import open_device
+
+        try:
+            device, _info = open_device()
+            device.destroy()
+        except StokesError as exc:
+            reason = f"gpu test: {exc.message}"
+    if reason:
+        skip = pytest.mark.skip(reason=reason)
+        for item in wanted:
             item.add_marker(skip)
 
 

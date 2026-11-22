@@ -253,6 +253,14 @@ def _results(project: Project, study: Node, table: StudyTable, status: str) -> d
             required=False,
             description="Number of points, for the samplers that take one.",
         ),
+        ParamDef(
+            "engine",
+            "string",
+            required=False,
+            default="function",
+            description="function (expressions alone) or geometry (each point rebuilds and "
+            "measures the parts made with Create).",
+        ),
         NODE_ID,
     ),
 )
@@ -264,6 +272,7 @@ def study_create(
     sampler: str | None = None,
     seed: int | None = None,
     count: int | None = None,
+    engine: str = "function",
     node_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a study under /studies with its variables, responses, objectives and constraints
@@ -277,6 +286,7 @@ def study_create(
         "type": type,
         "description": description,
         "sampler": sampler or ("latin_hypercube" if type == "doe" else "full_factorial"),
+        "engine": engine,
     }
     if seed is not None:
         params["seed"] = seed
@@ -447,11 +457,15 @@ def study_add_response(
     text = expression.strip()
     if not text:
         raise ValidationError("a response needs an expression")
+    from stokes.explore.engine_geometry import base_resolver
+
+    # A part's measure (geometry.parts.duct.volume) is checked by measuring the base case.
+    resolve = base_resolver(project)
     if dimension is not None:
         dim = named_dimension(dimension)
-        a.evaluate_text(text, project.resolve, dim)
+        a.evaluate_text(text, resolve, dim)
     else:
-        dim = a.dimension_of(a.evaluate_text(text, project.resolve), f"response {text!r}")
+        dim = a.dimension_of(a.evaluate_text(text, resolve), f"response {text!r}")
     _taken(node, name)
     if name is None:
         if a.is_reference(text):
@@ -664,10 +678,12 @@ def study_add_point(
 def study_update(
     ctx: CommandContext, study: str, points: Any = "all"
 ) -> dict[str, Any]:  # Any: JSON
-    """Evaluate points with the function engine: with "all", every point not yet done (or
-    lacking a response); streams study.point events, then study.updated."""
+    """Evaluate points with the study's engine (function, or geometry, which rebuilds and
+    measures the parts made with Create): with "all", every point not yet done (or lacking a
+    response); streams study.point events, then study.updated."""
     from stokes.explore.definition import StudyDefinitionError, read_definition
     from stokes.explore.engine_function import FunctionEngine
+    from stokes.explore.engine_geometry import GeometryEngine
     from stokes.explore.evaluate import PointRequest, PointResult
 
     selection = _indices(points)
@@ -680,7 +696,9 @@ def study_update(
         )
     rows = store.select(node.id, selection, [r.name for r in definition.responses])
     token = store.begin(node.id)
-    engine = FunctionEngine()
+    engine: FunctionEngine | GeometryEngine = (
+        GeometryEngine() if node.params.get("engine") == "geometry" else FunctionEngine()
+    )
     finished: list[dict[str, Any]] = []  # Any: JSON rows
 
     def started(index: int) -> None:

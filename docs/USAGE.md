@@ -11,7 +11,7 @@ Install first: [Windows](INSTALL-WINDOWS.md) or [Linux](INSTALL-LINUX.md).
 To see the whole case first, watch the
 [walkthrough video](video/elbow-walkthrough.webm) (about 1½ minutes, no sound).
 
-Contents: [Start](#start) · [The six steps](#the-six-steps) ·
+Contents: [Start](#start) · [The steps](#the-steps) ·
 [Themes and colour maps](#themes-and-colour-maps) ·
 [Moving around the 3D view](#moving-around-the-3d-view) ·
 [Results tools](#results-tools) · [Full mode](#full-mode-and-the-tree) ·
@@ -26,7 +26,7 @@ recent projects, **Examples** (a sample project is copied and opened) and
 top bar appears:
 
 ```
-Geometry — Fluid — Boundaries — Mesh — Run — Results        Guided | Full
+Geometry — Fluid — Boundaries — Mesh — Run — Results — Optimise        Guided | Full
 ```
 
 Each step is a card on the left and a view in the middle. A tick means the step
@@ -38,7 +38,7 @@ be undone with `Ctrl+Z` (redo with `Ctrl+Y`).
 The command palette (`Ctrl+K`, or **Commands** in the top bar) finds every action
 by name.
 
-## The six steps
+## The steps
 
 ### 1. Geometry
 
@@ -103,7 +103,10 @@ The same part, coarser, builds faster and is the right first try:
 Times are from one Windows machine; yours will differ. The default mesher is
 snappyHexMesh. In **Full** mode you can also choose cfMesh (tetrahedral,
 polyhedral, hex-dominant) or blockMesh, set cores for the mesher, and keep
-several meshes and pick which one the run uses.
+several meshes and pick which one the run uses. A mesher whose programs the
+selected host does not have (for example cfMesh on an older FoamWin install) is
+listed as not available, with the missing program named, instead of failing when
+you press Generate.
 
 ### 5. Run
 
@@ -139,6 +142,15 @@ Temperature on the same slice: the hot streak is still visible at the outlet.
 Streamlines from both inlets, traced through the volume and coloured by speed:
 
 ![Streamlines](images/elbow-8-streamlines.jpg)
+
+### 7. Optimise (optional)
+
+After a run, the last step opens two doors. **Optimise the shape…** opens the
+Optimise panel, which changes dimensions of a body made with **Create** to lower
+the pressure loss or balance a flow split, with gradients from the adjoint or
+from finite differences (an imported CAD body has no dimensions to change, so the
+button says so). **New study…** starts a parametric study; once the project has
+one, **Design table** and **Plots** open it. This step is never opened for you.
 
 ## Themes and colour maps
 

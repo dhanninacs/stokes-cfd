@@ -88,9 +88,9 @@ describe("the over-the-limit line", () => {
 describe("localSizesApply", () => {
   it("every shape-following mesher, with blockMesh told honestly", () => {
     expect(localSizesApply("snappy")).toBe(true);
-    for (const id of ["cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex"]) expect(localSizesApply(id)).toBe(true);
+    for (const id of ["cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex", "gmsh"]) expect(localSizesApply(id)).toBe(true);
     expect(localSizesApply("blockmesh")).toBe(false);
-    expect(BLOCKMESH_NOTE).toBe("Local sizes apply to snappyHexMesh and the cfMesh types only");
+    expect(BLOCKMESH_NOTE).toBe("Local sizes apply to snappyHexMesh, the cfMesh types and Gmsh only");
   });
 });
 

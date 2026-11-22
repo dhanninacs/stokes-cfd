@@ -127,21 +127,21 @@ def test_presets_differ_as_documented() -> None:
     # built-in now, so every preset has to place it.
     assert ids("classic", "left") == ["tree", "properties", "conditions", "details"]
     # `classic`'s right slot keeps its own three and gains the new ones.
-    assert ids("classic", "right") == ["output", "design-table", "plots", *new_right]
+    assert ids("classic", "right") == ["output", "design-table", "plots", *new_right, "optimise"]
     assert classic["topbar"]["stages"]["style"] == "chips"
     assert presets["ribbon"]["topbar"]["stages"]["style"] == "ribbon"
     assert (ids("ribbon", "left"), ids("ribbon", "right")) == (
         # `details` is placed in every preset: the schema wants each built-in exactly once, and a
         # preset that forgot it would be a document the server refuses.
         ["tree", "details"],
-        ["properties", "mesh", "conditions", "solve", "results", "plots"],
+        ["properties", "mesh", "conditions", "solve", "results", "plots", "optimise"],
     )
     workflow = presets["workflow"]
     assert workflow["topbar"]["stages"]["style"] == "hidden"
     assert workflow["tree"]["linkStage"] is False
     assert (ids("workflow", "left"), ids("workflow", "right")) == (
         ["tree", "details"],
-        ["properties", "mesh", "conditions", "solve", "results", "plots"],
+        ["properties", "mesh", "conditions", "solve", "results", "plots", "optimise"],
     )
     minimal = presets["minimal"]
     # **`minimal` HIDES them rather than placing them**: a preset whose whole character is "few
@@ -151,7 +151,7 @@ def test_presets_differ_as_documented() -> None:
     # tree - by hiding it rather than placing it somewhere the preset did not choose.
     assert minimal["layout"]["hidden"] == ["tree", "details", *new_right]
     assert ids("minimal", "float") == ["properties", "conditions"]
-    assert ids("minimal", "bottom") == ["output", "design-table", "plots"]
+    assert ids("minimal", "bottom") == ["output", "design-table", "plots", "optimise"]
     assert minimal["layout"]["bottom"]["collapsed"] is True
     shown = [item["id"] for item in minimal["topbar"]["items"] if item["visible"]]
     assert shown == ["logo", "project", "commands", "run", "window"]

@@ -82,9 +82,10 @@ CELL_FACTORS: dict[str, float] = {
     "polyhex": 0.83,
     "cfmesh_poly": 3.5,
     "cfmesh_tet": 12.9,
-    # **Gmsh, measured 2026-11-20 on four parts** (pipe tee, branch manifold, bend, 20-pin
-    # channel) against snappyHexMesh at the same settings: 6.2, 7.9, 6.6 and 7.6 times; the median.
-    "gmsh": 7.1,
+    # ADR-0043, measured 2026-11-20: Gmsh's tetrahedra on the 20x10x10 mm duct at 1.5 mm (12,949
+    # against this formula's 10,997) and on a 10 mm pipe at 1 mm (24,543 tetrahedra against
+    # 20,213). Prism layers add `layers x wall faces` on top, which the formula does not model.
+    "gmsh": 1.2,
 }
 
 

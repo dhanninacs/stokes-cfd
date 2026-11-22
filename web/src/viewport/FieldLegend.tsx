@@ -15,15 +15,15 @@
  * `--text-muted`); the only colours that are not are the map's own.
  */
 import { useMemo, useState } from "react";
-import { NO_FIELD, fieldTitle, fieldUnits, parseRangeInput, rangeForField, resultsShown, type Range } from "../panels/fieldsModel";
-import { dropReadout, legendLabels, legendOf, setManualEnd } from "../panels/legendModel";
+import { NO_FIELD, fieldRange, fieldTitle, fieldUnits, formatTick, parseRangeInput, rangeForField, resultsShown, type Range } from "../panels/fieldsModel";
+import { clippedEnds, dropReadout, legendLabels, legendOf, legendTickCount, setManualEnd, type Clipped } from "../panels/legendModel";
+import { useVariables } from "../panels/variablesControl";
+import { variableOf, variableTitle } from "../panels/variablesModel";
 import { sliceFieldOf, visibleSlices } from "../panels/sliceModel";
 import { monitorsOf, pressureDrop, runForMonitors } from "../panels/monitorsModel";
 import { rangeScopeOf } from "../panels/fieldsModel";
 import { steppedGradientCssFor } from "../state/colormap";
 import { useStore } from "../state/store";
-
-const TICKS = 5;
 
 /**
  * The drop from the inlet to the outlet that the run's monitors give, as a line under the legend (T-219 D).
@@ -35,7 +35,8 @@ function DropReadout({ value, inlet, outlet, units, density }: { value: number; 
   return (
     <div className="field-legend-drop" data-ws="field-drop" title={shown.detail === "" ? undefined : shown.detail}>
       <span className="muted">{`Pressure drop, ${inlet} to ${outlet}`}</span>
-      <span className="field-legend-drop-value">{`${shown.symbol} ${shown.text} ${shown.units}`}</span>
+      {/* The solver spells the unit "m2/s2"; on screen the powers are raised: m²/s². */}
+      <span className="field-legend-drop-value">{`${shown.symbol} ${shown.text} ${shown.units.replace(/([A-Za-z])([23])/g, (_, letter: string, power: string) => `${letter}${power === "2" ? "²" : "³"}`)}`}</span>
     </div>
   );
 }
@@ -50,12 +51,21 @@ function LegendBlock({
   onEnd,
   values,
   onPrint,
+  clipped,
+  extent,
+  clipNote,
 }: {
   title: string;
   bar: string;
   ticks: string[];
   fixed: boolean;
   scope: string;
+  /** Whether the data reaches past either end of the range: drawn as a cap on that end of the bar. */
+  clipped: Clipped;
+  /** The data's own range in words, shown when the colours span less than it. */
+  extent: string;
+  /** What happens to the values past an end: the sentence of the extent line's tooltip. */
+  clipNote: string;
   /** Writes one end of the range (R6): present only for the field the colours follow. */
   onEnd?: (end: "min" | "max", value: number) => void;
   values?: { min: number; max: number };
@@ -69,6 +79,7 @@ function LegendBlock({
     setDraft(String(Number(values[end].toPrecision(4))));
     setEditing(end);
   };
+  const last = ticks.length - 1;
   const commit = () => {
     const parsed = parseRangeInput(draft);
     if (editing !== null && parsed !== null && onEnd !== undefined) onEnd(editing, parsed);
@@ -92,17 +103,17 @@ function LegendBlock({
         </div>
       )}
       <div className="field-legend-body">
-        <div className="field-legend-bar" style={{ background: bar }} aria-hidden="true" />
+        <div className="field-legend-bar" style={{ background: bar }} aria-hidden="true" data-above={clipped.above || undefined} data-below={clipped.below || undefined} />
         <ol className="field-legend-ticks" aria-label="Values from highest to lowest">
           {ticks.map((label, i) => (
             <li
               key={i}
-              data-end={i === 0 ? "max" : i === TICKS - 1 ? "min" : undefined}
-              data-editable={onEnd !== undefined && (i === 0 || i === TICKS - 1) ? "" : undefined}
-              title={onEnd !== undefined && (i === 0 || i === TICKS - 1) ? "Double-click to set this end" : undefined}
-              onDoubleClick={onEnd !== undefined && (i === 0 || i === TICKS - 1) ? () => begin(i === 0 ? "max" : "min") : undefined}
+              data-end={i === 0 ? "max" : i === last ? "min" : undefined}
+              data-editable={onEnd !== undefined && (i === 0 || i === last) ? "" : undefined}
+              title={onEnd !== undefined && (i === 0 || i === last) ? "Double-click to set this end" : undefined}
+              onDoubleClick={onEnd !== undefined && (i === 0 || i === last) ? () => begin(i === 0 ? "max" : "min") : undefined}
             >
-              {editing !== null && (i === 0 ? editing === "max" : i === TICKS - 1 && editing === "min") ? (
+              {editing !== null && (i === 0 ? editing === "max" : i === last && editing === "min") ? (
                 <input
                   className="field mono field-legend-edit"
                   value={draft}
@@ -122,7 +133,12 @@ function LegendBlock({
           ))}
         </ol>
       </div>
-      {fixed && <div className="field-legend-note">fixed range</div>}
+      {extent !== "" && (
+        <div className="field-legend-note" data-ws="legend-extent" title={clipNote}>
+          {`data ${extent}`}
+        </div>
+      )}
+      {fixed && extent === "" && <div className="field-legend-note">fixed range</div>}
     </>
   );
 }
@@ -134,6 +150,7 @@ export function FieldLegend() {
   const data = useStore((s) => s.results.data);
   const slices = useStore((s) => s.slices);
   const runs = useStore((s) => s.run.runs);
+  const variables = useVariables((s) => s.reply?.variables ?? null);
   const resultsRun = useStore((s) => s.results.run);
   // **The bar follows the map, its direction and the band count** (results item 3, R1): a gradient beside a
   // banded surface would be a legend that lies about its own colours.
@@ -171,7 +188,8 @@ export function FieldLegend() {
       </div>
     );
   }
-  const label = blocks.map((b) => fieldTitle(data, b.field)).join("; ");
+  const titleOf = (field: string) => variableTitle(variableOf(variables, field), field, fieldUnits(data, field)) || fieldTitle(data, field);
+  const label = blocks.map((b) => titleOf(b.field)).join("; ");
   return (
     <div
       className={`field-legend glass${print ? " field-legend--print" : ""}`}
@@ -179,14 +197,21 @@ export function FieldLegend() {
       aria-label={`Colour legend: ${label}`}
       data-ws="field-legend"
     >
-      {blocks.map((b) => (
-        <LegendBlock
-          key={b.field}
-          title={fieldTitle(data, b.field)}
-          bar={steppedGradientCssFor(look.map, look.bands, look.reverse, "to top", b.range)}
-          ticks={legendLabels(b.range, view, TICKS)}
+      {blocks.map((b) => {
+        const whole = fieldRange(data, b.field);
+        const clipped = clippedEnds(b.range, whole);
+        const extent = whole !== null && (clipped.above || clipped.below) ? `${formatTick(whole.min)} to ${formatTick(whole.max)}` : "";
+        return (
+          <LegendBlock
+            key={b.field}
+            title={titleOf(b.field)}
+            clipped={clipped}
+            extent={extent}
+            clipNote={look.clip ? "Clipped to the range: values past an end are drawn without colour" : "The colours span less than the data: values past an end take that end's colour"}
+            bar={steppedGradientCssFor(look.map, look.bands, look.reverse, "to top", b.range)}
+            ticks={legendLabels(b.range, view, legendTickCount(look.bands))}
           fixed={view.lock !== null && view.lock.field === b.field}
-          scope={rangeScopeOf(b.field, view.lock !== null && view.lock.field === b.field)}
+          scope={rangeScopeOf(b.field, view.lock !== null && view.lock.field === b.field, data?.fields.some((f) => f.name === b.field) === true)}
           onPrint={() => setPrint((on) => !on)}
           values={b.field === view.field ? { min: b.range.min, max: b.range.max } : undefined}
           onEnd={
@@ -198,8 +223,9 @@ export function FieldLegend() {
                   })
               : undefined
           }
-        />
-      ))}
+          />
+        );
+      })}
       {readout}
     </div>
   );
