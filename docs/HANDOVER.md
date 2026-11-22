@@ -45,8 +45,11 @@ Linux/WSL, and to keep both branches level.
   (`stokes/geometry/faceleaks.py`). A drawn arc keeps its exact circle (ADR-0036 addendum
   2026-11-17). Splines are still polylines.
 - **GUI walkthrough fixes** of 2026-11-17 and 18 are listed under Unreleased in `CHANGELOG.md`.
-- **Public repository:** `dhanninacs/stokes-cfd` still carries the 2026-11-09 source snapshot (code
-  branches last touched 2026-11-12). Publishing a newer one is an owner decision, not taken.
+- **Public repository (2026-11-23):** `dhanninacs/stokes-cfd` keeps three branches: `main`
+  (documentation and the website, served by GitHub Pages from `main:/docs`), `windows` and `linux`
+  (the 2026-11-22 source snapshot with the CI fixes of 2026-11-23), each code branch with its release
+  (`windows-2026-11-22`, `linux-2026-11-22`). Older snapshot branches and the 2026-11-09 releases were
+  removed.
 - **Packaging:** the local FoamWin installer and zip under `D:\WSL\OF14_windows\pkg\windows` are the
   20 Oct build with the 31 Oct cfMesh programs copied in by hand; not rebuilt.
 - **FoamWin:** GitHub `main` is `a7bccdc5` (release v14.0.0-win.5 and the project site). Branch
@@ -69,7 +72,7 @@ Linux/WSL, and to keep both branches level.
    `of14-adjoint` `ROADMAP.md`). Do not make it the default until V2 and V3 pass.
 6. `pip-audit`: opentelemetry-api 1.45.1 (fix 1.45.2, pulled in through fastapi); update the pin.
 7. Rebuild the FoamWin installer and zip from a release with cfMesh instead of the hand-copied
-   programs; owner decides on merging FoamWin's fix branch and on a new `stokes-cfd` snapshot.
+   programs; FoamWin's fix branch is merged into its `main`; release v14.0.0-win.6 is the owner's to build.
 8. The cfMesh fork (`Ultravis66/cfMesh-OpenFOAM13`) has no licence file of its own (GPL headers only);
    ask counsel before a public release (`docs/00-open-questions.md`).
 
