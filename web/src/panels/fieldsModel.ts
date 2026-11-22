@@ -344,6 +344,7 @@ export function patchTint(
   bands = SMOOTH,
   map?: ColormapId,
   reverse = false,
+  clip = false,
 ): Uint8Array | null {
   /*
     **The refusals are named, and the VECTOR one is logged.** A multi-component field reaching here is
@@ -358,7 +359,7 @@ export function patchTint(
     return null;
   }
   if (values.count !== vertices || values.values.length !== vertices) return null;
-  return tintFor(values.values, range.min, range.max, bandCount(bands), map, reverse);
+  return tintFor(values.values, range.min, range.max, bandCount(bands), map, reverse, clip);
 }
 
 /** The key one field of one surface is cached under: a run's results are replaced as a whole (`seq`). */
@@ -594,8 +595,9 @@ export function componentRange(values: FieldValues, axis: 0 | 1 | 2): Range {
  * one run can legitimately show different legends. Without the label the two read identically and a user
  * comparing them would take a difference in what was sampled for a change in the physics.
  */
-export function rangeScopeOf(field: string, locked: boolean): string {
+export function rangeScopeOf(field: string, locked: boolean, ranged = false): string {
   if (locked) return "range set by you";
-  if (derivedComponentOf(field) !== null) return "over the values on this cut";
+  // A component the server has ranged over every surface (`variablesControl.rangeVariable`) is the run's range.
+  if (derivedComponentOf(field) !== null && !ranged) return "over the values on this cut";
   return "";
 }

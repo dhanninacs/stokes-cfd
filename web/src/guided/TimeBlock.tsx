@@ -74,7 +74,8 @@ export default function TimeBlock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, pending, shown, times, loop]);
 
-  if (run === null || times.length < 2) return null;
+  // A steady run's written iterations are not a history worth stepping through on the card: transient only.
+  if (run === null || times.length < 2 || steady) return null;
   const at = Math.max(0, timeIndex(times, pending ?? shown));
   const back = stepTime(times, shown, -1);
   const on = stepTime(times, shown, 1);

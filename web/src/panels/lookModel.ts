@@ -28,8 +28,8 @@ import type { SectionAxis, SectionPlane } from "../state/sectionState";
 import { sectionAt } from "../state/sectionState";
 import { axisOfPlane, axisPlane } from "../state/slicePlane";
 import { ARROW_DENSITIES, VELOCITY_MAGNITUDE, isVectorFieldName, volumeArrowsShown, volumeCountOf, type ArrowPlace, type ArrowView } from "./arrowModel";
-import { chooseField, setSlice, type ResultsLive } from "./fieldsModel";
-import { ISO_CODES, hideIso, isoFields, type IsoField, type IsoView } from "./isoModel";
+import { chooseField, rangeForField, setSlice, type ResultsLive } from "./fieldsModel";
+import { ISO_CODES, contourValues, hideIso, isoFields, type ContourSet, type IsoField, type IsoView } from "./isoModel";
 import type { RunFields } from "./resultsApi";
 import { MAX_SLICES, SLICE_DEBOUNCE_MS, addAxisSlice, formatMm, isFull, moveSlice, updateSlice, type SliceList } from "./sliceModel";
 import type { StreamlineState } from "./streamlineModel";
@@ -67,6 +67,8 @@ export interface LookState {
   results: ResultsLive;
   slices: SliceList;
   iso: IsoView;
+  /** Several iso-surfaces at once; absent where a caller does not hold them (old tests, views). */
+  contours?: ContourSet | null;
   streamlines: StreamlineState;
   arrows: ArrowView;
   section: SectionPlane | null;
@@ -95,10 +97,37 @@ export interface LookContext {
 export interface LookPrefs {
   /** Where in the field's range the iso value sits, 0 to 1. */
   isoFraction: number;
+  /** How many iso-surfaces: one at the slider's value, or several evenly spaced through the range. */
+  isoCount: number;
+  /** See-through surfaces (several levels are read through one another), or solid. */
+  isoGlass: boolean;
   streamSeeds: SeedKind;
   streamCount: number;
   /** Draw the lines as tubes (a width in metres) rather than hairlines (a width in pixels). */
   streamTubes: boolean;
+  /** Which way from the seeds the lines run. */
+  streamDirection: StreamDirection;
+  /** Slide lines along walls rather than stop them there (passages a few cells wide). */
+  streamFollow: boolean;
+  /** How far a line may run, in lengths of the model's longest side. */
+  streamReach: number;
+}
+
+export type StreamDirection = "forward" | "both" | "backward";
+
+/** How a volume trace runs: the card's tracing settings, as `run.streamlines` takes them. */
+export interface StreamTrace {
+  direction: StreamDirection;
+  follow: boolean;
+  reach: number;
+}
+
+/** The lengths of the model's longest side a line may run. */
+export const STREAM_REACHES: readonly number[] = [1, 2, 5, 10];
+
+/** The tracing settings in `prefs`. */
+export function streamTraceOf(prefs: LookPrefs): StreamTrace {
+  return { direction: prefs.streamDirection, follow: prefs.streamFollow, reach: prefs.streamReach };
 }
 
 /*
@@ -107,7 +136,20 @@ export interface LookPrefs {
   wherever the model does not fill its box: on a mixing elbow most of the row lay outside the pipes and the
   second inlet was never seeded at all.
 */
-export const DEFAULT_PREFS: LookPrefs = { isoFraction: 0.5, streamSeeds: "inlet", streamCount: 50, streamTubes: false };
+export const DEFAULT_PREFS: LookPrefs = {
+  isoFraction: 0.5,
+  isoCount: 1,
+  isoGlass: true,
+  streamSeeds: "inlet",
+  streamCount: 50,
+  streamTubes: false,
+  streamDirection: "forward",
+  // **Follow walls by default** (2026-11-20): in a lattice or fin passage two or three cells across, a line that
+  // stops at the first wall it touches ends long before an outlet (`stokes_agent.walk` has the measurement).
+  streamFollow: true,
+  // Five lengths of the model: a line through a lattice or round a header winds, measured 127 mm median on a 60 mm plate.
+  streamReach: 5,
+};
 
 /** The seed kind an ask uses: Inlet falls back to Line when the case has no inlet in the scene. */
 export function seedKindFor(kind: SeedKind, hasInlet: boolean): SeedKind {
@@ -211,7 +253,7 @@ export function sliceShown(state: LookState, data: RunFields | null): boolean {
  * head); a section with no slice is Clip (a slice's own cut sets the section, but then Slice already answered).
  */
 export function activeLook(state: LookState, data: RunFields | null): LookId {
-  if (state.iso.surface !== null && state.iso.visible) return "iso";
+  if ((state.iso.surface !== null && state.iso.visible) || (state.contours ?? null) !== null) return "iso";
   if (state.streamlines.phase === "ready" && state.streamlines.lines.length > 0) return "stream";
   if (volumeArrowsShown(state.arrows)) return "vectors";
   const slice = sliceShown(state, data);
@@ -287,6 +329,8 @@ export type LookAction =
   | { kind: "field"; name: string }
   | { kind: "clearStreamlines" }
   | { kind: "hideIso" }
+  /** Several iso-surfaces of one field (`contours: null` takes them away). */
+  | { kind: "contours"; contours: ContourSet | null }
   | { kind: "sectionOff" }
   | { kind: "sectionAt"; axis: SectionAxis; offset: number }
   | { kind: "sectionInvert"; invert: boolean }
@@ -295,7 +339,7 @@ export type LookAction =
   | { kind: "hideSolids"; ids: string[] }
   /** Asks of the server, or of the camera: not a change of the stores. */
   | { kind: "askIso"; field: string; value: number }
-  | { kind: "askStreamlines"; seeds: SeedKind; count: number; tubes: boolean }
+  | { kind: "askStreamlines"; seeds: SeedKind; count: number; tubes: boolean; trace?: StreamTrace }
   /** The velocity sampled through the volume (`run.vectors`), about `count` arrows. */
   | { kind: "askVectors"; count: number }
   /**
@@ -436,7 +480,7 @@ export function activationActions(look: LookId, state: LookState, ctx: LookConte
     case "iso": {
       out.push({ kind: "midSlice", on: false }, { kind: "hideUserSlices" }, { kind: "arrows", shown: false }, { kind: "clearStreamlines" });
       const field = isoFieldFor(state.results.view, ctx.data);
-      if (field !== null) out.push({ kind: "askIso", field: field.name, value: isoValueAt(field, isoFractionOf(state, field, prefs)) });
+      if (field !== null) out.push(...isoAsks(field, state, ctx, prefs));
       break;
     }
     case "stream":
@@ -447,7 +491,7 @@ export function activationActions(look: LookId, state: LookState, ctx: LookConte
         now run through the whole fluid, so the slices go and the walls fade (`wallsFaded`'s `inside`).
       */
       out.push({ kind: "arrows", shown: false }, { kind: "hideIso" }, { kind: "hideUserSlices" }, { kind: "midSlice", on: false });
-      out.push({ kind: "askStreamlines", seeds: seedKindFor(prefs.streamSeeds, ctx.hasInlet), count: prefs.streamCount, tubes: prefs.streamTubes });
+      out.push({ kind: "askStreamlines", seeds: seedKindFor(prefs.streamSeeds, ctx.hasInlet), count: prefs.streamCount, tubes: prefs.streamTubes, trace: streamTraceOf(prefs) });
       break;
     case "vectors":
       out.push({ kind: "clearStreamlines" }, { kind: "hideIso" }, ...vectorsAt(state.arrows.where ?? "volume", state, ctx));
@@ -646,8 +690,24 @@ const AXIS_OPTIONS: ControlOption[] = AXES.map((a) => ({ value: a, label: a.toUp
 
 /** How many streamlines the seeds can be: the server draws at most 200 (`stokes.post.streamlines.MAX_LINES`). */
 export const MAX_STREAM_SEEDS = 200;
-export const STREAM_COUNTS: readonly number[] = [50, 100, 200];
-export const ISO_COUNTS: readonly number[] = [1, 3, 5];
+export const STREAM_COUNTS: readonly number[] = [25, 50, 100, 200];
+export const ISO_COUNTS: readonly number[] = [1, 3, 5, 8];
+/** How see-through each of several iso-surfaces is drawn: enough to read the inner ones through the outer. */
+export const CONTOUR_GLASS = 0.35;
+
+/** One surface at the slider's value, or a set of `isoCount` evenly spaced through the range. */
+function isoAsks(field: IsoField, state: LookState, ctx: LookContext, prefs: LookPrefs): LookAction[] {
+  if (prefs.isoCount <= 1 || ctx.data === null) {
+    return [{ kind: "contours", contours: null }, { kind: "askIso", field: field.name, value: isoValueAt(field, isoFractionOf(state, field, prefs)) }];
+  }
+  // **Inside the range the legend shows**, so every level takes a distinct colour: a volume's extremes (a jet's
+  // peak speed) sit far outside the walls' automatic range, and levels spread over them clamped to its ends.
+  const shown = rangeForField(state.results.view, ctx.data, field.name);
+  const span = shown !== null && shown.max > shown.min ? { min: Math.max(field.min, shown.min), max: Math.min(field.max, shown.max) } : field;
+  const values = contourValues(span.max > span.min ? span : field, prefs.isoCount);
+  const contours: ContourSet = { run: ctx.data.run, field: field.name, units: field.units, values, opacity: prefs.isoGlass ? CONTOUR_GLASS : 1 };
+  return [{ kind: "hideIso" }, { kind: "contours", contours }];
+}
 
 /**
  * The position slider. Its value reads **with the axis letter** (`y = 0 mm`): a bare "0 mm" read as "not set" on
@@ -707,17 +767,28 @@ export function controlsOf(look: LookId, state: LookState, ctx: LookContext, pre
           min: 0,
           max: 1,
           step: 0.01,
-          text: field === null ? "" : `${isoValueAt(field, t)}${field.units !== "" ? ` ${field.units}` : ""}`,
+          text: field === null ? "" : prefs.isoCount > 1 ? `${prefs.isoCount} levels` : `${isoValueAt(field, t)}${field.units !== "" ? ` ${field.units}` : ""}`,
           settleMs: SETTLE.iso,
-          ...(field === null ? { disabled: "Needs speed, T or p in the run" } : {}),
+          ...(field === null ? { disabled: "Needs speed, T or p in the run" } : prefs.isoCount > 1 ? { disabled: "Several surfaces are spaced evenly through the range" } : {}),
         },
         {
           kind: "choice",
           id: "count",
           label: "Count",
-          tip: "How many surfaces, evenly spaced",
-          value: "1",
-          options: ISO_COUNTS.map((n) => ({ value: String(n), label: String(n), ...(n === 1 ? {} : { disabled: "One surface at a time for now" }) })),
+          tip: "How many surfaces: one at the value, or several evenly spaced through the range (3-D contours)",
+          value: String(prefs.isoCount),
+          options: ISO_COUNTS.map((n) => ({ value: String(n), label: String(n) })),
+        },
+        {
+          kind: "choice",
+          id: "glass",
+          label: "Look",
+          tip: "See-through surfaces show the inner levels through the outer ones",
+          value: prefs.isoGlass ? "glass" : "solid",
+          options: [
+            { value: "glass", label: "Glass" },
+            { value: "solid", label: "Solid" },
+          ],
         },
       ];
     }
@@ -755,6 +826,37 @@ export function controlsOf(look: LookId, state: LookState, ctx: LookContext, pre
             { value: "lines", label: "Lines" },
             { value: "tubes", label: "Tubes" },
           ],
+        },
+        {
+          kind: "choice",
+          id: "direction",
+          label: "Direction",
+          tip: "Downstream from the seeds, upstream to where the flow came from, or both",
+          value: prefs.streamDirection,
+          options: [
+            { value: "forward", label: "Down" },
+            { value: "both", label: "Both" },
+            { value: "backward", label: "Up" },
+          ],
+        },
+        {
+          kind: "choice",
+          id: "walls",
+          label: "At walls",
+          tip: "Slide along a wall and go on (for narrow passages, lattices and fins), or stop where a line first meets one",
+          value: prefs.streamFollow ? "follow" : "stop",
+          options: [
+            { value: "follow", label: "Follow" },
+            { value: "stop", label: "Stop" },
+          ],
+        },
+        {
+          kind: "choice",
+          id: "reach",
+          label: "Length",
+          tip: "How far a line may run, in lengths of the model's longest side",
+          value: String(prefs.streamReach),
+          options: STREAM_REACHES.map((n) => ({ value: String(n), label: `${n}×` })),
         },
       ];
     case "vectors":
@@ -821,17 +923,24 @@ export function controlActions(look: LookId, id: string, value: string, state: L
       return unchanged;
     }
     case "iso": {
-      const field = isoFieldFor(state.results.view, ctx.data, shownIsoField(state));
-      if (id !== "value" || field === null || !Number.isFinite(number)) return unchanged;
-      const next = { ...prefs, isoFraction: Math.min(1, Math.max(0, number)) };
-      return { actions: [{ kind: "askIso", field: field.name, value: isoValueAt(field, next.isoFraction) }], prefs: next };
+      const field = isoFieldFor(state.results.view, ctx.data, shownIsoField(state) ?? state.contours?.field ?? null);
+      if (field === null) return unchanged;
+      let next = prefs;
+      if (id === "value" && Number.isFinite(number)) next = { ...prefs, isoFraction: Math.min(1, Math.max(0, number)) };
+      else if (id === "count" && ISO_COUNTS.includes(number)) next = { ...prefs, isoCount: number };
+      else if (id === "glass" && (value === "glass" || value === "solid")) next = { ...prefs, isoGlass: value === "glass" };
+      else return unchanged;
+      return { actions: isoAsks(field, state, ctx, next), prefs: next };
     }
     case "stream": {
       let next = prefs;
       if (id === "seed" && (value === "line" || value === "plane" || value === "rake" || value === "sphere" || value === "inlet")) next = { ...prefs, streamSeeds: value };
       else if (id === "count" && STREAM_COUNTS.includes(number)) next = { ...prefs, streamCount: number };
       else if (id === "style" && (value === "lines" || value === "tubes")) next = { ...prefs, streamTubes: value === "tubes" };
-      return next === prefs ? unchanged : { actions: [{ kind: "askStreamlines", seeds: seedKindFor(next.streamSeeds, ctx.hasInlet), count: next.streamCount, tubes: next.streamTubes }], prefs: next };
+      else if (id === "direction" && (value === "forward" || value === "both" || value === "backward")) next = { ...prefs, streamDirection: value };
+      else if (id === "walls" && (value === "follow" || value === "stop")) next = { ...prefs, streamFollow: value === "follow" };
+      else if (id === "reach" && STREAM_REACHES.includes(number)) next = { ...prefs, streamReach: number };
+      return next === prefs ? unchanged : { actions: [{ kind: "askStreamlines", seeds: seedKindFor(next.streamSeeds, ctx.hasInlet), count: next.streamCount, tubes: next.streamTubes, trace: streamTraceOf(next) }], prefs: next };
     }
     case "vectors": {
       if (id === "where" && (value === "volume" || value === "slice")) {
@@ -939,8 +1048,13 @@ export function applyLookActions(state: LookState, actions: readonly LookAction[
       case "hideIso": {
         const iso = hideIso(next.iso);
         if (iso !== next.iso) next = { ...next, iso };
+        // Another look takes the contours away with the surface: they are the same look.
+        if ((next.contours ?? null) !== null) next = { ...next, contours: null };
         break;
       }
+      case "contours":
+        if ((next.contours ?? null) !== action.contours) next = { ...next, contours: action.contours };
+        break;
       case "sectionOff":
         if (next.section !== null) next = { ...next, section: null };
         break;
@@ -1104,4 +1218,31 @@ export function inletPatchesOf(boundaries: readonly { name: string; kind: string
     if (found !== undefined && !out.some((p) => p.id === found.id)) out.push(found);
   }
   return out;
+}
+
+/** Words for why a trace's lines ended, by count: the card's note after a trace. */
+const STOP_WORDS: Record<string, string> = {
+  left_domain: "left the fluid (an opening, or a wall when lines stop there)",
+  length: "ran their full length",
+  steps: "ran out of steps",
+  stagnation: "stopped where the flow stalls",
+  wall: "got stuck at a wall",
+};
+
+/**
+ * The card's line after a trace: how many lines reached an opening (or left the fluid), and the rest by reason.
+ * The tip spells every reason out, so a line that ended early is never mistaken for one that went all the way.
+ */
+export function stopSummary(reasons: readonly string[], follow = true): { text: string; tip: string } {
+  if (reasons.length === 0) return { text: "", tip: "" };
+  const counts = new Map<string, number>();
+  for (const r of reasons) counts.set(r, (counts.get(r) ?? 0) + 1);
+  const out = counts.get("left_domain") ?? 0;
+  // Following walls, a line that leaves the fluid left through an opening; stopping at walls, it may be either.
+  const text = `${out} of ${reasons.length} lines ${follow ? "reached an opening" : "left the fluid"}`;
+  const tip = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([r, n]) => `${n} ${STOP_WORDS[r] ?? "ended for another reason"}`)
+    .join(" · ");
+  return { text, tip };
 }

@@ -284,3 +284,15 @@ def test_a_reloaded_project_starts_clean(session: Session, tmp_path: Path) -> No
     assert session.execute("project.close") is not None
     opened = session.execute("project.open", path=path)
     assert opened["dirty"] is False
+
+
+def test_a_private_session_leaves_the_recent_list_alone(session: Session, tmp_path: Path) -> None:
+    """A shape optimisation's cycle opens a COPY of the user's project in a private session: its
+    folders are scratch, and twenty "obstacle" rows from one run had filled the start screen."""
+    session.execute("project.new", name="mine", path=str(tmp_path / "mine.stokes"))
+    private = Session()
+    private.private = True
+    private.execute("project.open", path=str(tmp_path / "mine.stokes"))
+    private.execute("project.save_as", path=str(tmp_path / "copy.stokes"))
+    names = [row["name"] for row in session.execute("project.recent")["projects"]]
+    assert names == ["mine"]

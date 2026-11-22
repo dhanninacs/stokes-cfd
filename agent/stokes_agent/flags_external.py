@@ -277,6 +277,7 @@ EXTERNAL_FLAGS: dict[str, dict[str, ExternalFlag]] = {
             "laplacianFoam",
             "financialFoam",
             "adjointShapeOptimisationFoam",
+            "adjointFoam",
         )
     },
 }

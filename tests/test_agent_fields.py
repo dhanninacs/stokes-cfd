@@ -88,10 +88,11 @@ def test_the_magic_and_the_header_layout() -> None:
 def test_the_declared_fields_are_the_ones_the_brief_names() -> None:
     """`FIELDS` is what a model run must have: `U` and `p`. `U_mag` is computed, never read; the
     turbulence and time-averaged fields follow when the case has them (`OPTIONAL_FIELDS`)."""
+    from stokes_agent.derived import DERIVED_FIELDS
     from stokes_agent.extract import OPTIONAL_FIELDS, fields_for
 
     assert FIELDS == ("U", "p")
-    assert fields_for(None) == (*FIELDS, *OPTIONAL_FIELDS)
+    assert fields_for(None) == (*FIELDS, *OPTIONAL_FIELDS, *DERIVED_FIELDS)
 
 
 def test_a_reader_recovers_every_array_exactly() -> None:
@@ -559,7 +560,15 @@ def test_a_hand_written_case_extracts_its_fields(tmp_path: Path) -> None:
         assert any(np.allclose(got[name]["U"], [1.0, 0.0, 0.0]) for _ in [0]), got[name]["U"]
         assert np.allclose(got[name]["U_mag"], 1.0)
         assert np.allclose(got[name]["p"], 5.0)
-    assert set(header["patches"][0]["fields"]) == {"U", "U_mag", "p"}
+    # The derived vorticity and Q join every patch; the wall terms need a viscosity, absent here.
+    assert set(header["patches"][0]["fields"]) == {
+        "U",
+        "U_mag",
+        "p",
+        "vorticity",
+        "vorticity_mag",
+        "Q",
+    }
 
 
 def test_the_patch_points_are_the_surfaces_points_in_the_same_order(tmp_path: Path) -> None:

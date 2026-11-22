@@ -220,6 +220,11 @@ def resolve_target(project: Project, ref: str) -> tuple[Node, str]:
             spec = project.spec_of(owner)
             if any(p.name == segments[-1] and p.kind == "quantity" for p in spec.params):
                 return owner, segments[-1]
+    if len(segments) >= 3:  # a vector's or a map's component: ops.cyl.position.x (ADR-0037)
+        owner = project.find("/" + "/".join(segments[:-2]))
+        component = f"{segments[-2]}.{segments[-1]}"
+        if owner is not None and isinstance(owner.params.get(component), QuantityValue):
+            return owner, component
     raise StudyDefinitionError(
         f"{ref!r} names no parameter or node quantity", details={"parameter": ref}
     )

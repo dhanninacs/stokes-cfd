@@ -11,7 +11,12 @@ from __future__ import annotations
 
 def quiet_vtk() -> None:
     """Replace VTK's output window with a silent one. Idempotent; call before the first reader."""
-    from vtkmodules.vtkCommonCore import vtkOutputWindow, vtkStringOutputWindow
+    from vtkmodules.vtkCommonCore import vtkLogger, vtkOutputWindow, vtkStringOutputWindow
 
     if not isinstance(vtkOutputWindow.GetInstance(), vtkStringOutputWindow):
         vtkOutputWindow.SetInstance(vtkStringOutputWindow())
+    # **Warnings also go to stderr through `vtkLogger`**, which the output window does not cover:
+    # `vtkPolyhedron`'s "non-manifold ... cannot be contoured" reached the run log on every slice.
+    # The slice now finds and re-cuts those cells itself and reports the count it could not draw
+    # (`extract.cut_plane`, `skipped_cells`), so warnings are dropped here and errors still show.
+    vtkLogger.SetStderrVerbosity(vtkLogger.VERBOSITY_ERROR)

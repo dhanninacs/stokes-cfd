@@ -211,8 +211,8 @@ function mesh(params: Record<string, unknown>) {
 describe("the solver page: Basic is the flow model and the iterations", () => {
   it("has a Basic set, and a steady laminar run shows exactly those two fields", () => {
     expect(hasBasicSet("solver_settings")).toBe(true);
-    expect(BASIC.solver_settings).toEqual(["turbulence", "iterations"]);
-    expect(solver({})("basic")).toEqual(["turbulence", "iterations"]);
+    expect(BASIC.solver_settings).toEqual(["turbulence", "iterations", "residual_target"]);
+    expect(solver({})("basic")).toEqual(["turbulence", "iterations", "residual_target"]);
   });
 
   it("hides time step and end time until the run is transient", () => {
@@ -224,7 +224,7 @@ describe("the solver page: Basic is the flow model and the iterations", () => {
     const names = ["initial_velocity", "initial_intensity", "initial_length_scale", "initial_viscosity_ratio"];
     expect(solver({ turbulence: "laminar" })("hidden")).toEqual(expect.arrayContaining(names));
     expect(solver({ turbulence: "kOmegaSST" })("advanced")).toEqual(expect.arrayContaining(names));
-    expect(solver({ turbulence: "kOmegaSST" })("basic")).toEqual(["turbulence", "iterations"]);
+    expect(solver({ turbulence: "kOmegaSST" })("basic")).toEqual(["turbulence", "iterations", "residual_target"]);
   });
 
   it("hides the density model and molar mass until the energy equation is on", () => {

@@ -212,6 +212,26 @@ class Feature:
 
 
 @dataclass(frozen=True)
+class Zone:
+    """One region of a multi-region mesh (ADR-0042): a body that becomes its own cell zone.
+
+    ``file`` is the open surface of the faces the body shares with other regions' bodies, staged
+    under :data:`GEOMETRY_DIR`; empty for the default region, whose cells are the ones no zone
+    claims. ``seeds`` are points just inside a fluid's openings: the fluid is rebuilt as the cells
+    connected to them, so a pocket cut off from every opening stays with the default region.
+    """
+
+    name: str
+    kind: str = "fluid"
+    part: str = ""
+    file: str = ""
+    level_min: int = 0
+    level_max: int = 0
+    inside_point: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    seeds: tuple[tuple[float, float, float], ...] = ()
+
+
+@dataclass(frozen=True)
 class SnappySnapshot:
     """Everything one snappyHexMesh job needs, as a plain record (SI, frozen).
 
@@ -319,12 +339,15 @@ class SnappySnapshot:
     #: only: the surfaces `front` and `back` are the slab's faces across the plane, and the case
     #: extrudes `front` to one layer, which makes `front` and `back` `empty`.
     two_d: dict[str, Any] = field(default_factory=dict)
-    #: The Gmsh driver's own inputs (`stokes.mesh.drivers.gmsh`), **empty for every other
-    #: mesher** so their records and bases are unchanged: ``groups`` (patch name -> Gmsh surface
-    #: numbers, 1-based), ``boxes`` (each B-rep face's bounding box in metres, in face order),
-    #: ``diagonal`` (the part's, metres) and ``part_spec`` (what the geometry worker needs to
-    #: export the part as STEP when the job is staged; `stokes.geometry.shapes.part_spec`).
-    gmsh: dict[str, Any] = field(default_factory=dict)
+    #: The regions of a multi-region mesh (ADR-0042), fluids first and the default region last;
+    #: **empty for one region**, so a one-fluid case and its basis are what they always were.
+    zones: tuple[Zone, ...] = ()
+    #: The region the cells in no zone belong to: the last solid.
+    default_region: str = ""
+    #: The pairs of regions that share a wall, each pair in name order.
+    interfaces: tuple[tuple[str, str], ...] = ()
+    #: Region name -> the patches its body's faces became (its tags, and `unassigned`).
+    region_patches: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def bbox(self) -> tuple[float, float, float, float, float, float]:
@@ -368,6 +391,8 @@ def write(snap: SnappySnapshot) -> dict[str, str]:
         files["system/decomposeParDict"] = decompose_par_dict(cores)
     if snap.two_d:
         files["system/extrudeMeshDict"] = _extrude_mesh_dict(snap)
+    if snap.zones:
+        files.update(_region_files(snap))
     # **The surfaces travel WITH the case.** snappyHexMesh reads them from `constant/geometry/`,
     # so a dictionary naming `inlet.stl` is useless unless the file is staged beside it; the two
     # come from one place so they cannot disagree.
@@ -430,6 +455,39 @@ def steps(snap: SnappySnapshot) -> list[dict[str, Any]]:
             "parse": "checkMesh",
         }
     )
+    if snap.zones:
+        # **After the quality check** (ADR-0042), which measures the whole mesh: each fluid zone
+        # is rebuilt as the cells connected to its openings, then the mesh is split by zone into
+        # `constant/<region>/polyMesh`. The whole mesh stays in `constant/polyMesh`.
+        if any(zone.seeds for zone in snap.zones):
+            run.append({"name": "topoSet", "argv": ["topoSet"], "timeout_s": 600})
+        openings = _zone_openings(snap)
+        if openings:
+            # **Sealed pockets leave the fluid** (`stokes_agent.zones`): a piece of a fluid zone
+            # that reaches none of its inlets or outlets has no pressure reference, and its first
+            # pressure solve is NaN (measured on a gyroid exchanger at 0.6 mm).
+            run.append(
+                {
+                    "name": "pruneZones",
+                    "argv": [],
+                    "timeout_s": 900,
+                    "action": {"op": "prune_zones", "zones": openings},
+                }
+            )
+        run.append(
+            {
+                "name": "splitMeshRegions",
+                "argv": [
+                    "splitMeshRegions",
+                    "-cellZones",
+                    "all",
+                    "-defaultRegion",
+                    snap.default_region,
+                ],
+                "timeout_s": 900,
+                "parse": "splitMeshRegions",
+            }
+        )
     return run
 
 
@@ -815,7 +873,12 @@ def _snappy_dict(snap: SnappySnapshot) -> str:
     `addLayers true` with no `layers {}` block is accepted by the utility and does nothing,
     which would be a silent no-op.
     """
-    geometry = Dict(tuple(_geometry_entry(s) for s in snap.surfaces))
+    geometry = Dict(
+        (
+            *(_geometry_entry(s) for s in snap.surfaces),
+            *(_geometry_entry(_zone_surface(z)) for z in snap.zones if z.file),
+        )
+    )
     controls = _castellated_controls(snap)
     layers_on = any(count > 0 for count in snap.layer_counts.values())
     mesh_quality = _mesh_quality(snap, relaxed=layers_on)
@@ -892,6 +955,7 @@ def _castellated_controls(snap: SnappySnapshot) -> Dict:
             )
             for s in snap.surfaces
         )
+        + tuple(_zone_refinement(z) for z in snap.zones if z.file)
     )
     regions = Dict(
         tuple(
@@ -924,6 +988,97 @@ def _castellated_controls(snap: SnappySnapshot) -> Dict:
             Entry("allowFreeStandingZoneFaces", Word("true")),
         )
     )
+
+
+def _zone_surface(zone: Zone) -> Surface:
+    """A zone's interface surface as a `geometry {}` member: a file, with no patch of its own."""
+    return Surface(name=f"{zone.name}_zone", file=zone.file)
+
+
+def _zone_refinement(zone: Zone) -> Entry:
+    """A zone's `refinementSurfaces` entry (ADR-0042): its faces become the face zone
+    `<region>_zone` and the cells on the point's side of them the cell zone `<region>`.
+
+    **`mode insidePoint`, because the surface is open**: it holds only the faces the body shares
+    with another region, and the rest of the body's skin is the mesh's own boundary. Measured on
+    FoamWin 14: snappyHexMesh walks from the point and changes zone when it crosses a zone face.
+    """
+    return Entry(
+        f"{zone.name}_zone",
+        Dict(
+            (
+                Entry("level", Tuple_((Raw(str(zone.level_min)), Raw(str(zone.level_max))))),
+                Entry("faceZone", Word(f"{zone.name}_zone")),
+                Entry("cellZone", Word(zone.name)),
+                Entry("mode", Word("insidePoint")),
+                Entry("insidePoint", _vec(zone.inside_point)),
+            )
+        ),
+    )
+
+
+def _region_files(snap: SnappySnapshot) -> dict[str, str]:
+    """What the split needs beside the mesh dictionaries (ADR-0042): `topoSetDict`, and the two
+    solution dictionaries `splitMeshRegions` reads to build each region's mesh (it runs no
+    equation; they only have to exist and parse).
+    """
+    actions: list[Dict] = []
+    for zone in snap.zones:
+        if not zone.seeds:
+            continue
+        whole, kept = f"{zone.name}_whole", f"{zone.name}_open"
+        actions += [
+            Dict(
+                (
+                    Entry("name", Word(whole)),
+                    Entry("type", Word("cellSet")),
+                    Entry("action", Word("new")),
+                    Entry("source", Word("zoneToCell")),
+                    Entry("zone", Word(zone.name)),
+                )
+            ),
+            Dict(
+                (
+                    Entry("name", Word(kept)),
+                    Entry("type", Word("cellSet")),
+                    Entry("action", Word("new")),
+                    Entry("source", Word("regionToCell")),
+                    Entry("set", Word(whole)),
+                    Entry("insidePoints", List_(tuple(_vec(p) for p in zone.seeds))),
+                    Entry("nErode", 0),
+                )
+            ),
+            Dict(
+                (
+                    Entry("name", Word(zone.name)),
+                    Entry("type", Word("cellZoneSet")),
+                    Entry("action", Word("new")),
+                    Entry("source", Word("setToCellZone")),
+                    Entry("set", Word(kept)),
+                )
+            ),
+        ]
+    schemes = Dict(
+        tuple(
+            Entry(name, Dict((Entry("default", Raw(value)),)))
+            for name, value in (
+                ("ddtSchemes", "steadyState"),
+                ("gradSchemes", "Gauss linear"),
+                ("divSchemes", "none"),
+                ("laplacianSchemes", "Gauss linear corrected"),
+                ("interpolationSchemes", "linear"),
+                ("snGradSchemes", "corrected"),
+            )
+        )
+    )
+    files = {
+        "system/fvSchemes": render_file("fvSchemes", schemes, location="system"),
+        "system/fvSolution": render_file("fvSolution", Dict(()), location="system"),
+    }
+    if actions:
+        body = Dict((Entry("actions", List_(tuple(actions))),))
+        files["system/topoSetDict"] = render_file("topoSetDict", body, location="system")
+    return files
 
 
 def _mesh_quality(snap: SnappySnapshot, *, relaxed: bool) -> Dict:
@@ -1079,3 +1234,16 @@ def _extrude_mesh_dict(snap: SnappySnapshot) -> str:
 def diagonal(lo: tuple[float, float, float], hi: tuple[float, float, float]) -> float:
     """The box diagonal, which a caller uses as the part's characteristic length."""
     return math.dist(lo, hi)
+
+
+def _zone_openings(snap: SnappySnapshot) -> dict[str, list[str]]:
+    """Each fluid zone's open patches (its inlets and outlets): the patches its cells must reach."""
+    open_names = {surface.name for surface in snap.surfaces if surface.patch_type != "wall"}
+    out: dict[str, list[str]] = {}
+    for zone in snap.zones:
+        if zone.kind != "fluid" or not zone.file:
+            continue
+        found = [name for name in snap.region_patches.get(zone.name, ()) if name in open_names]
+        if found:
+            out[zone.name] = found
+    return out

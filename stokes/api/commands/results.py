@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from stokes.api.registry import CommandContext, ParamDef, command
 from stokes.errors import ExpressionError, StokesError, ValidationError
@@ -82,6 +82,7 @@ class _Loaded:
     kind: str  # "patch" | "slice"
     node_id: str = ""
     extra: dict[str, Any] = field(default_factory=dict)  # Any: JSON
+    run: str = ""
 
 
 def _store(ctx: CommandContext) -> Any:  # Any: RunStore (run.py owns its construction)
@@ -101,8 +102,27 @@ def _run_fields(ctx: CommandContext, run: str | None) -> tuple[str, memoryview, 
             "this run has no field data; finish a run and show its results first"
         )
     run_id = str(status["run"])
-    data = memoryview(store.fields_path(run_id).read_bytes())
-    return run_id, data, read_header(data)
+    path = store.fields_path(run_id)
+    try:
+        stat = path.stat()
+    except OSError as exc:
+        raise ResultsUnavailable("this run's field data is not on disk") from exc
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    held = _FieldFileCache.held.get(key)
+    if held is None:
+        data = memoryview(path.read_bytes())
+        held = (data, read_header(data))
+        # **One file held**: a report reads every surface of one run, and a run's cache is replaced
+        # (a new time, a new run) rather than edited, which changes the key.
+        _FieldFileCache.held = {key: held}
+    return run_id, held[0], held[1]
+
+
+class _FieldFileCache:
+    """The last field cache file read, keyed by path, modification time and size, so a report over
+    many surfaces reads the file once instead of once per surface."""
+
+    held: ClassVar[dict[tuple[str, int, int], tuple[memoryview, dict[str, Any]]]] = {}
 
 
 def _patch_nodes(ctx: CommandContext) -> list[Node]:
@@ -163,7 +183,7 @@ def _load(ctx: CommandContext, run: str | None, ref: str, plane: str | None) -> 
         fields, units = _split(header_units, entry.get("fields") or {}, data, header, SLICE_INDEX)
         extra = {"origin": entry.get("origin"), "normal": entry.get("normal")}
         surface = Surface("slice", np.asarray(positions), np.asarray(triangles))
-        return _Loaded(surface, fields, units, "slice", extra=extra)
+        return _Loaded(surface, fields, units, "slice", extra=extra, run=run_id)
     from stokes.mesh.service import MeshService
     from stokes.mesh.surfaces import patch_arrays
 
@@ -180,7 +200,7 @@ def _load(ctx: CommandContext, run: str | None, ref: str, plane: str | None) -> 
     fields, units = _split(header_units, patches[index].get("fields") or {}, data, header, index)
     name = str(node.params.get("name") or node.name)
     surface = Surface(name, np.asarray(positions), np.asarray(triangles))
-    return _Loaded(surface, fields, units, "patch", node_id=node.id)
+    return _Loaded(surface, fields, units, "patch", node_id=node.id, run=run_id)
 
 
 def _density(ctx: CommandContext, given: float | None) -> float | None:
@@ -230,6 +250,93 @@ def _names(
     return names
 
 
+def _kinematic(units: dict[str, str]) -> bool:
+    """Whether the run's pressure is kinematic (p/rho, m2/s2): an incompressible run."""
+    return units.get("p", "m2/s2") == "m2/s2"
+
+
+def _known_functions(ctx: CommandContext, loaded: _Loaded, density: float | None) -> dict[str, str]:
+    """The built-in field functions for this run's pressure, then the user's (theirs win)."""
+    return {**_builtins(loaded, density), **_functions(ctx)}
+
+
+def _builtins(loaded: _Loaded, density: float | None) -> dict[str, str]:
+    from stokes.post.variables import builtin_definitions
+
+    return builtin_definitions(_kinematic(loaded.units), density is not None)
+
+
+class _ReferenceCache:
+    """The reference speed and pressure per run (`_references`), kept while the cache file is."""
+
+    _held: ClassVar[dict[tuple[str, float], dict[str, Any] | None]] = {}
+
+
+def _ends(ctx: CommandContext) -> tuple[list[str], list[str]]:
+    """The mesh patch ids of the inlets and of the outlets, by the boundary condition's kind."""
+    project = ctx.session.require_project()
+    kinds: dict[str, str] = {}
+    for node in project.root.walk():
+        if node.type == "boundary":
+            kinds[node.name] = str(node.params.get("kind") or "")
+    inlets: list[str] = []
+    outlets: list[str] = []
+    for node in _patch_nodes(ctx):
+        kind = kinds.get(node.name, "")
+        if "inlet" in kind or (not kind and "inlet" in node.name.lower()):
+            inlets.append(node.id)
+        elif "outlet" in kind or (not kind and "outlet" in node.name.lower()):
+            outlets.append(node.id)
+    return inlets, outlets
+
+
+def _references(ctx: CommandContext, run_id: str) -> dict[str, Any] | None:  # Any: JSON
+    """`U_ref` (area-weighted mean |U| over the inlets) and `p_ref` (mean p over the outlets).
+
+    The pressure coefficient's reference values when nobody has given others: the speed the flow
+    enters at and the pressure it leaves at. None when the model has no inlet or no outlet.
+    """
+    import numpy as np
+
+    from stokes.post.integrals import surface_integrals
+
+    path = _store(ctx).fields_path(run_id)
+    try:
+        stamp = path.stat().st_mtime
+    except OSError:
+        return None
+    key = (run_id, stamp)
+    if key in _ReferenceCache._held:
+        return _ReferenceCache._held[key]
+    inlets, outlets = _ends(ctx)
+    found: dict[str, Any] | None = None
+    if inlets and outlets:
+
+        def mean(refs: list[str], name: str) -> float | None:
+            total = 0.0
+            area = 0.0
+            for ref in refs:
+                loaded = _load(ctx, run_id, ref, None)
+                values = loaded.fields.get(name)
+                if values is None or values.ndim != 1:
+                    return None
+                row = surface_integrals(loaded.surface, np.asarray(values, dtype=np.float64))
+                if row["integral"] is None or row["area"] is None:
+                    return None
+                total += float(row["integral"])
+                area += float(row["area"])
+            return total / area if area > 0 else None
+
+        speed = mean(inlets, "U_mag")
+        pressure = mean(outlets, "p")
+        if speed is not None and pressure is not None and speed > 0:
+            found = {"U_ref": speed, "p_ref": pressure}
+    if len(_ReferenceCache._held) > 32:
+        _ReferenceCache._held.clear()
+    _ReferenceCache._held[key] = found
+    return found
+
+
 def _values(
     ctx: CommandContext,
     loaded: _Loaded,
@@ -238,7 +345,8 @@ def _values(
     functions: dict[str, str] | None = None,
     depth: int = 0,
 ) -> tuple[np.ndarray, str]:
-    """The point values of a field, a component, a field function or an expression, and units."""
+    """The point values of a field, a component, a built-in or user field function, or an
+    expression, and its units."""
     import numpy as np
 
     from stokes.post.calculator import evaluate_field, names_of
@@ -255,7 +363,11 @@ def _values(
             f"{text} has {loaded.fields[text].shape[1]} components; use {text}_mag or {text}_x",
             code="results.vector_field",
         )
-    saved = _functions(ctx) if functions is None else functions
+    saved = (
+        _known_functions(ctx, loaded, density)
+        if functions is None
+        else {**_builtins(loaded, density), **functions}
+    )
     if depth > 8:
         raise ExpressionError("field functions refer to each other too deeply (a loop?)")
     if text in saved:
@@ -264,8 +376,34 @@ def _values(
         if name not in names and name in saved:
             values, units = _values(ctx, loaded, saved[name], density, saved, depth + 1)
             names[name] = (values, units)
+    absent = _stored_elsewhere(ctx, loaded, text)
+    if absent is not None:
+        # A field the run stored on other surfaces (wall shear stress is on walls only): here it
+        # has no value, NaN - drawn in the surface's own colour, left out of sums - not an error.
+        return np.full(loaded.surface.positions.shape[0], np.nan), absent
+    if {"p_ref", "U_ref"} & set(names_of(text)) and loaded.run:
+        refs = _references(ctx, loaded.run)
+        if refs is not None:
+            names["U_ref"] = (refs["U_ref"], "m/s")
+            names["p_ref"] = (refs["p_ref"], loaded.units.get("p", ""))
     result = evaluate_field(text, names, loaded.surface.positions.shape[0])
     return result.values, result.units
+
+
+def _stored_elsewhere(ctx: CommandContext, loaded: _Loaded, text: str) -> str | None:
+    """The units of `text` when the run stored it (or the vector it is a component of) on some
+    surface but not on this one; None otherwise."""
+    if not loaded.run or text in loaded.fields:
+        return None
+    from stokes.api.commands.results_variables import stored_fields
+
+    stored = stored_fields(_run_fields(ctx, loaded.run)[2])
+    if text in stored:
+        return stored[text][0]
+    base, _sep, axis = text.rpartition("_")
+    if axis in ("x", "y", "z") and stored.get(base, ("", 1))[1] == 3 and base not in loaded.fields:
+        return stored[base][0]
+    return None
 
 
 def _velocity(loaded: _Loaded) -> np.ndarray | None:
@@ -500,7 +638,8 @@ def results_surface_plot(
 
     `radius` without an `origin` and `direction` measures from each surface's own axis: its
     area-weighted centre along its mean normal, which on a pipe's outlet is the pipe's axis - so
-    the plot is the velocity profile. A surface with no mean normal (a curved wall) is refused.
+    the plot is the velocity profile. A surface with no mean normal (a curved wall) uses the axis
+    of the first flat surface chosen with it, and is refused only when none is flat.
 
     Answers `{field, units, axis, x_units, series: [{surface, x, y, points}]}`.
     """
@@ -510,17 +649,28 @@ def results_surface_plot(
     functions = _functions(ctx)
     series: list[dict[str, Any]] = []
     units = ""
-    for ref in _surface_list(surfaces):
-        loaded = _load(ctx, run, ref, plane)
+    loads = [_load(ctx, run, ref, plane) for ref in _surface_list(surfaces)]
+    # A surface with no single normal (a curved wall) is measured from the axis of the first flat
+    # one chosen with it - an outlet's axis for the wall beside it - so one plot shares one radius.
+    shared: tuple[list[float], list[float]] | None = None
+    if axis == "radius" and (origin is None or direction is None):
+        for loaded in loads:
+            centre, normal = centre_and_normal(loaded.surface)
+            if normal is not None:
+                shared = (centre, normal)
+                break
+    for loaded in loads:
         values, units = _values(ctx, loaded, field, rho, functions)
         own_origin, own_direction = origin, direction
         if axis == "radius" and (origin is None or direction is None):
             centre, normal = centre_and_normal(loaded.surface)
             if normal is None and direction is None:
-                raise ReportInvalid(
-                    f"{loaded.surface.name} has no single direction to measure a radius from; "
-                    "give a direction"
-                )
+                if shared is None:
+                    raise ReportInvalid(
+                        f"{loaded.surface.name} has no single direction to measure a radius from; "
+                        "add a flat surface (an inlet or an outlet), or plot against x, y or z"
+                    )
+                centre, normal = shared
             own_origin = origin if origin is not None else centre
             own_direction = direction if direction is not None else normal
         series.append(surface_plot(loaded.surface, values, axis, own_direction, own_origin))

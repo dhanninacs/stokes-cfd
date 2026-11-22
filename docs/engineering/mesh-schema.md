@@ -29,7 +29,7 @@ arrays are SI numbers.
 
 | name | kind | default | notes |
 |---|---|---|---|
-| `mesher` | enum `blockmesh, snappy, cfmesh, gmsh` | `blockmesh` | |
+| `mesher` | enum `blockmesh, snappy, cfmesh, cfmesh_tet, cfmesh_poly, polyhex, gmsh` | `blockmesh` | `gmsh`: ADR-0043 |
 | `host` | string, `[a-z0-9][a-z0-9_.-]{0,62}` | `local` | a host name (T-144c) |
 | `base_size` | quantity, length | `0.005` m | the background cell size |
 | `surface_size` | quantity, length | `0.0` m | snappy's surface size; **0 means the base size** |
@@ -343,14 +343,19 @@ serial), and the quality thresholds (`max_non_ortho`, `max_skewness`) — those 
 
 | command | params | mutates | result |
 |---|---|---|---|
-| `mesh.generate` | `host?`, `wait=false`, `force=false`, `result_id?` | **yes** | `{result, path, state, job, basis, reused, warnings}` |
+| `mesh.generate` | `host?`, `wait=false`, `force=false`, `result_id?` | **yes** | `{result, path, state, job, basis, reused, warnings}`; on the server's session thread `{state: "preparing", result, path: "", steps, ...}` at once (ADR-0024 addendum 2026-11-14) |
 | `mesh.cancel` | none | no | `{cancelled: bool}` |
-| `mesh.status` | none | no | `{state, result, path, job, step, fraction, stale, warnings}` |
+| `mesh.status` | none | no | `{state, result, path, job, step, fraction, stale, warnings, preparing}`; `preparing` is `{}` or `{result, step, step_number, steps, elapsed, cancelling}` |
 | `mesh.log` | `lines=200` | no | `{step, lines, truncated}` |
 
 **Events:** `mesh.progress {node_id, path, step, stage, fraction, message}`, `mesh.log {node_id, step,
 lines}`, `mesh.done {node_id, path, seconds}`, `mesh.failed {node_id, path, code, message}`,
 `mesh.cancelled {node_id, path}`, `mesh.skipped {node_id, path, code, message}`.
+
+While a press prepares (server only): `mesh.preparing {node_id, step, step_number, steps, elapsed,
+bytes_sent?, bytes_total?}` per step (`snapshot`, `probe`, `compile`, `stage`, `start`; `stage` repeats per
+chunk sent), then `mesh.prepared {node_id, outcome, elapsed, code?, message?}` with `outcome` one of
+`started`, `reused`, `skipped`, `failed`, `cancelled`. `node_id` is the id the press will give its result.
 
 ### Three rules that shape it
 

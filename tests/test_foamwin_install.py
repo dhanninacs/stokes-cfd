@@ -1,4 +1,4 @@
-"""Installing FoamWin from its GitHub release (ADR-0037), without the network.
+"""Installing FoamWin from its GitHub release (ADR-0046), without the network.
 
 The release metadata and the archive are served from memory through `_open`; the archive is a small
 zip with a stand-in `setup-openfoam14.ps1` that writes the `of14-env.ps1` discovery looks for. The

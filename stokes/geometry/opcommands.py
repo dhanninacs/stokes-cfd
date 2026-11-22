@@ -20,7 +20,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from stokes.errors import ModelError, StokesError
-from stokes.geometry.model import GEOMETRY_PATH, OPERATIONS_GROUP, OPERATIONS_PATH
+from stokes.geometry.model import (
+    GEOMETRY_PATH,
+    OPERATIONS_GROUP,
+    OPERATIONS_PATH,
+    is_implicit_operation,
+)
 from stokes.model.commands import AddNode, Command, Composite, RemoveNode, SetParam
 from stokes.model.ids import stable_id
 
@@ -61,10 +66,19 @@ class CreateOperation(Command):
             OPERATIONS_PATH, self.op_type, self.op_name, self.params, node_id=self.node_id
         )
         commands.append(add)
+        # An implicit operation's inputs are steps of the body it makes (ADR-0035): they leave the
+        # simulation with the same undo step, so a mesh or a region never takes an intermediate
+        # body for a solid of its own. **So do a B-rep transform's**: a moved or turned body
+        # replaces the one it was made from, and keeping both meshed the original as a second
+        # body (seen in the desktop window: "box is the fluid" beside the rotated box_2).
+        implicit = is_implicit_operation(self.op_type) or self.op_type == "transform"
         for part in self.hide:
             node = project.find(part)
             if node is not None and node.type == "part" and node.params.get("visible") is not False:
                 commands.append(SetParam(part, "visible", False))
+            excluded = node is not None and node.params.get("simulate", True) is False
+            if implicit and node is not None and node.type == "part" and not excluded:
+                commands.append(SetParam(part, "simulate", False))
         steps = Composite(self.describe(), commands)
         steps.apply(project)
         self.steps = steps
@@ -133,10 +147,14 @@ class DeleteOperation(Command):
             # pointing at parts that were gone.
             commands.extend(self._strip_commands(project, outputs, op.id))
             commands.extend(RemoveNode(part) for part in outputs)
+            implicit = is_implicit_operation(op.type)
             for part in consumed(op):
                 node = project.find(part)
                 if node is not None and node.type == "part" and node.params.get("visible") is False:
                     commands.append(SetParam(part, "visible", True))
+                excluded = node is not None and node.params.get("simulate", True) is False
+                if implicit and node is not None and node.type == "part" and excluded:
+                    commands.append(SetParam(part, "simulate", True))
         commands.append(RemoveNode(op.id))
         steps = Composite(self.describe(), commands)
         held: dict[str, MeshEntry] = {}

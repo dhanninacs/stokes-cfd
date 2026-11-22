@@ -97,7 +97,20 @@ class PatchCondition:
 #: The temperature conditions the snapshot can carry (ADR-0027 step 2). Convection walls are not
 #: here on purpose: the snapshot refuses them with `solve.thermal_unsupported` until the writer can
 #: express one.
-THERMAL_KINDS: tuple[str, ...] = ("fixedValue", "zeroGradient", "inletOutlet", "heatFlux")
+#: `coupled` is the wall a region shares with another (ADR-0042): the temperature and the heat
+#: flux are continuous across it. The snapshot sets it on interface patches; no boundary asks
+#: for it.
+THERMAL_KINDS: tuple[str, ...] = (
+    "fixedValue",
+    "zeroGradient",
+    "inletOutlet",
+    "heatFlux",
+    "coupled",
+)
+
+#: The engine id of a multi-region case (ADR-0042). Not one a user picks: the snapshot takes it
+#: when the mesh has several regions and the settings ask for `of14.fluid` with energy.
+MULTI_REGION_ENGINE = "of14.multiRegion"
 
 #: The snapshot fields that only the energy equation fills. `solve_basis` drops them when energy
 #: is off, so a flow-only project hashes, and writes, exactly as it did before they existed.
@@ -127,6 +140,13 @@ TRANSIENT_CONTROL_DEFAULTS: dict[str, object] = {
     "average": False,
     "average_start": 0.0,
 }
+
+#: The adjoint's objective and outlets (ADR-0041) and their defaults. Dropped from the basis while
+#: they hold them, so a pressure-loss adjoint run made before they existed keeps its basis.
+ADJOINT_DEFAULTS: dict[str, object] = {"adjoint_objective": "pressure_loss", "adjoint_outlets": ()}
+
+#: The objectives the adjoint case can be written for (ADR-0041): the objective picks the program.
+ADJOINT_OBJECTIVES: tuple[str, ...] = ("pressure_loss", "flow_split")
 
 #: The inflow turbulence modes the model offers (`geometry.model.TURBULENCE_INPUTS`).
 TURBULENCE_MODES: tuple[str, ...] = ("intensity_ratio", "intensity_length")
@@ -160,7 +180,7 @@ class SolveSnapshot:
     #: iteration 67 with plain `corrected`. Off, the case is unchanged (and so is its basis).
     non_orthogonal: bool = False
     #: The mesh's cell count, 0 when unknown. Only the coupled writer reads it, to pick a linear
-    #: solver the size can afford (ADR-0035 decision 3); it is out of the run basis because the
+    #: solver the size can afford (ADR-0044 decision 3); it is out of the run basis because the
     #: mesh basis already decides it.
     cells: int = 0
     #: The energy equation (ADR-0027). Off, every field below keeps its default and the case is
@@ -200,7 +220,21 @@ class SolveSnapshot:
     #: written as `UMean`, `pMean`, ... beside the instantaneous fields.
     average: bool = False
     average_start: float = 0.0
-    #: Steady runs only: the user's under-relaxation factors (ADR-0036), each in (0, 1], or None
+    #: The adjoint engine only (ADR-0041): which objective the adjoint is the derivative of.
+    #: `pressure_loss` is Foundation's `adjointShapeOptimisationFoam`; `flow_split` is the
+    #: separately installed `adjointFoam` with the flow-rate partition objective.
+    adjoint_objective: str = "pressure_loss"
+    #: The flow split's outlets by patch name; empty means every `pressure_outlet`.
+    adjoint_outlets: tuple[str, ...] = ()
+    #: The regions of a multi-region case (ADR-0042), fluids first; **empty for one region**, and
+    #: then out of the basis. With regions, this record's own fields are the first fluid's, and
+    #: `monitor_patches` every fluid's.
+    regions: tuple[RegionCase, ...] = ()
+    #: The region names by the index the mesh's split gave them (its own log), which is how the
+    #: agent places each region's cells on the whole mesh when it merges the result. Empty when
+    #: the mesh did not record it; the merge is then left out.
+    region_order: tuple[str, ...] = ()
+    #: Steady runs only: the user's under-relaxation factors (ADR-0045), each in (0, 1], or None
     #: for the engine's own value (`stokes.compile.relaxation`). Unset, they are out of the run
     #: basis, so a project made before they existed keeps its basis.
     relax_pressure: float | None = None
@@ -214,6 +248,29 @@ class SolveSnapshot:
             if item.name == name:
                 return item
         raise KeyError(name)
+
+
+@dataclass(frozen=True)
+class RegionCase:
+    """One region of a multi-region case (ADR-0042): a fluid's own case, or a solid's properties.
+
+    ``fluid`` is the region's case as the `of14.fluid` writer takes it, its interface walls
+    included (`thermal == "coupled"`); None for a solid, whose density, specific heat and
+    conductivity are the material's at its reference temperature.
+    """
+
+    name: str
+    kind: str
+    fluid: SolveSnapshot | None = None
+    rho: float = 0.0
+    cp: float = 0.0
+    kappa: float = 0.0
+    #: Kelvin: the solid's starting temperature.
+    T_init: float = 300.0
+    #: The mesh's outer patches (a solid may hold faces of any; all are adiabatic for it).
+    patches: tuple[str, ...] = ()
+    #: The regions it shares a wall with.
+    neighbours: tuple[str, ...] = ()
 
 
 def laplacian_scheme(snap: SolveSnapshot) -> str:

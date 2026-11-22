@@ -61,10 +61,10 @@ POSITIONAL: dict[str, str] = {
     # **`foamDictionary` edits one file, the boundary list** (the polyhedral mesher's symmetry
     # planes, `stokes.mesh.drivers.cfmesh`): no other path can be named.
     "foamDictionary": r"constant/polyMesh/boundary",
-    # **Gmsh's script and the converter's input: one path each.** The script is the case's own
-    # (`lint_gmsh` checks every line), and the mesh is the file Gmsh's `-o` names below.
-    "gmsh": r"constant/geometry/mesh\.geo",
-    "gmshToFoam": r"constant/geometry/mesh\.msh",
+    # **Gmsh runs the case's one script and the converter reads the one mesh it saves** (ADR-0043):
+    # both paths are fixed, so neither program can be pointed at another file.
+    "gmsh": r"system/domain\.geo",
+    "gmshToFoam": r"constant/domain\.msh",
 }
 
 
@@ -126,10 +126,15 @@ ALLOWED_FLAGS: dict[str, dict[str, FlagSpec]] = {
     # cfMesh's `improveSymmetryPlanes` reads `constant/polyMesh` and flattens the `symmetryPlane`
     # patches in place; it needs no argument.
     "improveSymmetryPlanes": {},
-    # **`foamDictionary` may only set a boundary patch's type to `symmetry`**: the file is pinned by
-    # `POSITIONAL`, the entry to `entry0/<patch>/type` and the value to the one word. That is the
-    # whole of what the polyhedral mesher needs after flattening (`cfmesh.RESTORE_STEP`); any other
-    # edit of any other dictionary is refused here.
+    # The adjoint of ADR-0038 reads the case it is run in and takes no flag.
+    "adjointShapeOptimisationFoam": {},
+    # ADR-0041: the open-source adjoint reads the case and its system/adjointDict; no flag.
+    "adjointFoam": {},
+    # **`foamDictionary` may only set a boundary patch's type to `symmetry` or `wall`**: the file is
+    # pinned by `POSITIONAL`, the entry to `entry0/<patch>/type` and the value to the two words.
+    # That is the whole of what the polyhedral mesher needs after flattening
+    # (`cfmesh.RESTORE_STEP`) and what Gmsh's conversion needs, since `gmshToFoam` writes every
+    # patch as `patch` (`gmsh.TYPE_STEP`); any other edit of any other dictionary is refused here.
     "foamDictionary": {
         "-entry": FlagSpec(
             1,
@@ -139,25 +144,33 @@ ALLOWED_FLAGS: dict[str, dict[str, FlagSpec]] = {
         "-set": FlagSpec(
             1,
             pattern=r"^(symmetry|wall)$",
-            why="set back to symmetry after flattening; Gmsh's walls and symmetry planes, which "
-            "gmshToFoam writes as plain patches",
+            why="set a patch to symmetry after flattening, or to wall after gmshToFoam",
         ),
     },
-    # **Gmsh** (`stokes.mesh.drivers.gmsh`): mesh in 3D, write the one mesh file the converter
-    # reads, and a thread count. Everything else Gmsh does is in the checked script.
+    # **Gmsh** (ADR-0043): `-nopopup` keeps a script error from waiting on a dialog, and `-` means
+    # "run the script, then exit". The script is the one positional (`POSITIONAL`).
     "gmsh": {
-        "-3": FlagSpec(0, why="mesh the volume"),
-        "-o": FlagSpec(
-            1, pattern=r"^constant/geometry/mesh\.msh$", why="the file gmshToFoam reads"
-        ),
-        "-nt": FlagSpec(
+        "-nopopup": FlagSpec(0, why="never wait on a dialog"),
+        "-": FlagSpec(0, why="run the script, then exit"),
+    },
+    # `gmshToFoam <mesh>`: the mesh file is its one positional, and it needs no flag.
+    "gmshToFoam": {},
+    # **Multi-region conjugate cases** (ADR-0042). `topoSet` reads `system/topoSetDict` and takes
+    # no argument. `splitMeshRegions` is given the two it needs and no other: every cell zone
+    # becomes a region, and the cells in none belong to the named one (a plain word, so it
+    # cannot be a path).
+    "topoSet": {},
+    "splitMeshRegions": {
+        "-cellZones": FlagSpec(1, pattern=r"^all$", why="one region per cell zone"),
+        "-defaultRegion": FlagSpec(
             1,
-            pattern=r"^([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-6])$",
-            why="the user's core count as Gmsh threads (1 to 256)",
+            pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$",
+            why="the region of the cells in no zone: the solid between the fluids",
         ),
     },
-    "gmshToFoam": {},
-    # **coupledSimpleFoam takes nothing** (ADR-0035): the case directory is its whole input, and a
+    # `foamMultiRun` reads `regionSolvers` from the case's `controlDict`; it needs no argument.
+    "foamMultiRun": {},
+    # **coupledSimpleFoam takes nothing** (ADR-0044): the case directory is its whole input, and a
     # parallel run (`-parallel`) is a later step with its own reason.
     "coupledSimpleFoam": {},
     # **Only the final fields**: the coupled run's monitors are the `controlDict` functions,

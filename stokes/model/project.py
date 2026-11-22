@@ -30,8 +30,13 @@ from stokes.model.ids import is_id, new_id, stable_id
 from stokes.model.nodes import STATUSES, Node, QuantityValue
 from stokes.model.schema import (
     DYNAMIC,
+    INTEGER_TOLERANCE,
+    MAP_DIMENSIONS,
+    MAP_ENTRY,
     MAX_JSON_BYTES,
+    MAX_MAP_ENTRIES,
     NAME_RE,
+    VECTOR_AXES,
     NodeSpec,
     NodeTypeRegistry,
     ParamSpec,
@@ -297,7 +302,7 @@ class Project:
             raise ModelError(f"node id {node_id!r} already exists")
         node = Node(node_id or new_id(), node_type, name, parent=parent)
         for pspec in spec.params:
-            node.params[pspec.name] = self._default_value(node, pspec)
+            self._put_default(node, pspec)
         position = (
             len(parent.children) if index is None else max(0, min(index, len(parent.children)))
         )
@@ -427,7 +432,7 @@ class Project:
         node.type = spec.type
         node.params = {}
         for pspec in spec.params:
-            node.params[pspec.name] = self._default_value(node, pspec)
+            self._put_default(node, pspec)
         try:
             ordered = sorted((params or {}).items(), key=lambda kv: kv[0] != "dimension")
             for pname, raw in ordered:
@@ -496,6 +501,10 @@ class Project:
         """
         node = self.get(ref)
         spec = self.registry.get(node.type).param(name)
+        if spec.kind == "vector":
+            return self._set_vector(node, spec, raw)
+        if spec.kind == "quantity_map":
+            return self._set_map(node, spec, raw)
         old = node.params.get(name)
         old_json = old.to_json() if isinstance(old, QuantityValue) else old
         if spec.kind == "json":
@@ -513,6 +522,7 @@ class Project:
             return old_json
         if spec.kind == "quantity":
             new = self._quantity_from_raw(node, spec, raw)
+            _check_integer(node, spec, new.value)
             key = (node.id, name)
             previous_deps = self._deps.get(key, set())
             if new.expr:
@@ -539,6 +549,112 @@ class Project:
         self._mark(node)
         self._touch()
         return old_json
+
+    def _set_vector(self, node: Node, spec: ParamSpec, raw: Any) -> list[Any]:  # Any: JSON
+        """Set the three components of a ``vector``: a list of three quantities (numbers in SI,
+        quantity text or expressions) or an object with ``x``, ``y`` and ``z``. All or nothing:
+        a component that is refused puts back the ones already set. Returns the old components'
+        JSON, which sets them back."""
+        if isinstance(raw, Mapping):
+            raw = [raw.get(axis) for axis in VECTOR_AXES]
+        if isinstance(raw, str | bytes) or not isinstance(raw, Sequence) or len(raw) != 3:
+            raise ValidationError(
+                f"{spec.name!r} expects three values (x, y, z)", details={"parameter": spec.name}
+            )
+        if any(item is None for item in raw):
+            raise ValidationError(f"{spec.name!r} needs a value for each of x, y and z")
+        done: list[tuple[str, Any]] = []  # Any: the component's old JSON
+        try:
+            for axis, item in zip(VECTOR_AXES, raw, strict=True):
+                component = f"{spec.name}.{axis}"
+                done.append((component, self.set_param(node.id, component, item)))
+        except StokesError:
+            for component, old in reversed(done):
+                self.set_param(node.id, component, old, validate=False)
+            raise
+        return [old for _, old in done]
+
+    def _set_map(self, node: Node, spec: ParamSpec, raw: Any) -> dict[str, Any]:  # Any: JSON
+        """Replace a ``quantity_map``: ``{name: value}``, a value being quantity text, an
+        expression, a number (in the entry's SI unit) or ``{"value" | "expr", "dimension"}``.
+        Entries left out are removed, and whatever read them fails as for a removed parameter.
+        All or nothing. Returns the old map's JSON, which sets it back."""
+        if not isinstance(raw, Mapping):
+            raise ValidationError(f"{spec.name!r} expects an object of named quantities")
+        if len(raw) > MAX_MAP_ENTRIES:
+            raise ValidationError(
+                f"{spec.name!r} holds at most {MAX_MAP_ENTRIES} entries",
+                details={"count": len(raw)},
+            )
+        for name in raw:
+            if not isinstance(name, str) or not NAME_RE.match(name):
+                raise ValidationError(
+                    f"{name!r} is not a name: letters, digits, underscores; no leading digit",
+                    details={"parameter": spec.name},
+                )
+        prefix = f"{spec.name}."
+        old: dict[str, Any] = {}  # Any: JSON
+        snapshot: dict[str, QuantityValue] = {}
+        for key, value in node.params.items():
+            if key.startswith(prefix) and isinstance(value, QuantityValue):
+                entry = value.to_json()
+                entry["dimension"] = _entry_dimension(value).name
+                old[key[len(prefix) :]] = entry
+                snapshot[key] = QuantityValue(value.value, value.unit, value.expr)
+        try:
+            for name in [n for n in old if n not in raw]:
+                self._drop_entry(node, prefix + name)
+            for name, item in raw.items():
+                dim = self._entry_dim(item, old.get(name))
+                current = node.params.get(prefix + name)
+                if not isinstance(current, QuantityValue) or current.unit != dim.si_unit:
+                    node.params[prefix + name] = QuantityValue(0.0, dim.si_unit, None)
+                value = item.get("expr") or item.get("value") if isinstance(item, Mapping) else item
+                self.set_param(node.id, prefix + name, value)
+        except StokesError:
+            for key in [k for k in node.params if k.startswith(prefix)]:
+                if key not in snapshot:
+                    self._drop_entry(node, key)
+            node.params.update(snapshot)
+            for key, value in snapshot.items():
+                if value.expr:
+                    self._reevaluate(node, key)
+                self._recompute_dependents((node.id, key))
+            raise
+        self._mark(node)
+        self._touch()
+        return old
+
+    def _drop_entry(self, node: Node, key_name: str) -> None:
+        key = (node.id, key_name)
+        node.params.pop(key_name, None)
+        self._drop_deps(key)
+        self._failed.discard(key)
+        self._recompute_dependents(key)
+
+    def _entry_dim(self, item: Any, old: Any) -> Dimension:  # Any: JSON
+        """A map entry's dimension: stated, kept from the entry it replaces, or read from the
+        value (a length, an angle written with an angle unit, or a plain number)."""
+        if isinstance(item, Mapping) and item.get("dimension") is not None:
+            name = str(item["dimension"])
+            if name not in MAP_DIMENSIONS:
+                raise ValidationError(
+                    f"an entry is one of {', '.join(MAP_DIMENSIONS)}; not {name!r}",
+                    details={"dimension": name},
+                )
+            return dimension(name)
+        if isinstance(old, Mapping) and old.get("dimension") in MAP_DIMENSIONS:
+            return dimension(str(old["dimension"]))
+        if isinstance(item, Mapping):
+            item = item.get("expr") or item.get("value")
+        if isinstance(item, bool) or item is None or not str(item).strip():
+            raise ValidationError("a map entry needs a quantity")
+        if isinstance(item, int | float):
+            return dimension("length")
+        text = str(item).strip()
+        if is_quantity_text(text):
+            return _text_dimension(text)
+        return _dimension_of(self.evaluate(text), text)
 
     def unset_param(self, ref: str, name: str) -> None:
         """Take a parameter off a node that never held it: the undo of the first write to a node
@@ -631,6 +747,11 @@ class Project:
 
     # ------------------------------------------------------------------ quantities
     def param_dimension(self, node: Node, spec: ParamSpec) -> Dimension:
+        if spec.dimension == MAP_ENTRY:
+            stored = node.params.get(spec.name)
+            if isinstance(stored, QuantityValue):
+                return _entry_dimension(stored)
+            return dimension("length")
         if spec.dimension == DYNAMIC:
             return dimension(str(node.params.get("dimension", "dimensionless")))
         return dimension(str(spec.dimension))
@@ -650,6 +771,12 @@ class Project:
         node, pname = self._resolve_ref(ref)
         return self.value_of(node.id, pname)
 
+    def resolve_param(self, ref: str) -> tuple[Node, str]:
+        """The node and quantity parameter an expression name refers to (``R``,
+        ``geometry.cyl.radius``, ``geometry.cyl.position.x``); :class:`ExpressionError` when it
+        names none."""
+        return self._resolve_ref(ref)
+
     def _resolve_ref(self, ref: str) -> tuple[Node, str]:
         segments = [s for s in ref.split(".") if s]
         if not segments:
@@ -668,6 +795,11 @@ class Project:
                 spec = self.registry.get(owner.type)
                 if any(p.name == segments[-1] and p.kind == "quantity" for p in spec.params):
                     return owner, segments[-1]
+        if len(segments) >= 3:  # one component of a vector or a map: ops.cyl.position.x
+            owner = self._by_path("/".join(segments[:-2]))
+            component = f"{segments[-2]}.{segments[-1]}"
+            if owner is not None and isinstance(owner.params.get(component), QuantityValue):
+                return owner, component
         raise ExpressionError(f"unknown reference {ref!r}", details={"ref": ref})
 
     def evaluate(self, text: str, dim: Dimension | None = None) -> Quantity:
@@ -770,6 +902,19 @@ class Project:
             )
         return target.id
 
+    def _put_default(self, node: Node, spec: ParamSpec) -> None:
+        """A new node's value of ``spec``: a vector's three components, nothing for a map (it
+        starts empty), else :meth:`_default_value`."""
+        if spec.kind == "vector":
+            dim = dimension(str(spec.dimension))
+            defaults = tuple(spec.default or (0.0, 0.0, 0.0))
+            for axis, value in zip(VECTOR_AXES, defaults, strict=True):
+                node.params[f"{spec.name}.{axis}"] = QuantityValue(float(value), dim.si_unit, None)
+            return
+        if spec.kind == "quantity_map":
+            return
+        node.params[spec.name] = self._default_value(node, spec)
+
     def _default_value(self, node: Node, spec: ParamSpec) -> Any:  # Any: JSON
         if spec.kind == "quantity":
             dim = self.param_dimension(node, spec)
@@ -868,7 +1013,9 @@ class Project:
         try:
             self._install_deps(key, value.expr)
             result = evaluate(value.expr, self.resolve, expect=dim)
-            value.value = to_si(result, dim)
+            number = to_si(result, dim)
+            _check_integer(node, spec, number)
+            value.value = number
             self._ok(node)
         except StokesError as exc:
             self._fail(node, f"{pname}: {exc.message}", key)
@@ -1042,6 +1189,55 @@ def _matching(spec: ParamSpec, raw: str) -> str:
             details={"pattern": spec.pattern},
         )
     return raw
+
+
+def _check_integer(node: Node, spec: ParamSpec, value: float) -> None:
+    """Refuse a value off a whole number for an ``integer`` quantity (never rounded)."""
+    if spec.integer and not (
+        math.isfinite(value) and abs(value - round(value)) <= INTEGER_TOLERANCE
+    ):
+        raise ValidationError(
+            f"{spec.label or spec.name} of {node.path} must be a whole number; got {value:g}",
+            details={"code": "model.not_integer", "parameter": spec.name, "value": value},
+        )
+
+
+_ANGLE_UNITS = re.compile(r"\b(deg|degree|degrees|rad|radian|radians|grad|turn)\b")
+
+
+def _text_dimension(text: str) -> Dimension:
+    """The map dimension of quantity text: an angle when written with an angle unit, a length
+    when it parses as one, else a plain number."""
+    if _ANGLE_UNITS.search(text):
+        return dimension("angle")
+    try:
+        parse_quantity(text, dimension("length"))
+    except StokesError:
+        return dimension("dimensionless")
+    return dimension("length")
+
+
+def _entry_dimension(value: QuantityValue) -> Dimension:
+    """A stored map entry's dimension, from the SI unit it is kept in."""
+    for name in MAP_DIMENSIONS:
+        if dimension(name).si_unit == value.unit:
+            return dimension(name)
+    return dimension("length")
+
+
+def _dimension_of(q: Quantity, text: str) -> Dimension:
+    """Which map dimension an evaluated entry has: a length, an angle (written with an angle
+    unit, which pint does not tell from a plain number by its dimensionality), or a number."""
+    if q.dimensionality == dimension("length").dimensionality:
+        return dimension("length")
+    if q.dimensionality == dimension("dimensionless").dimensionality:
+        if _ANGLE_UNITS.search(str(q.units)) or _ANGLE_UNITS.search(text):
+            return dimension("angle")
+        return dimension("dimensionless")
+    raise ValidationError(
+        f"an entry is a length, an angle or a plain number; {text!r} is not",
+        details={"text": text},
+    )
 
 
 def _numbers(spec: ParamSpec, raw: Any) -> list[float]:  # Any: JSON value

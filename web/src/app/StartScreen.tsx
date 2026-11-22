@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Box, FilePlus, FolderOpen, GraduationCap, Settings } from "lucide-react";
 import { useStore } from "../state/store";
 import { NewProjectDialog, type NewProjectValues } from "../components/NewProjectDialog";
@@ -7,7 +7,7 @@ import { FolderBrowser, type BrowseReply } from "../components/FolderBrowser";
 import { host } from "./host";
 import TutorialsCard from "./TutorialsCard";
 import { runAction } from "./actions";
-import { ago, folderOf, monogram, recentCards } from "./startScreenModel";
+import { ago, dedupeRecent, monogram, recentCards, recentLocations } from "./startScreenModel";
 import { FlowThumb } from "./FlowThumb";
 import "./StartScreen.css";
 
@@ -126,7 +126,10 @@ export default function StartScreen() {
     }
   };
 
-  const cards = recentCards(recent);
+  // One card per project, however its path was spelled; a location long enough to tell same-named projects apart.
+  const unique = useMemo(() => dedupeRecent(recent), [recent]);
+  const cards = recentCards(unique);
+  const locations = useMemo(() => recentLocations(unique), [unique]);
   const now = Date.now();
   const startNew = () => {
     setDialog("new");
@@ -178,7 +181,7 @@ export default function StartScreen() {
         <section className="start-section" aria-labelledby="start-recent-title">
           <header className="start-section-head">
             <h2 id="start-recent-title">Recent</h2>
-            {recent.length > 0 && <span className="start-count">{recent.length}</span>}
+            {unique.length > 0 && <span className="start-count">{unique.length}</span>}
             <button type="button" className="link no-drag" disabled={!connected} onClick={() => setDialog("open")}>Show all</button>
           </header>
           {cards.length === 0 ? (
@@ -192,7 +195,7 @@ export default function StartScreen() {
             <ul className="start-grid">
               {cards.map((row) => {
                 const when = ago(row.modified ?? row.opened, now);
-                const folder = folderOf(row.path);
+                const folder = locations.get(row.path) ?? "";
                 const url = row.exists && row.has_preview === true ? previewUrl(apiBase, row.path, token) : "";
                 return (
                   <li key={row.path}>
@@ -203,7 +206,7 @@ export default function StartScreen() {
                       </span>
                       <span className="start-card-body">
                         <strong>{row.name}</strong>
-                        <small>{row.exists ? [folder, when].filter(Boolean).join(" · ") : "Not found"}</small>
+                        <small title={row.path}>{row.exists ? [folder, when].filter(Boolean).join(" · ") : `Not found · ${folder}`}</small>
                       </span>
                     </button>
                   </li>

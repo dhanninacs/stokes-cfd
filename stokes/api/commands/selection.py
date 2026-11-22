@@ -56,6 +56,7 @@ from stokes.api.registry import CommandContext, ParamDef, command
 from stokes.errors import UnknownNode, ValidationError
 from stokes.geometry.errors import SelectionError
 from stokes.geometry.model import (
+    BREPLESS_FAMILIES,
     GEOMETRY_PATH,
     GROW_ANGLE,
     SELECTION_KINDS,
@@ -701,7 +702,12 @@ def selection_rematch(
     geo = _Geometry(ctx)
     node = _selection(geo.project, tag)
     if result is not None:
-        return {**_apply(ctx, geo, node, _given(geo, result), verb="re-match"), "report": []}
+        # A re-match says the faces are on each part's CURRENT version, even where the ids are
+        # the ones the member had (an inlet that is face 0 before and after a rebuild): stamp
+        # every part the result names, as the fingerprint path below does.
+        given = _given(geo, result)
+        reply = _apply(ctx, geo, node, given, verb="re-match", stamp={m.part for m in given})
+        return {**reply, "report": []}
     report: list[dict[str, Any]] = []
     kept: list[Member] = []
     for member in _members(node):
@@ -1683,7 +1689,7 @@ def _brep_now(
 ) -> dict[str, Any]:  # Any: JSON
     """What to report for a part's B-rep now: nothing to check, the job is running, or the
     findings of the version the part is at (``stored``)."""
-    if node.params.get("family") == "mesh":
+    if node.params.get("family") in BREPLESS_FAMILIES:
         return _MESH_ONLY_BREP
     if not _checkable(geo, node):
         return _NO_BREP
@@ -1751,7 +1757,7 @@ def geometry_check(
     specs = []
     bases: dict[str, str] = {}
     for node in ready:
-        if node.params.get("family") == "mesh" or not _checkable(geo, node):
+        if node.params.get("family") in BREPLESS_FAMILIES or not _checkable(geo, node):
             continue
         if not force and _stored_brep(geo, node) is not None:
             continue  # already checked at the version the part is now
@@ -1991,7 +1997,7 @@ def geometry_export_step(
             f"{target.name} is not a .step or .stp file", details={"path": str(target)}
         )
     nodes = [geo.project.get(part_id) for part_id in chosen]
-    mesh_only = [n for n in nodes if n.params.get("family") == "mesh"]
+    mesh_only = [n for n in nodes if n.params.get("family") in BREPLESS_FAMILIES]
     if mesh_only:
         raise MeshOnly(
             f"{mesh_only[0].path} is a mesh-only part: it has no B-rep. Export it to STL for the "

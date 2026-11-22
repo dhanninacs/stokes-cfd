@@ -51,7 +51,10 @@ const TAGS_PATH = "/geometry/tags";
 export function collectTags(tree: NodeSummary | null): TagInfo[] {
   const out: TagInfo[] = [];
   const visit = (node: NodeSummary): void => {
-    if (node.type === "tag") {
+    // **A region tag is not painted** (walkthrough 2026-11-18): it holds whole bodies, so its colour
+    // flooded the fluid body in solid orange the moment a fluid was chosen. Its body is drawn in the
+    // body's own colour; the tags the viewport paints are the boundary patches.
+    if (node.type === "tag" && node.params.kind !== "region") {
       const params = node.params;
       out.push({
         id: node.id,

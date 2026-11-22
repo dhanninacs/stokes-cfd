@@ -428,6 +428,7 @@ export function startWorkspace(): () => void {
         if (data.scope === "presets") void useWorkspace.getState().loadPresets();
         else scheduleRefetch();
       } else if (event === "project.opened" || event === "project.closed" || event === "project.saved") {
+        if (event !== "project.saved") useWorkspace.getState().clearOpened();
         scheduleRefetch();
       }
     });

@@ -172,6 +172,19 @@ function moveItems(): UiItem[] {
 
 
 /**
+ * Brings a registered panel on screen the way "Open <panel>" does, for a button that leads to one
+ * (the Results step's "Optimise…"): where the layout has it, else in the slot the registry names.
+ */
+export function openPanelById(id: string): boolean {
+  const def = PANELS.get(id);
+  if (def === undefined) return false;
+  const here = placeOf(useWorkspace.getState().document.layout, id);
+  const home = here === null || here === "hidden" ? homeSlot(def) : here;
+  openPanelTo(def, home);
+  return true;
+}
+
+/**
  * Puts a panel back on screen and OPENS the slot it lands in, in **one write**.
  *
  * **Two writes lose**, measured: `movePanel` sends the whole `layout`, and so does the `collapsed`
@@ -230,6 +243,7 @@ function visibleNow(def: PanelDef): boolean {
   const place = placeOf(document, def.id);
   if (place === null || place === "hidden") return false;
   if (place !== "float" && document[place].collapsed) return false;
+  if (def.id === "optimise") return (useWorkspace.getState().opened[place] ?? []).includes(def.id);
   const stages = def.stages;
   if (stages === undefined) return true;
   const stage = useStore.getState().stage;
@@ -264,6 +278,9 @@ export function uiItems(reset: () => void): UiItem[] {
       run: () => useWorkspace.getState().setCustomising(true),
     },
     { kind: "ui", key: "ui:reset", name: "Reset workspace", description: "Back to the Stokes defaults; it asks first", section: "actions", run: reset },
+    // **"Fast" finds the panel, not a raw command.** Typed alone it listed fast.stop, fast.start and three
+    // more above "Open Fast mode" (GUI review, 2026-11-22): the label of this entry starts with the word.
+    { kind: "ui", key: "ui:fast", name: "Fast mode", description: "Open the GPU preview's panel", section: "actions", run: () => void openPanelById("fast") },
   );
   return [...items, ...moveItems()];
 }

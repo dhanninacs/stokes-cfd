@@ -229,7 +229,7 @@ function bandsOf(bands: number): number {
  * `map` is the colour map (viridis when omitted) and `reverse` reads it from the other end. **A diverging map
  * over a range that spans zero is centred on zero** (`fractionIn`).
  */
-export function tintFor(values: ArrayLike<number>, min: number, max: number, bands = 0, map?: Colormap | ColormapId, reverse = false): Uint8Array {
+export function tintFor(values: ArrayLike<number>, min: number, max: number, bands = 0, map?: Colormap | ColormapId, reverse = false, clip = false): Uint8Array {
   const out = new Uint8Array(values.length * 4);
   const m = colormapOf(map);
   /*
@@ -249,6 +249,8 @@ export function tintFor(values: ArrayLike<number>, min: number, max: number, ban
   for (let i = 0; i < values.length; i++) {
     const v = values[i];
     if (Number.isNaN(v)) continue; // the array is zeros: alpha 0
+    // Clipped to the range: a value past an end keeps the surface's own colour (alpha 0), as a NaN does.
+    if (clip && (v < min || v > max)) continue;
     let at: number;
     if (n === 0) at = place(v);
     else {

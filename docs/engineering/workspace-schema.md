@@ -185,7 +185,7 @@ A panel entry:
 
 | Key | Type | Required | Meaning |
 |---|---|---|---|
-| `id` | panel id (`[a-z][a-z0-9]*` with `.`, `_` or `-` between parts) | yes | `tree`, `properties`, `output`, `design-table` or `plots` today; registered plug-in panels later. Unknown ids are kept for the front end's registry to resolve. |
+| `id` | panel id (`[a-z][a-z0-9]*` with `.`, `_` or `-` between parts) | yes | `tree`, `properties`, `output`, `design-table`, `plots` or `optimise` (ADR-0038) today; registered plug-in panels later. Unknown ids are kept for the front end's registry to resolve. |
 | `order` | integer, 0 to 1000 | filled from the position | Display order in the slot (lowest first; ties keep list order). |
 | `size` | number, 24 to 4096 | no | In a split, the panel's share in px (height in left and right, width in bottom); panels without one share the rest equally. In float, the card's width. Ignored in tabs. |
 | `collapsed` | boolean | no | In a split, the panel folded to its header. In float, the card folded. |
@@ -260,7 +260,10 @@ Keys: `A`–`Z`, `0`–`9`, `` ` - = [ ] \ ; ' , . / ``, `Plus` (for `+`), `F1`�
 `Esc`, `Del`, `Up` ...) and stored canonical. Match letters, digits and
 punctuation by `KeyboardEvent.code` (`KeyF`, `Digit1`, `Comma`) so that Shift
 and keyboard layouts do not change them. Global actions do not fire while a
-text field has focus; tree actions fire when the tree has focus.
+text field has focus; tree actions fire when the tree has focus. Build actions have handlers only
+while the build ribbon is open; they come before the global actions of the same letter, and the
+keymap runs the first action of a chord that has a handler, so `S`, `P`, `M` and `C` reach Section,
+Paint, Measure and nothing otherwise.
 
 | Action id | Default | Context | What it does |
 |---|---|---|---|
@@ -275,6 +278,10 @@ text field has focus; tree actions fire when the tree has focus.
 | `view.projection` | `O` | global | Switch between perspective and orthographic |
 | `view.mode.cycle` | `V` | global | Cycle shaded, shaded with edges, wireframe |
 | `view.nav.cycle` | `Shift N` | global | Cycle the mouse scheme: CAD, ParaView, Blender, Select/Orbit |
+| `build.sketch` | `S` | build | Open the sketcher (only while the build ribbon is open) |
+| `build.pull` | `P` | build | Pull: open the picked sketched body's sketch, where its depth is |
+| `build.move` | `M` | build | Move the picked body |
+| `build.combine` | `C` | build | Combine the picked bodies |
 | `view.section` | `S` | global | Section view (not built yet) |
 | `view.measure` | `M` | global | Measure: click two points on the model for the distance between them (see below) |
 | `selection.isolate` | `I` | global | Isolate the selected patch, or show all again |
@@ -294,6 +301,12 @@ text field has focus; tree actions fire when the tree has focus.
 | `prepare.extractFluid` | none | global | Extract the fluid around a seed point |
 | `prepare.boolean` | none | global | Fuse, cut or intersect the picked bodies |
 | `prepare.repair` | none | global | Heal, sew or solidify the picked bodies |
+| `create.sketch` | none | global | Sketch a profile and pull or revolve it |
+| `create.shape` | none | global | Create a shape: box, cylinder, sphere, torus… (ADR-0035) |
+| `create.transform` | none | global | Move, rotate, mirror or scale the picked body |
+| `create.combine` | none | global | Union, subtract, intersect or split the picked bodies |
+| `create.pattern` | none | global | Copy the picked body in a row or around an axis (ADR-0036) |
+| `create.modify` | none | global | Offset or shell the picked body (ADR-0036) |
 | `palette.open` | `Ctrl+K` | global | Open the command palette (always keeps a chord) |
 | `history.undo` | `Ctrl+Z` | global | Undo |
 | `history.redo` | `Ctrl+Y` or `Ctrl+Shift+Z` | global | Redo |
@@ -559,7 +572,8 @@ This is `workspace.get`'s `document` with no user or project file, and what
       "conditions",
       "solve",
       "results",
-      "plots"
+      "plots",
+      "optimise"
     ]
   },
   "islands": {
@@ -676,6 +690,10 @@ This is `workspace.get`'s `document` with no user or project file, and what
     "view.projection": "O",
     "view.mode.cycle": "V",
     "view.nav.cycle": "Shift+N",
+    "build.sketch": "S",
+    "build.pull": "P",
+    "build.move": "M",
+    "build.combine": "C",
     "view.section": "S",
     "view.measure": "M",
     "selection.name": "Ctrl+Shift+T",
@@ -695,6 +713,12 @@ This is `workspace.get`'s `document` with no user or project file, and what
     "prepare.extractFluid": [],
     "prepare.boolean": [],
     "prepare.repair": [],
+    "create.sketch": [],
+    "create.shape": [],
+    "create.transform": [],
+    "create.combine": [],
+    "create.pattern": [],
+    "create.modify": [],
     "palette.open": "Ctrl+K",
     "history.undo": "Ctrl+Z",
     "history.redo": [

@@ -105,6 +105,9 @@ export interface RankedCommand<T extends Rankable = CommandSchema> {
  * the description; entries in `recent` get a boost, the most recent most. `keyOf` is how an entry
  * is written in `recent` (its name, unless the caller keeps another key).
  */
+/** What an entry named in words gets over a raw command (see `rankCommands`). */
+const WORDS_BONUS = 2;
+
 export function rankCommands<T extends Rankable>(
   commands: readonly T[],
   query: string,
@@ -119,7 +122,8 @@ export function rankCommands<T extends Rankable>(
     const descriptionIndices = new Set<number>();
     let all = true;
     for (const term of terms) {
-      const inLabel = command.label === undefined ? null : fuzzyMatch(term, command.label);
+      // An entry with no label of its own (a panel, an action) is named in words already: its name is its label.
+      const inLabel = fuzzyMatch(term, command.label ?? command.name);
       const inName = fuzzyMatch(term, command.name);
       const inDescription = fuzzyMatch(term, command.description);
       if (!inLabel && !inName && !inDescription) {
@@ -141,9 +145,13 @@ export function rankCommands<T extends Rankable>(
       inDescription?.indices.forEach((i) => descriptionIndices.add(i));
     }
     if (!all) continue;
+    // An entry named in words (a panel, an action) leads a raw command that matches about as well: "Fast"
+    // listed fast.stop and four more above the Fast mode panel.
+    if (command.label === undefined) score += WORDS_BONUS;
     const rank = recent.indexOf(keyOf(command));
     if (rank >= 0) score += 4 - rank * 0.5;
     ranked.push({ command, score, nameIndices: [...nameIndices].sort((a, b) => a - b), descriptionIndices: [...descriptionIndices].sort((a, b) => a - b) });
   }
-  return ranked.sort((a, b) => b.score - a.score || a.command.name.localeCompare(b.command.name));
+  // At equal scores an entry named in words (a panel, an action) comes before a raw command.
+  return ranked.sort((a, b) => b.score - a.score || Number(a.command.label !== undefined) - Number(b.command.label !== undefined) || a.command.name.localeCompare(b.command.name));
 }

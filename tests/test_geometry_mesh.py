@@ -311,7 +311,10 @@ def test_part_node_schema_and_persistence(tmp_path: Path) -> None:
     # The label is `title` in the JSON schema - not `x-label`, which I assumed and the test
     # corrected.
     assert schema["simulate"]["title"] == "In simulation"
-    assert schema["family"]["enum"] == ["brep", "mesh"] and schema["family"]["default"] == "brep"
+    assert (
+        schema["family"]["enum"] == ["brep", "mesh", "implicit"]
+        and schema["family"]["default"] == "brep"
+    )
     project = Project.new("demo")
     project.add("/geometry", "group", "parts")
     part = project.add("/geometry/parts", "part", "bracket", {"source": "C:/cad/bracket.step"})

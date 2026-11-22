@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import HoverReadout from "./HoverReadout";
 import type { TagMembers } from "../api/types";
 import { runAction } from "../app/actions";
 import { isMeshSource, meshIdOfSource } from "../state/meshPatches";
@@ -17,13 +18,19 @@ import { freeRect } from "./freeRect";
 import { effectiveDisplayQuality } from "./displayQuality";
 import { THEME_TOKENS_EVENT } from "../workspace/theme";
 import ImportProgressLine from "./ImportProgressLine";
+import DirectLayer from "../direct/DirectLayer";
 import { MeasureReadout } from "./MeasureReadout";
 import { MeasurePanel } from "./MeasurePanel";
 import { ScaleBar } from "./ScaleBar";
 import { ViewButtons } from "./ViewButtons";
 import type { Vec3 } from "./measure";
 import { MeshPatchesController } from "./meshPatches";
+import { linesForField } from "../panels/streamlineModel";
+import { ContourLayer } from "./contourLayer";
+import { MeshSectionController } from "./meshSection";
+import { SolidSectionController } from "./solidSection";
 import { FieldsController } from "./fields";
+import { FastLayer } from "./fastLayer";
 import { IsoLayer } from "./isoLayer";
 import { IsoStatusLine } from "./IsoStatusLine";
 import { FieldLegend } from "./FieldLegend";
@@ -131,6 +138,8 @@ interface SceneProbe {
    * the readout it published. Figures only — a caller cannot measure into the scene through it.
    */
   measure(): { on: boolean; a: Vec3 | null; b: Vec3 | null; label: string | null; metres: number | null };
+  /** The direct flow (ADR-0039): whether a ghost is drawn and whether a sketch holds the camera. */
+  direct(): { ghost: boolean; pinned: boolean };
   /**
    * How many parts have a topology record loaded, and how many edges and vertices they hold, plus
    * what a screen-space topology pick at a canvas point finds.
@@ -153,6 +162,10 @@ interface SceneProbe {
    * to do nothing.
    */
   capsInfo(): { groups: number; marks: number; quad: boolean; active: boolean; rebuilds: number };
+  /** The volume mesh drawn at the section (`meshCut.ts`), or null. */
+  meshCutInfo(): { cells: number; triangles: number; edges: number; drawn: number; plane: number[] } | null;
+  /** The modeller bodies' filled sections in the scene (`solidCut.ts`). */
+  solidCutInfo(): { parts: number; triangles: number };
   /** The mesh patches and cell edges the scene holds and draws, and the layers its view filter allows (T-211). */
   meshInfo(): {
     patches: number;
@@ -238,6 +251,7 @@ function publishTopologyLoaded(scene: SceneManager): void {
 function probeOf(scene: SceneManager): SceneProbe {
   return Object.freeze({
     perf: () => scene.perf(),
+    direct: () => ({ ghost: scene.hasGhost, pinned: scene.isPinned }),
     measureRender: (frames?: number) => scene.measureRender(frames),
     startFrames: () => scene.startFrames(),
     stopFrames: () => scene.stopFrames(),
@@ -278,6 +292,8 @@ function probeOf(scene: SceneManager): SceneProbe {
     axisRange: (axis: "x" | "y" | "z") => scene.axisRange(axis),
     clippingCount: () => scene.renderer.clippingPlanes?.length ?? 0,
     capsInfo: () => scene.capsInfo(),
+    meshCutInfo: () => scene.meshCutInfo(),
+    solidCutInfo: () => scene.solidCutInfo(),
     meshInfo: () => scene.meshInfo(),
     modelBounds: () => scene.modelBounds(),
     fitFrom: (x: number, y: number, z: number) => scene.fitFrom(x, y, z),
@@ -297,6 +313,23 @@ function probeOf(scene: SceneManager): SceneProbe {
 
 
 /** The canvas in its own pixels: the space the projection works in. */
+/**
+ * How far up from the canvas's bottom edge the build ribbon reaches, or 0 when it is closed.
+ *
+ * **The ribbon covers the model** (walkthrough 2026-11-18): it floats over the bottom of the view,
+ * about 70 px tall, and a fit that ignored it framed a newly pulled body behind it. The modes island
+ * below it sits in the canvas's own bottom margin, so only the ribbon is counted.
+ */
+function ribbonCover(): number {
+  const ribbon = document.querySelector('[data-ws="build-ribbon"]');
+  const canvas = document.querySelector("canvas");
+  if (ribbon === null || canvas === null) return 0;
+  const r = ribbon.getBoundingClientRect();
+  const c = canvas.getBoundingClientRect();
+  if (r.height === 0) return 0;
+  return Math.max(0, Math.round(c.bottom - r.top));
+}
+
 function canvasRect(): { width: number; height: number } {
   const el = document.querySelector("canvas");
   const rect = el?.getBoundingClientRect();
@@ -397,6 +430,7 @@ function findMeshPatch(tree: NodeSummary | null, drawnName: string): { id: strin
 export default function Viewport() {
   // Guided mode draws the field legend under its step card (guided/GuidedLayer.tsx), not in its own corner.
   const guided = useGuidedMode() === "guided";
+  const sketching = useStore((st) => st.sketch !== null);
   const guidedRef = useRef(guided);
   guidedRef.current = guided;
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -414,6 +448,8 @@ export default function Viewport() {
    * module variable and causes no re-render, which is why the ref alone was not enough.
    */
   const [scene, setScene] = useState<SceneManager | null>(null);
+  /** The results colouring, for the hover readout to read the values from. */
+  const fieldsRef = useRef<FieldsController | null>(null);
   /**
    * Why the 3D view could not start, or null. **A blank canvas is not an explanation**: a Linux VM
    * on llvmpipe (or a driver on Chromium's block list) fails WebGL 2 while everything else works,
@@ -497,6 +533,8 @@ export default function Viewport() {
   const lineA = useStore((s) => s.line.a);
   const lineB = useStore((s) => s.line.b);
   const streamlines = useStore((s) => s.streamlines);
+  // The field the view shows: lines that carry it take its colours, so they agree with the legend.
+  const shownField = useStore((s) => s.results.view.field);
   const arrows = useStore((s) => s.arrows);
   const vectorCloud = useStore((s) => s.vectorCloud);
   // The lines wear the results view's colour map, as the slices and the legend do (R1's open item).
@@ -749,12 +787,26 @@ export default function Viewport() {
     const controller = new PartsController(client, scene);
     // The boundary patches of the mesh (T-211) are sources of the same scene, drawn in the Mesh stage.
     const meshes = new MeshPatchesController(client, scene);
+    // The volume mesh where the section cuts it, while the mesh is what the view shows.
+    const meshSection = new MeshSectionController(client, scene);
+    // The modeller bodies' own sections, filled from their fields (a lattice's mesh cannot be stencil-capped).
+    const solidSection = new SolidSectionController(client, scene);
     // The results colour those patches (T-218): the tint is set once the scene holds a patch.
     const fields = new FieldsController(client, scene);
+    fieldsRef.current = fields;
     // The iso-surface the Results panel made ready (ADR-0026 amendment 1), one at a time.
     const iso = new IsoLayer(client, scene);
+    // Several iso-surfaces at once, see-through (the Iso look's Count above one).
+    const contours = new ContourLayer(client, scene);
+    // Fast mode's plane (ADR-0047): drawn whenever a preview runs, whatever the stage.
+    const fast = new FastLayer(client, scene);
     return () => {
+      fast.dispose();
       iso.dispose();
+      contours.dispose();
+      meshSection.dispose();
+      solidSection.dispose();
+      fieldsRef.current = null;
       fields.dispose();
       meshes.dispose();
       controller.dispose();
@@ -932,14 +984,14 @@ export default function Viewport() {
       const live = sceneRef.current;
       if (live === null) return;
       // Docks can mount after the scene; observe new elements as the layout arrives.
-      for (const selector of [...SLOT_SELECTORS, "canvas"]) {
+      for (const selector of [...SLOT_SELECTORS, "canvas", '[data-ws="build-ribbon"]']) {
         const el = document.querySelector(selector);
         if (el && !observed.has(el)) { observer.observe(el); observed.add(el); }
       }
       // Guided mode's step card (left column) and strip (top row) cover the canvas too: the fit stays clear of them.
       const inset = guidedInset(guidedRef.current ? "guided" : "full");
       const rect = freeRect({ left: dockEdge("left") + inset.left, right: dockEdge("right"),
-        top: inset.top, bottom: 0, window: canvasRect() });
+        top: inset.top, bottom: ribbonCover(), window: canvasRect() });
       const key = JSON.stringify(rect);
       if (key === previous) return;
       previous = key;
@@ -986,10 +1038,12 @@ export default function Viewport() {
     // **Switched off is a PLACEMENT**, not a separate mechanism: `setGizmo` already decides whether
     // and where the gizmo draws, so "hidden" is one more answer to the question it asks - which
     // keeps one route to the gizmo rather than a flag beside it.
-    const place = () => sceneRef.current?.setGizmo(display.gizmo === false ? null : gizmoPlacement());
+    // The sketcher covers the view and pins the camera face-on, so the gizmo and the view buttons go
+    // while it is open: they peeked out past its edge (walkthrough 2026-11-18).
+    const place = () => sceneRef.current?.setGizmo(display.gizmo === false || sketching ? null : gizmoPlacement());
     place();
     return subscribeGizmo(place);
-  }, [display.gizmo]);
+  }, [display.gizmo, sketching]);
 
   useEffect(() => {
     sceneRef.current?.setSelected(selectedPatch);
@@ -1018,8 +1072,9 @@ export default function Viewport() {
     a new answer - so a redraw is one object swap, and `setStreamlines` disposes the old one.
   */
   useEffect(() => {
-    sceneRef.current?.setStreamlines(streamlines.lines, streamlines.range, streamMap, streamReverse, streamlines.tubes === true);
-  }, [streamlines, streamMap, streamReverse]);
+    const drawn = linesForField(streamlines, shownField);
+    sceneRef.current?.setStreamlines(drawn.lines, drawn.range, streamMap, streamReverse, streamlines.tubes === true);
+  }, [streamlines, streamMap, streamReverse, shownField]);
 
   /*
     **The volume's arrows follow the store** (`run.vectors`, 2026-11-04): an even lattice through the fluid, one
@@ -1111,7 +1166,17 @@ export default function Viewport() {
           for (const child of node.children ?? []) walk(child);
         };
         walk(useStore.getState().tree);
-        scene.setBoundaryGlyphs(answer.anchors ?? [], owners);
+        // **A region's tag gets no glyph** (walkthrough 2026-11-18): it holds the whole body, and the
+        // default tile drawn at its centroid was the unexplained grey square in the middle of the model,
+        // over slices and streamlines too. A face tag no boundary uses yet keeps its tile.
+        const regionTags = new Set<string>();
+        const tags = useStore.getState().tree?.children?.find((n) => n.path === "/geometry")?.children?.find((n) => n.path === "/geometry/tags");
+        const collect = (node: NodeSummary): void => {
+          if (node.type === "tag" && node.params.kind === "region") regionTags.add(node.path);
+          for (const child of node.children ?? []) collect(child);
+        };
+        if (tags) collect(tags);
+        scene.setBoundaryGlyphs((answer.anchors ?? []).filter((a) => !regionTags.has(a.tag)), owners);
       })
       .catch((err: unknown) => {
         useStore.getState().log("error", `tag.anchor: ${(err as Error).message}`);
@@ -1266,15 +1331,19 @@ export default function Viewport() {
         </div>
       )}
       <ImportProgressLine />
+      {/* The direct flow (ADR-0039): the ghost of a body being pulled or rebuilt, and the Pull handle. */}
+      <DirectLayer />
       {/* The scale (T-097): a round length at the size it is drawn, so the model's size is readable
           without opening the tree. */}
       {/* The owner's Scale bar switch; the component draws nothing when it is off. */}
       {display.scaleBar !== false && <ScaleBar />}
       {/* The standard views as named buttons against the view cube (hidden with it). */}
-      <ViewButtons shown={display.gizmo !== false} />
+      <ViewButtons shown={display.gizmo !== false && !sketching} />
       {/* The legend of the field that colours the mesh in the Results stage (T-218). In Guided mode the
           guided layer draws it under the step card instead, so the two never sit in the same corner. */}
       {!guided && <FieldLegend />}
+      {/* The value of the shown field under the pointer, in the Results stage. */}
+      <HoverReadout scene={scene} fields={fieldsRef} host={hostRef} />
       {/* The iso-surface in the scene: its field, value and triangle count, while it is drawn. */}
       <IsoStatusLine />
       {/* The measurement (T-098): the distance at the middle of the line it belongs to. */}

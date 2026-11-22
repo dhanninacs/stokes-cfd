@@ -14,7 +14,7 @@ import { LoaderCircle } from "lucide-react";
 import { Button } from "../components/ui";
 import { useStore } from "../state/store";
 import { currentScene } from "../viewport/scene";
-import { MAX_SEEDS, NO_STREAMLINES, seedRake, speedRangeOf } from "./streamlineModel";
+import { MAX_SEEDS, NO_STREAMLINES, carriedFields, coloredBy, seedRake, speedRangeOf, type TracedLine } from "./streamlineModel";
 import { inletPatchesOf } from "./lookModel";
 import { meshPatchesOf } from "../state/meshPatches";
 import { readBoundaries } from "../guided/guidedTree";
@@ -59,6 +59,15 @@ export default function StreamlineSection() {
   const hasSlice = useStore((s) => s.results.data?.slice === true);
   const ready = hasSlice || slices.list.some((s) => s.visible);
 
+  // The fields the lines carried besides the speed (T, p, ...), and a change of colouring that
+  // needs no new trace: the values travel with the lines.
+  const carried = useMemo(() => carriedFields(lines.traced ?? []), [lines.traced]);
+  const recolor = (name: string) => {
+    const again = coloredBy(lines.traced ?? [], name);
+    if (again === null) return;
+    setLines({ ...lines, lines: again, colorBy: name, range: speedRangeOf(again) });
+  };
+
   const seed = async () => {
     if (field === null) {
       setLines({ ...NO_STREAMLINES, phase: "failed", message: "this run has no velocity field to trace" });
@@ -80,7 +89,7 @@ export default function StreamlineSection() {
     setBusy(true);
     setLines({ ...NO_STREAMLINES, phase: "computing" });
     try {
-      type Reply = { lines?: { points: [number, number, number][]; speeds: number[] }[] };
+      type Reply = { lines?: TracedLine[] };
       const maxLength = 2 * Math.max(box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2]);
       /*
         **Through the volume first, from every inlet** (2026-11-04, as the Looks card does): the host spreads the
@@ -100,6 +109,8 @@ export default function StreamlineSection() {
       setLines({
         phase: found.length === 0 ? "failed" : "ready",
         lines: found,
+        traced: found,
+        colorBy: "",
         range: speedRangeOf(found),
         /*
           **Told to a USER, not to a developer** (claude-win2: *"make the empty-result message
@@ -138,10 +149,27 @@ export default function StreamlineSection() {
         <Note className="mesh-hint" tip={`This run has no velocity field (${VECTOR_PREFERENCE.join(", ")}) to trace.`}>No velocity field</Note>
       )}
       {lines.phase === "failed" && <p className="muted mesh-hint" data-ws="streamlines-failed">{lines.message}</p>}
+      {lines.phase === "ready" && carried.length > 0 && (
+        <div className="streamline-row" role="group" aria-label="Colour the lines by" data-ws="streamlines-color-by">
+          <span className="muted">Colour by</span>
+          {["", ...carried].map((name) => (
+            <button
+              key={name === "" ? "speed" : name}
+              type="button"
+              className="task-choice"
+              aria-pressed={(lines.colorBy ?? "") === name}
+              data-choice={name === "" ? "speed" : name}
+              onClick={() => recolor(name)}
+            >
+              {name === "" ? "Speed" : name}
+            </button>
+          ))}
+        </div>
+      )}
       {lines.phase === "ready" && (
         <p className="muted mesh-hint" data-ws="streamlines-count">
           {lines.lines.length} {lines.lines.length === 1 ? "line" : "lines"} of {field}
-          {lines.range ? `, ${lines.range.min.toFixed(3)} to ${lines.range.max.toFixed(3)} m/s` : ""}
+          {lines.range ? `, ${lines.range.min.toPrecision(4)} to ${lines.range.max.toPrecision(4)} ${unitOf(lines.colorBy ?? "", fields)}` : ""}
         </p>
       )}
       {lines.phase === "ready" && (
@@ -161,4 +189,10 @@ function TooltipFree({ label, children }: { label: string; children: React.React
       <span className="muted streamline-why">{label}</span>
     </div>
   );
+}
+
+/** The unit of the field the lines are coloured by: the run's own for a carried field, m/s for the speed. */
+function unitOf(name: string, fields: readonly { name: string; units: string }[]): string {
+  if (name === "") return "m/s";
+  return fields.find((f) => f.name === name)?.units ?? "";
 }

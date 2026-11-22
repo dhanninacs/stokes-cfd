@@ -33,7 +33,20 @@ MAX_ISO_TRIANGLES = 2_000_000
 #: `U_mag` has no point array in the case; the agent derives it from `U` before contouring
 #: (`contour_surface`), so a surface of constant speed - the figure most people want of a flow -
 #: is cut like `p` and `T`.
-ISO_FIELDS: tuple[str, ...] = ("p", "T", "U_mag")
+#: `Q` and `vorticity_mag` are derived the same way, from the velocity gradient: the Q-criterion
+#: surface is the usual picture of the vortices in a flow. The turbulence fields are contoured
+#: where the run has them.
+ISO_FIELDS: tuple[str, ...] = (
+    "p",
+    "T",
+    "U_mag",
+    "Q",
+    "vorticity_mag",
+    "k",
+    "omega",
+    "epsilon",
+    "nut",
+)
 
 #: The cache suffix, distinct from a plane's `.stkslice` so the two LRUs trim separately.
 ISO_SUFFIX = ".stkiso"

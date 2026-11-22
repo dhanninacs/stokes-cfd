@@ -1,11 +1,13 @@
 /**
- * The flow strip: `Geometry › Fluid › Boundaries › Mesh › Run › Results`, each step with a state dot and a
- * one-line hint, the step whose card is open marked, and the Guided / Full switch at the end.
+ * The flow strip: `Geometry › Fluid › Boundaries › Mesh › Run › Results › Optimise`, each step a compact
+ * segment with its mark (index, or a glyph once done / needing attention / running), its label, and a
+ * 2 px segment of the progress rail under it in the state's colour; the step whose card is open is marked,
+ * and the Guided / Full switch sits at the end. The optional Optimise step is set apart with a dashed rail.
  *
  * It sits at the top of the viewport in both modes. A press opens that step's card in Guided mode; in Full
  * mode (no cards) it brings the step's stage in front, which the tree follows.
  */
-import { AlertCircle, Check, LoaderCircle } from "lucide-react";
+import { AlertTriangle, Check, LoaderCircle } from "lucide-react";
 import { Segmented } from "../components/ui";
 import { useStore } from "../state/store";
 import { STEP_STAGE, type GuidedStep, type GuidedStepId, type StepState } from "./guidedModel";
@@ -20,12 +22,14 @@ const STATE_WORDS: Record<StepState, string> = {
   running: "running",
 };
 
-function Dot({ state }: { state: StepState }) {
+/** The step's mark: its index in tabular mono figures until something has happened, then a glyph that says what. */
+function Mark({ state, index }: { state: StepState; index: number }) {
   return (
     <span className="guided-dot" data-state={state} aria-hidden="true">
-      {state === "done" && <Check size={10} strokeWidth={3.25} />}
-      {state === "attention" && <AlertCircle size={13} />}
-      {state === "running" && <LoaderCircle size={13} className="mesh-spin" />}
+      {state === "done" && <Check size={12} strokeWidth={3} />}
+      {state === "attention" && <AlertTriangle size={12} strokeWidth={2.5} />}
+      {state === "running" && <LoaderCircle size={12} strokeWidth={2.5} className="mesh-spin" />}
+      {state === "todo" && String(index + 1).padStart(2, "0")}
     </span>
   );
 }
@@ -44,8 +48,8 @@ export default function GuidedStrip({ steps, current, mode }: { steps: readonly 
     <div className="guided-strip-wrap">
       <nav className="guided-strip glass" aria-label="Set-up steps" data-ws="guided-strip" data-mode={mode}>
         <ol className="guided-steps">
-          {steps.map((step) => (
-            <li key={step.id} className="guided-step-item">
+          {steps.map((step, index) => (
+            <li key={step.id} className="guided-step-item" data-state={step.state} data-optional={step.id === "optimise" ? "" : undefined}>
               <button
                 type="button"
                 className="guided-step no-drag"
@@ -56,7 +60,7 @@ export default function GuidedStrip({ steps, current, mode }: { steps: readonly 
                 title={step.hint}
                 onClick={() => press(step.id, mode)}
               >
-                <Dot state={step.state} />
+                <Mark state={step.state} index={index} />
                 <span className="guided-step-text">
                   <span className="guided-step-label">{step.label}</span>
                   <span className="guided-step-hint">{step.hint}</span>

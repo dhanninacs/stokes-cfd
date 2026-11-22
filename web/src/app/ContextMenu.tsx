@@ -18,6 +18,7 @@ import { contextMenuItems, type ChainedMenu } from "./contextMenuItems";
 import { resolveKeyboardTarget, resolveViewportTarget, selectionFor, type ContextTarget } from "./contextTarget";
 import { usePrepareMenu } from "./PrepareMenu";
 import { removeNode } from "./removeNode";
+import { bodyEdit, editBody } from "./editOperation";
 import { renameTarget, type RenameRequest } from "./renameTarget";
 
 /** A right press that moves further than this is a pan, not a click (the scene's `POINTER_SLOP`). */
@@ -298,6 +299,11 @@ export default function ContextMenu() {
       },
       hide: (patch) => useStore.getState().toggleHidden(patch),
       hint: shortcutHint,
+      edit: (() => {
+        if (target.kind !== "body") return null;
+        const found = bodyEdit(useStore.getState().tree, target.part);
+        return found === null ? null : { label: found.label, run: () => void editBody(target.part) };
+      })(),
     });
   }, [open, chain, assign.ready, prepare.ready, prepare.why, startRename]);
 

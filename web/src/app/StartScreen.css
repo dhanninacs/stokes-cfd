@@ -219,6 +219,11 @@
   height: 100%;
   object-fit: cover;
 }
+/* A saved thumbnail has a clear background, so the card's initials showed through the model ("EL"
+   across the elbow). The picture replaces the initials; they come back if the picture fails to load. */
+.start-thumb:has(img:not([style*="display: none"])) .start-mono {
+  display: none;
+}
 .start-thumb--sample {
   color: var(--accent);
 }

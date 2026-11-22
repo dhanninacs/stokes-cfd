@@ -401,16 +401,16 @@ def _feature_capture(
     if mesh.shape[0] == 0:
         return 0.0, int(edges.shape[0])
 
-    captured = 0
-    for start, end in edges:
-        probes = np.stack([start, (start + end) / 2, end])
-        # One cell size is the tolerance: a vertex further than that from the edge cannot be said
-        # to have followed it.
-        near = np.any(
-            np.min(np.linalg.norm(mesh[:, None, :] - probes[None, :, :], axis=2), axis=1)
-            <= cell_size
-        )
-        captured += int(bool(near))
+    # One cell size is the tolerance: a vertex further than that from the edge cannot be said to
+    # have followed it. **One nearest-vertex search for every probe at once** (VTK's static
+    # locator, `derived.nearest_points`): the loop over edges compared each with every mesh vertex,
+    # 922 s on a lattice heat exchanger's 30,000 sharp edges and 57,000 boundary vertices.
+    from stokes_agent.derived import nearest_points
+
+    probes = np.concatenate([edges[:, 0], (edges[:, 0] + edges[:, 1]) / 2, edges[:, 1]])
+    nearest = nearest_points(mesh, probes)
+    distance = np.linalg.norm(mesh[nearest] - probes, axis=1).reshape(3, -1)
+    captured = int(np.count_nonzero((distance <= cell_size).any(axis=0)))
     return captured / edges.shape[0], int(edges.shape[0])
 
 

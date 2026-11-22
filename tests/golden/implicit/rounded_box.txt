@@ -1,0 +1,28 @@
+_0 var-x
+_1 abs _0
+_2 const 3.0
+_3 sub _1 _2
+_4 const 0.0
+_5 max _3 _4
+_6 square _5
+_7 var-y
+_8 abs _7
+_9 const 8.0
+_10 sub _8 _9
+_11 max _10 _4
+_12 square _11
+_13 add _6 _12
+_14 var-z
+_15 abs _14
+_16 const 13.0
+_17 sub _15 _16
+_18 max _17 _4
+_19 square _18
+_20 add _13 _19
+_21 sqrt _20
+_22 max _10 _17
+_23 max _3 _22
+_24 min _23 _4
+_25 add _21 _24
+_26 const 2.0
+_27 sub _25 _26

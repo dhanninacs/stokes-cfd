@@ -1,5 +1,6 @@
 /** Pure helpers over the node tree that the tree and properties panels share. */
 
+import { implicitTreeValue } from "../state/implicitFields";
 import type { NodeSummary, NodeTypeSchema, ParamValue } from "../api/types";
 import { isQuantity } from "../api/types";
 import { ancestorChain, indexFor } from "../state/treePatch";
@@ -116,6 +117,16 @@ export function treeValue(node: NodeSummary): string {
   // The mesh settings and the mesh result say the mesher and the cells or the run's state (T-211b).
   const mesh = meshTreeValue(node);
   if (mesh !== "") return mesh;
+  // An implicit operation says its kind and its main value, not its first quantity (which may be a
+  // parameter its kind does not read: a box's radius).
+  const implicit = implicitTreeValue(node.type, node.params as Record<string, unknown>, node.displays);
+  if (implicit !== null) return implicit;
+  // A part's first quantity is its mesh size, 0 until the user sets one: "0 m" on every body says
+  // nothing, so a part shows its size only once it has one.
+  if (node.type === "part") {
+    const size = node.params.mesh_size;
+    return isQuantity(size) && size.value > 0 ? prettyDisplay(node.displays?.mesh_size ?? "") : "";
+  }
   const displays = node.displays ?? {};
   const key = "value" in displays ? "value" : Object.keys(displays)[0];
   if (key !== undefined) {

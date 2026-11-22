@@ -106,7 +106,7 @@ describe("availableRows", () => {
     // A project without studies has no `/studies`; the row is simply empty rather than unavailable.
     const result = availableRows(OUTLINE.Explore, () => false);
     expect(result.unavailable).toEqual([]);
-    expect(result.buildable.map((r) => r.key)).toEqual(["studies"]);
+    expect(result.buildable.map((r) => r.key)).toEqual(["optimise", "studies", "design-table", "explore-plots"]);
   });
 
   it("keeps every Solve row but the unavailable ones", () => {
@@ -416,6 +416,7 @@ describe("PAGE_ROW - each mapping opens the page the row CLAIMS", () => {
       "mesh-quality", "mesh-fidelity", "solver-settings", "flow-model", "run", "fields",
       "field", "slice", "residuals", "monitors", "result-vectors", "result-streamlines",
       "result-probe", "result-report", "result-lod",
+      "explore-optimise", "explore-table", "explore-plots",
     ]);
     for (const kind of Object.values(PAGE_ROW)) expect(known.has(kind)).toBe(true);
   });

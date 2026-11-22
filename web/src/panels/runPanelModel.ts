@@ -316,7 +316,9 @@ export const RUN_DOT: Record<RunReadoutState, string> = {
 
 /** The residual a readout names while a run is going: pressure when the solver reports it, else the first field. */
 function headline(latest: readonly { name: string; value: number }[]): { name: string; value: number } | null {
-  return latest.find((f) => f.name === "p") ?? latest[0] ?? null;
+  // `p_rgh` with energy on, and `<region>.p_rgh` for a run of several regions (ADR-0042).
+  const pressure = (name: string) => name === "p" || name === "p_rgh" || name.endsWith(".p") || name.endsWith(".p_rgh");
+  return latest.find((f) => f.name === "p") ?? latest.find((f) => pressure(f.name)) ?? latest[0] ?? null;
 }
 
 /**

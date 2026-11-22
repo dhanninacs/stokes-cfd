@@ -75,3 +75,16 @@ class RunNotFound(RunError):
     """No run with that id in this project."""
 
     code = "run.not_found"
+
+
+class AdjointProgramMissing(SolveInvalid):
+    """The flow split's adjoint needs `adjointFoam`, and the host's OpenFOAM install has none
+    (ADR-0041).
+
+    The program is the open-source adjoint, built from `of14-adjoint`. Stokes bundles it as a
+    separate program (`bin/openfoam-adjoint`); a copy beside the install's solvers wins, and a
+    manual copy there is the fallback when the bundled one is absent (docs/00-open-questions.md
+    G30). Raised before meshing, so a user does not wait for a mesh to learn this.
+    """
+
+    code = "solve.adjoint_missing"

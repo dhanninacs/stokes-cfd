@@ -31,7 +31,7 @@ def _loaded(ref: str) -> Any:
     units = {"U": "m/s", "U_mag": "m/s", "p": "m2/s2"}
     kind = "slice" if ref == "slice" else "patch"
     return results_commands._Loaded(
-        surface, fields, units, kind, node_id="" if kind == "slice" else "n_00000001"
+        surface, fields, units, kind, node_id="" if kind == "slice" else "n_00000001", run="r_test"
     )
 
 
@@ -188,3 +188,44 @@ def test_a_fitted_range(fake: Session) -> None:
     assert out["min"] == pytest.approx(1.0) and out["max"] == pytest.approx(2.0)
     assert 1.0 <= out["low"] < out["high"] <= 2.0
     assert out["units"] == "m2/s2"
+
+
+def test_a_curved_wall_takes_the_radius_axis_of_a_flat_surface_beside_it(
+    fake: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A surface with no single normal (faked by the centre-and-normal answer) is measured from the
+    first flat one's axis instead of failing the plot; alone it is refused with the way out."""
+    from stokes.post import integrals
+
+    real = integrals.centre_and_normal
+
+    def curved(surface: Any) -> Any:
+        centre, normal = real(surface)
+        return (centre, None) if surface.name == "slice" else (centre, normal)
+
+    monkeypatch.setattr(integrals, "centre_and_normal", curved)
+    plot = fake.execute(
+        "results.surface_plot", surfaces=["outlet", "slice"], field="p", axis="radius"
+    )
+    assert [s["surface"] for s in plot["series"]] == ["outlet", "slice"]
+    with pytest.raises(StokesError, match="flat surface"):
+        fake.execute("results.surface_plot", surfaces=["slice"], field="p", axis="radius")
+
+
+def test_a_field_stored_only_on_other_surfaces_is_no_value_here(
+    fake: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Wall shear stress lives on walls: on the inlet it is NaN (left out of sums, drawn in the
+    surface's own colour), never an error, so a range over every surface still answers."""
+    header = {
+        "units": {"wallShearStress": "m2/s2", "yPlus": ""},
+        "patches": [{"fields": {"wallShearStress": {"components": 3}, "yPlus": {"components": 1}}}],
+    }
+    monkeypatch.setattr(results_commands, "_run_fields", lambda _c, _r: ("r_test", b"", header))
+    # Alone, a surface with no value has no range to give; beside a wall it adds nothing to it.
+    with pytest.raises(StokesError, match="no finite value"):
+        fake.execute("results.range", surfaces=["inlet"], field="yPlus", share=0)
+    report = fake.execute(
+        "results.surface_integrals", surfaces=["inlet"], field="wallShearStress_x"
+    )
+    assert report["rows"][0]["area_avg"] is None and report["field_units"] == "m2/s2"

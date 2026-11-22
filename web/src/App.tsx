@@ -1,3 +1,5 @@
+import BuildRibbon from "./app/BuildRibbon";
+import SketchEditorLayer from "./sketch/SketchEditor";
 import { memo, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { configFromLocation } from "./api/client";
 import { useStore } from "./state/store";
@@ -41,6 +43,7 @@ import BoundariesPage from "./panels/meshTaskPages/BoundariesPage";
 import RunPanel from "./panels/RunPanel";
 import FieldsPanel from "./panels/FieldsPanel";
 import ExportImageDialog from "./panels/ExportImageDialog";
+import { editBody } from "./app/editOperation";
 import { ChartLine, Cpu, Grid3x3, ListChecks, PanelRight, ShieldQuestion, Users, Tag as TagIcon } from "lucide-react";
 
 // The Conditions panel (ADR-0022 §9.1, T-048) is registered here rather than imported by
@@ -222,7 +225,25 @@ export default function App() {
    * menu with nothing else on screen still works.
    */
   const startScreen = useStore((s) => s.project === null);
+  // The build ribbon sits at the bottom of the viewport: the hint and the toasts rise above it.
+  const ribbonOpen = useStore((s) => s.buildRibbon && s.sketch === null);
+  // An open operation card is the context (review finding A8): the selection's toolbar steps aside
+  // rather than float over the card's fields.
+  const cardOpen = useStore((s) => s.operationCard !== null);
+  const sketchOpen = useStore((s) => s.sketch !== null);
   useAutosave();
+  // Double-click a body in the viewport opens what made it (review finding B3): the first click
+  // picks the body, the second opens its sketch or its operation's page.
+  useEffect(() => {
+    const onDoubleClick = (e: MouseEvent) => {
+      if (!(e.target instanceof HTMLCanvasElement) || e.target.closest(".viewport-bg") === null) return;
+      const s = useStore.getState();
+      if (s.pickMode !== "body" || s.paintMode || s.measureMode || s.picked.bodies.length !== 1) return;
+      if (editBody(s.picked.bodies[0])) e.preventDefault();
+    };
+    window.addEventListener("dblclick", onDoubleClick);
+    return () => window.removeEventListener("dblclick", onDoubleClick);
+  }, []);
   const tokens = useSyncExternalStore(subscribeTokens, currentTokens);
   const [hosted, setHosted] = useState(false);
   const [reducedMotion] = useBoolPref(REDUCED_MOTION_KEY, false);
@@ -326,17 +347,24 @@ export default function App() {
         <FloatLayer />
         {/* Drop a CAD file on the window, the hint of an empty project and the upload card (T-219 A). */}
         {/* In Guided mode the toolbar stays clear of the step card (312 px) at the left; the flow strip is in the top bar. */}
-        <ContextToolbar leftInset={layout.insets.left + guidedInset(guided ? "guided" : "full").left} rightInset={layout.insets.right} topInset={guidedInset(guided ? "guided" : "full").top} />
+        {/* Not while a sketch is open: the sketch canvas is see-through and the toolbar showed in the drawing. */}
+        {!cardOpen && !sketchOpen && <ContextToolbar leftInset={layout.insets.left + guidedInset(guided ? "guided" : "full").left} rightInset={layout.insets.right} topInset={guidedInset(guided ? "guided" : "full").top} />}
         <ContextMenu />
         <IslandLayer offsets={layout.offsets} />
+        {/* The build ribbon (ADR-0035): the modeller's Sketch, Shape, Transform and Combine tools. */}
+        <BuildRibbon leftInset={layout.insets.left} rightInset={layout.insets.right} />
+        {/* The 2D sketcher (ADR-0036), over the viewport while a sketch is open. */}
+        <SketchEditorLayer leftInset={layout.insets.left} rightInset={layout.insets.right} />
         {/* Guided mode: the flow strip across the top of the viewport and the open step's card (guided/). */}
-        <GuidedLayer />
+        {/* The sketch is drawn over the 3D view (ADR-0039): the guided cards step aside while it is open. */}
+        {!sketchOpen && <GuidedLayer />}
         </>}
         <ImportDrop />
-        <div className="bottom-stack">
+        <div className={ribbonOpen ? "bottom-stack ribbon-open" : "bottom-stack"}>
           <Toasts />
           {!startScreen && <RecoveryCard />}
-          {!startScreen && <FirstRunHint />}
+          {/* The orbit hint says nothing about a sketch (its view is pinned) and sat on the sketch's status line. */}
+          {!startScreen && !sketchOpen && <FirstRunHint />}
         </div>
         <MemoPalette />
       </main>

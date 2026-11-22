@@ -37,14 +37,14 @@ those paths from before ADR-0022 stay valid as legacy entries. The contract is
 ``docs/engineering/setup-schema.md``.
 
 The operation types (ADR-0021 decision 8.1) are declared here too: one node type per operation
-(``primitive``, ``boolean``, ``enclosure``, ``extract_fluid`` and the eight repairs), living at
-``/geometry/operations/<name>``. Each carries its own parameters (quantities in SI, so studies can
-vary them) and three common ones: ``inputs`` (the parts it reads, node ids), ``outputs`` (the
-parts its last run made, written by the run) and ``auto_run`` (re-run on a change, default true,
-decisions log G12). :data:`OPERATION_TYPES` says what the framework needs besides the parameters:
-how many inputs a type takes, which parameters name further parts (a boolean's ``tools``) and
-which reference a tag whose members the run reads (``<name>_members``). The modules that run
-them are :mod:`stokes.geometry.operations`; the commands are ``operation.*``.
+(``primitive``, ``boolean``, ``enclosure``, ``extract_fluid``, the eight repairs and ``transform``),
+living at ``/geometry/operations/<name>``. Each carries its own parameters (quantities in SI, so
+studies can vary them) and three common ones: ``inputs`` (the parts it reads, node ids),
+``outputs`` (the parts its last run made, written by the run) and ``auto_run`` (re-run on a
+change, default true, decisions log G12). :data:`OPERATION_TYPES` says what the framework needs
+besides the parameters: how many inputs a type takes, which parameters name further parts (a
+boolean's ``tools``) and which reference a tag whose members the run reads (``<name>_members``).
+The modules that run them are :mod:`stokes.geometry.operations`; the commands are ``operation.*``.
 
 Size: over 500 lines on purpose. Every geometry node type the model loads is declared here, and
 this is the one module of the package the model may import, so splitting it would only move the
@@ -199,9 +199,93 @@ OPERATION_TYPES: tuple[OperationType, ...] = (
     OperationType("defeature", "Remove faces"),
     OperationType("orient", "Fix orientation"),
     OperationType("solidify", "Make solid"),
+    OperationType("transform", "Transform"),
+    # The modeller's labels are words a CAD user reads on a card (review finding B9), not the type
+    # names; the card and the page title an operation by its kind ("Cylinder", "Subtract").
+    OperationType("implicit_primitive", "Shape", min_inputs=0),
+    OperationType("implicit_sketch", "Sketch", min_inputs=0),
+    OperationType("implicit_transform", "Transform"),
+    OperationType("implicit_boolean", "Combine", part_params=("tools",)),
+    OperationType("implicit_split", "Split"),
+    OperationType("implicit_offset", "Offset or shell"),
+    OperationType("implicit_pattern", "Pattern"),
+    OperationType("implicit_lattice", "Lattice"),
 )
 """Every operation type, in the order the Prepare menu lists them (ADR-0021 decisions 5 to 7)."""
 OPERATION_TYPE_NAMES: tuple[str, ...] = tuple(t.type for t in OPERATION_TYPES)
+IMPLICIT_PREFIX = "implicit_"
+"""Operation types whose names start with this build implicit parts (ADR-0035 decision 7): they
+read implicit parts only, and the B-rep operations refuse implicit parts."""
+BREPLESS_FAMILIES: tuple[str, ...] = ("mesh", "implicit")
+"""Part families with no B-rep: a B-rep operation, a B-rep check or a STEP export refuses them."""
+IMPLICIT_PRIMITIVES: tuple[str, ...] = (
+    "box",
+    "rounded_box",
+    "cylinder",
+    "cone",
+    "sphere",
+    "torus",
+    "capsule",
+    "half_space",
+)
+IMPLICIT_TRANSFORMS: tuple[str, ...] = ("translate", "rotate", "mirror", "scale")
+IMPLICIT_PROFILES: tuple[str, ...] = (
+    "rectangle",
+    "rounded_rectangle",
+    "circle",
+    "ellipse",
+    "slot",
+    "polygon",
+    "custom",
+)
+SKETCH_PLANES: tuple[str, ...] = ("xy", "yz", "zx")
+SKETCH_METHODS: tuple[str, ...] = ("extrude", "revolve")
+IMPLICIT_OFFSETS: tuple[str, ...] = ("offset", "shell")
+IMPLICIT_PATTERNS: tuple[str, ...] = ("linear", "polar")
+IMPLICIT_BOOLEANS: tuple[str, ...] = ("union", "intersection", "difference")
+IMPLICIT_LATTICES: tuple[str, ...] = ("gyroid", "schwarz_p", "diamond")
+IMPLICIT_LATTICE_FORMS: tuple[str, ...] = ("sheet", "network", "channel_a", "channel_b")
+
+
+def is_implicit_operation(op_type: str) -> bool:
+    """Whether ``op_type`` builds an implicit part (ADR-0035)."""
+    return op_type.startswith(IMPLICIT_PREFIX)
+
+
+_SHAPING = frozenset(
+    {
+        "implicit_transform",
+        "implicit_offset",
+        "implicit_pattern",
+        "implicit_boolean",
+        "implicit_lattice",
+    }
+)
+"""Implicit operations that change a body they read: their result is called after that body."""
+
+
+def implicit_output_name(
+    op_type: str,
+    params: dict[str, Any],  # Any: the operation's stored parameter values
+    target: str | None,
+    made: str,
+) -> str:
+    """What a new output of an implicit operation is called (review finding B8): what it is,
+    not an enum value. A shape is its kind (``cylinder``); a sketch is an ``extrusion`` or a
+    ``revolution`` (a named profile keeps its profile's name); a transform, an offset, a
+    pattern or a combine keeps the name of the body it acts on (``target``); a split names its
+    halves after it (``<body>_below``, ADR-0036 decision 5). ``made`` is the worker's name, the
+    fallback. The caller makes the name unique among the parts."""
+    if op_type == "implicit_sketch":
+        profile = params.get("profile")
+        if profile == "custom" or not isinstance(profile, str) or profile == "":
+            return "revolution" if params.get("method") == "revolve" else "extrusion"
+        return profile
+    if op_type in _SHAPING and target:
+        return target
+    if op_type == "implicit_split" and target:
+        return f"{target}_{made}"
+    return made
 
 
 def operation_type(name: str) -> OperationType | None:
@@ -702,10 +786,60 @@ def _operation_specs() -> tuple[NodeSpec, ...]:
     def lengths(name: str, label: str, default: tuple[float, ...], doc: str) -> ParamSpec:
         return ParamSpec(name, "array", label=label, dimension="length", default=default, doc=doc)
 
+    def vec(name: str, label: str, default: tuple[float, float, float], doc: str) -> ParamSpec:
+        # ADR-0037: three lengths, each a quantity that may be an expression.
+        return ParamSpec(name, "vector", label=label, dimension="length", default=default, doc=doc)
+
+    def whole(name: str, label: str, default: int, doc: str) -> ParamSpec:
+        # ADR-0037: a count is a dimensionless quantity that must be a whole number.
+        return ParamSpec(
+            name,
+            "quantity",
+            label=label,
+            dimension="dimensionless",
+            default=default,
+            integer=True,
+            doc=doc,
+        )
+
     def tag_ref(name: str, label: str, doc: str) -> ParamSpec:
         return ParamSpec(name, "ref", label=label, ref_type=TAG_TYPE, doc=doc)
 
     shapes = ("box", "cylinder", "sphere")
+    transform = (
+        choice("kind", "Kind", IMPLICIT_TRANSFORMS, "translate, rotate, mirror or scale."),
+        vec("offset", "Offset", (0.0, 0.0, 0.0), "Translate: the distance moved."),
+        ParamSpec(
+            "axis",
+            "enum",
+            label="Axis",
+            choices=AXES,
+            default="z",
+            doc="Rotate: the axis turned about. Mirror: the normal of the mirror plane.",
+        ),
+        ParamSpec(
+            "angle",
+            "quantity",
+            label="Angle",
+            dimension="angle",
+            default=0.0,
+            doc="Rotate: the angle, counter-clockwise looking down the axis.",
+        ),
+        vec(
+            "centre",
+            "Centre",
+            (0.0, 0.0, 0.0),
+            "Rotate and scale: the fixed point. Mirror: a point on the plane.",
+        ),
+        ParamSpec(
+            "factor",
+            "quantity",
+            label="Factor",
+            dimension="dimensionless",
+            default=1.0,
+            doc="Scale: the uniform factor.",
+        ),
+    )
     own: dict[str, tuple[ParamSpec, ...]] = {
         "primitive": (
             choice("shape", "Shape", shapes, "box, cylinder or sphere."),
@@ -900,6 +1034,281 @@ def _operation_specs() -> tuple[NodeSpec, ...]:
             switch("unify", "Unify faces", True, "Unify the faces of the result."),
         ),
         "orient": (),
+        "implicit_primitive": (
+            choice(
+                "kind",
+                "Kind",
+                IMPLICIT_PRIMITIVES,
+                "box, rounded_box, cylinder, cone, sphere, torus, capsule or half_space.",
+            ),
+            vec(
+                "size",
+                "Size",
+                (0.01, 0.01, 0.01),
+                "Box and rounded box: the edge lengths along x, y and z. Half-space: the block "
+                "it keeps on its inner side (make it larger than what it cuts).",
+            ),
+            length(
+                "radius",
+                "Radius",
+                0.005,
+                "Cylinder, sphere and capsule: the radius. Cone: the radius at the low end. "
+                "Torus: the radius of the ring (axis to tube centre).",
+            ),
+            length(
+                "length",
+                "Length",
+                0.01,
+                "Cylinder and cone: the length along the axis. Capsule: the distance between the "
+                "centres of its rounded ends.",
+            ),
+            length(
+                "top_radius", "Top radius", 0.0, "Cone: the radius at the high end; 0 is a point."
+            ),
+            length("tube_radius", "Tube radius", 0.002, "Torus: the radius of the tube."),
+            length(
+                "corner_radius",
+                "Corner radius",
+                0.001,
+                "Rounded box: the radius of its edges and corners.",
+            ),
+            vec(
+                "position",
+                "Position",
+                (0.0, 0.0, 0.0),
+                "The centre of the body (mid-length for the bodies on an axis); a point on the "
+                "plane of a half-space.",
+            ),
+            ParamSpec(
+                "axis",
+                "enum",
+                label="Axis",
+                choices=AXES,
+                default="z",
+                doc="The axis of a cylinder, cone, torus or capsule.",
+            ),
+            ParamSpec(
+                "normal",
+                "enum",
+                label="Normal",
+                choices=FLOWS,
+                default="+z",
+                doc="A half-space keeps the side its outward normal points away from.",
+            ),
+        ),
+        "implicit_sketch": (
+            choice(
+                "profile",
+                "Profile",
+                IMPLICIT_PROFILES,
+                "rectangle, rounded_rectangle, circle, ellipse, slot or polygon, drawn centred on "
+                "the sketch plane's origin; or custom, the entities drawn in the sketcher.",
+            ),
+            ParamSpec(
+                "entities",
+                "json",
+                label="Sketch",
+                default=[],
+                max_bytes=64 * 1024,
+                doc="Custom profile: the sketch's entities in the plane, metres: "
+                '{"kind": "line", "a": [u, v], "b": [u, v]}, '
+                '{"kind": "arc", "a", "m", "b"} (through m), {"kind": "circle", "c": [u, v], "r"}, '
+                '{"kind": "spline", "points": [[u, v], ...]}. They must make closed loops; a loop '
+                "inside another is a hole. A coordinate or a radius may be an expression of the "
+                "sketch's dimensions and the project's parameters ('W / 2').",
+            ),
+            ParamSpec(
+                "dimensions",
+                "quantity_map",
+                label="Dimensions",
+                doc="Custom profile: the sketch's driving dimensions, by name (W = 40 mm, "
+                "a = 30 deg), each a length, an angle or a number, and each may be an expression. "
+                "The entities refer to them by name; a study varies them as "
+                "<sketch path>.dimensions.<name>.",
+            ),
+            choice(
+                "plane",
+                "Sketch plane",
+                SKETCH_PLANES,
+                "xy (normal +z), yz (normal +x) or zx (normal +y), through the origin.",
+            ),
+            vec("origin", "Origin", (0.0, 0.0, 0.0), "Where the sketch plane's origin is."),
+            length(
+                "width",
+                "Width",
+                0.01,
+                "Rectangle and ellipse: the extent along the plane's first axis.",
+            ),
+            length(
+                "height",
+                "Height",
+                0.01,
+                "Rectangle and ellipse: the extent along the plane's second axis.",
+            ),
+            length(
+                "radius",
+                "Radius",
+                0.005,
+                "Circle: the radius. Slot: the radius of its rounded ends. Polygon: the radius to "
+                "its corners.",
+            ),
+            length(
+                "corner_radius", "Corner radius", 0.001, "Rounded rectangle: its corner radius."
+            ),
+            length(
+                "slot_length",
+                "Slot length",
+                0.01,
+                "Slot: the distance between the centres of its rounded ends.",
+            ),
+            whole("sides", "Sides", 6, "Polygon: the number of sides, 3 to 64."),
+            choice(
+                "method",
+                "Method",
+                SKETCH_METHODS,
+                "extrude pulls the profile along the plane's normal; revolve turns it about the "
+                "plane's second axis.",
+            ),
+            length("depth", "Pull distance", 0.01, "Extrude: how far the profile is pulled."),
+            switch(
+                "symmetric",
+                "Both directions",
+                False,
+                "Extrude: pull half the distance to each side of the plane.",
+            ),
+            ParamSpec(
+                "angle",
+                "quantity",
+                label="Revolve angle",
+                dimension="angle",
+                default=6.283185307179586,
+                doc="Revolve: how far the profile turns, up to a full turn.",
+            ),
+            length(
+                "axis_distance",
+                "Distance from axis",
+                # 20 mm: clear of every profile at its default size. At 10 mm the default slot
+                # (5 mm radius, 10 mm long) reached the axis and Revolve was refused at once.
+                0.02,
+                "Revolve: from the axis to the profile's centre; more than half its width.",
+            ),
+        ),
+        "implicit_transform": transform,
+        # The B-rep transform takes the implicit one's parameters, with the same meaning.
+        "transform": transform,
+        "implicit_boolean": (
+            choice(
+                "op",
+                "Operation",
+                IMPLICIT_BOOLEANS,
+                "union, intersection, or difference (the inputs minus the tools).",
+            ),
+            ParamSpec(
+                "tools",
+                "json",
+                label="Tools",
+                default=[],
+                max_bytes=JSON_PARTS_BYTES,
+                validate=validate_part_ids,
+                doc="Difference: the implicit parts removed. Union and intersection: more "
+                "operands, as node ids.",
+            ),
+            length(
+                "blend_radius",
+                "Blend radius",
+                0.0,
+                "0 is a sharp boolean; above 0, the seams are rounded to about this radius.",
+            ),
+            switch(
+                "keep_tools",
+                "Keep tools",
+                False,
+                "Difference: the tools stay bodies of their own, as CAD's 'keep tools' (the "
+                "fluid a solid is cut around, for one).",
+            ),
+        ),
+        "implicit_split": (
+            ParamSpec(
+                "normal",
+                "enum",
+                label="Plane normal",
+                choices=FLOWS,
+                default="+z",
+                doc="The split plane's normal; the two parts are the sides behind and in front.",
+            ),
+            vec("position", "Point on plane", (0.0, 0.0, 0.0), "A point the plane passes through."),
+        ),
+        "implicit_offset": (
+            choice(
+                "kind",
+                "Kind",
+                IMPLICIT_OFFSETS,
+                "offset grows or shrinks the body; shell keeps a wall of the thickness.",
+            ),
+            length(
+                "distance",
+                "Distance",
+                0.001,
+                "Offset: how far the surface moves out (negative: in). Shell: the wall thickness.",
+            ),
+            switch("outward", "Wall outside", False, "Shell: put the wall outside the surface."),
+        ),
+        "implicit_pattern": (
+            choice("kind", "Kind", IMPLICIT_PATTERNS, "linear along an axis, or polar about one."),
+            ParamSpec(
+                "axis",
+                "enum",
+                label="Axis",
+                choices=AXES,
+                default="x",
+                doc="Linear: the direction of the copies. Polar: the axis they turn about.",
+            ),
+            whole("count", "Count", 3, "How many copies, the original among them (1 to 1000)."),
+            length("pitch", "Pitch", 0.01, "Linear: the distance between copies."),
+            vec("centre", "Centre", (0.0, 0.0, 0.0), "Polar: a point on the axis."),
+            ParamSpec(
+                "angle",
+                "quantity",
+                label="Angle",
+                dimension="angle",
+                default=6.283185307179586,
+                doc="Polar: a full turn spaces the copies equally; less spreads them over it.",
+            ),
+        ),
+        "implicit_lattice": (
+            choice(
+                "kind",
+                "Pattern",
+                IMPLICIT_LATTICES,
+                "The triply periodic surface: gyroid, Schwarz P or diamond.",
+            ),
+            choice(
+                "form",
+                "Form",
+                IMPLICIT_LATTICE_FORMS,
+                "sheet keeps a wall on the surface, with a channel network either side of it; "
+                "network keeps one side of the surface as one solid; channel A and channel B are "
+                "the two networks a sheet of the same thickness leaves (a heat exchanger's two "
+                "fluids).",
+            ),
+            length("cell", "Cell size", 0.005, "The period of the lattice along every axis."),
+            length(
+                "thickness",
+                "Wall thickness",
+                0.0005,
+                "Sheet and channels: the mean thickness of the wall, below a third of the cell.",
+            ),
+            ParamSpec(
+                "bias",
+                "quantity",
+                label="Bias",
+                dimension="dimensionless",
+                default=0.0,
+                doc="Network: 0 gives the solid half the volume; towards 0.8 more, towards "
+                "-0.8 less.",
+            ),
+            vec("origin", "Origin", (0.0, 0.0, 0.0), "A point where a cell of the lattice starts."),
+        ),
         "solidify": (
             length("tolerance", "Tolerance", 1e-5, "Tolerance of the sewing."),
             length("fuzzy", "Fuzzy tolerance", 0.0, "Fuzzy value of the volume maker."),
@@ -929,9 +1338,9 @@ def _operation_specs() -> tuple[NodeSpec, ...]:
         ParamSpec(
             "auto_run",
             "bool",
-            label="Run on change",
+            label="Update automatically",
             default=True,
-            doc="Run again 300 ms after a parameter or an input changes.",
+            doc="Rebuild when a value or an input changes.",
         ),
     )
     return tuple(

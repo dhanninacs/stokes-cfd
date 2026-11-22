@@ -108,3 +108,10 @@
   width: 35% !important;
   animation: mesh-slide 1.2s ease-in-out infinite alternate;
 }
+
+/* The two ways into an empty project, side by side: import a file, or create a shape (ADR-0035). */
+.import-hint-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}

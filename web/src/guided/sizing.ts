@@ -127,3 +127,23 @@ export function parseCellSize(text: string, box: Box | null): number | null {
   }
   return Number(metres.toPrecision(2));
 }
+
+/** The base size a new project's mesh settings start with (`stokes.mesh.model`, 5 mm). */
+export const SETTINGS_DEFAULT_BASE = 0.005;
+
+/**
+ * The size to put in place of the settings' untouched default, or null to leave it.
+ *
+ * **The default is a length, not a fineness** (walkthrough 2026-11-18): 5 mm is coarser than "Coarse"
+ * for a 20 mm channel (four cells across it), so the slider sat pinned at its left end and the card
+ * read "Custom size" on a project nobody had set a size in. When the settings still hold the default,
+ * no mesh was made yet and the default is not within a factor of two of Coarse, Coarse is suggested:
+ * twenty cells across the smallest side, a first mesh that solves in seconds.
+ */
+export function suggestedBase(box: Box | null, baseSize: number | null, meshed: boolean): number | null {
+  if (meshed || baseSize === null || Math.abs(baseSize - SETTINGS_DEFAULT_BASE) > 1e-12) return null;
+  const coarse = baseSizeFor(box, "coarse");
+  if (coarse === null) return null;
+  const ratio = baseSize / coarse;
+  return ratio > 2 || ratio < 0.5 ? coarse : null;
+}

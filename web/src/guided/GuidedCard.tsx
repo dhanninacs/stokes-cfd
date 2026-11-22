@@ -17,6 +17,7 @@ const WORDS: Record<GuidedStep["id"], string> = {
   mesh: "Mesh",
   run: "Run",
   results: "Results",
+  optimise: "Optimise",
 };
 
 export default function GuidedCard({ step, children }: { step: GuidedStep; children: ReactNode }) {

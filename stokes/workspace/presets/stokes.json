@@ -59,7 +59,8 @@
       "conditions",
       "solve",
       "results",
-      "plots"
+      "plots",
+      "optimise"
     ]
   },
   "islands": {

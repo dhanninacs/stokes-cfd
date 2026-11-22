@@ -27,6 +27,7 @@ import CaseSettingsCard from "./steps/CaseSettingsCard";
 import FluidCard from "./steps/FluidCard";
 import GeometryCard from "./steps/GeometryCard";
 import MeshCard from "./steps/MeshCard";
+import OptimiseCard from "./steps/OptimiseCard";
 import ResultsCard from "./steps/ResultsCard";
 import RunCard from "./steps/RunCard";
 import "./guided.css";
@@ -48,6 +49,8 @@ function Card({ step }: { step: GuidedStep }) {
       return <RunCard step={step} />;
     case "results":
       return <ResultsCard step={step} />;
+    case "optimise":
+      return <OptimiseCard step={step} />;
   }
 }
 

@@ -17,18 +17,28 @@
  * written into the field as `point − normal × 1 % of the part's bounding-box diagonal`, in the
  * display unit the field shows (the value itself stays in SI, as every quantity does).
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Crosshair, Play, TriangleAlert, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowUpDown, Crosshair, Play, TriangleAlert, X } from "lucide-react";
 import { StokesApiError } from "../api/client";
-import { useStore, type OperationDraft } from "../state/store";
+import { findNode, useStore, type OperationDraft } from "../state/store";
 import { initialValues, operationCreatePayload, operationInputs, operationJsonText, operationText, seedAt } from "../state/operations";
 import { Button, IconButton } from "../components/ui";
+import EditSketchButton from "../sketch/EditSketchButton";
+import { AXES, withComponent, type Axis } from "./compoundValues";
 import { Tooltip } from "../components/Tooltip";
 import SchemaFields from "./SchemaFields.tsx"; // the .tsx: "./SchemaFields" would case-match the helpers' schemaFields.ts on Windows
 import { currentScene, type PointHit } from "../viewport/scene";
+import { GEOMETRY_UNIT_SYSTEM, implicitShows, implicitTitle, isImplicitOperation, optionLabel } from "../state/implicitFields";
+import { enterRunsCard, roleWords, swapTarget, targetAndTools } from "./bodySteps";
 
 /** The parameters the card's form does not offer: the outputs belong to the run, not to the form. */
 const HIDDEN: ReadonlySet<string> = new Set(["outputs"]);
+/**
+ * What an implicit card leaves out besides: the bodies it reads are named above the form (with the
+ * swap), and "Run on change" is the operation's own setting, on its page, not a question to ask on
+ * every card (review finding B9).
+ */
+const IMPLICIT_HIDDEN: ReadonlySet<string> = new Set(["inputs", "tools", "auto_run"]);
 
 /** What `operation.create` answers: the operation it made. */
 interface CreateResult {
@@ -51,11 +61,14 @@ function CardBody({ draft }: { draft: OperationDraft }) {
   const seedPick = useStore((s) => s.seedPick);
   const progress = useStore((s) => (draft.nodeId === null ? null : (s.operations[draft.nodeId] ?? null)));
 
-  const label = info?.label ?? draft.type;
+  const tree = useStore((s) => s.tree);
+  const implicit = isImplicitOperation(draft.type);
   const schema = info?.schema;
+  // The pick in the order the run reads it: the swap puts a combine's cutter first.
+  const [parts, setParts] = useState<string[]>(draft.parts);
   // How the run will read the pick, and what the read-only `inputs` and `tools` lines show: the
   // form must say what Run will do, not the schema's empty default.
-  const reads = useMemo(() => operationInputs(draft.type, draft.parts), [draft.type, draft.parts]);
+  const reads = useMemo(() => operationInputs(draft.type, parts), [draft.type, parts]);
   // The faces the pick held go into the form for a type that takes them (Remove faces' `faces`),
   // so the field shows what the run will remove rather than its empty default.
   const withFaces = useMemo(
@@ -68,7 +81,9 @@ function CardBody({ draft }: { draft: OperationDraft }) {
   );
   // The form's starting point: the schema's defaults and the entry's preset. The fields keep their
   // own text from there on, so the committed values are collected beside the seeded ones.
-  const initial = useMemo(() => (schema ? initialValues(schema, units, preset) : null), [schema, units, preset]);
+  // The form's starting values are seeded once a schema is known; the swap changes only what Run sends.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const initial = useMemo(() => (schema ? initialValues(schema, units, preset) : null), [schema, units]);
   const [values, setValues] = useState<Record<string, unknown>>(() => initial?.values ?? {});
   const [params, setParams] = useState<Record<string, unknown>>(() => ({ ...draft.params, ...withFaces }));
   const [busy, setBusy] = useState(false);
@@ -96,16 +111,26 @@ function CardBody({ draft }: { draft: OperationDraft }) {
     return () => currentScene()?.cancelPoint();
   }, [seedPick, applySeed]);
 
-  const commit = useCallback((name: string, value: unknown) => {
-    setRefused("");
-    setParams((current) => ({ ...current, [name]: value }));
-  }, []);
+  const commit = useCallback(
+    (name: string, value: unknown) => {
+      setRefused("");
+      // A vector's component (`position.x`, ADR-0037) goes into the card's list for the vector,
+      // which the create sends whole; the other components stay as the card shows them.
+      const [base, axis] = name.split(".");
+      if (axis !== undefined && schema?.properties[base]?.["x-kind"] === "vector" && (AXES as readonly string[]).includes(axis)) {
+        setParams((current) => ({ ...current, [base]: withComponent({ ...values, ...current }, base, axis as Axis, value) }));
+        return;
+      }
+      setParams((current) => ({ ...current, [name]: value }));
+    },
+    [schema, values],
+  );
 
   const close = useCallback(() => useStore.getState().closeOperationCard(), []);
 
   const run = useCallback(async () => {
     // One pure helper builds the payload, so what the card sends is testable without a renderer.
-    const payload = operationCreatePayload(draft.type, params, draft.parts, draft.faces, info?.schema);
+    const payload = operationCreatePayload(draft.type, params, parts, draft.faces, info?.schema);
     const autoRun = typeof params.auto_run === "boolean" ? params.auto_run : undefined;
     setBusy(true);
     setRefused("");
@@ -120,7 +145,10 @@ function CardBody({ draft }: { draft: OperationDraft }) {
     } finally {
       setBusy(false);
     }
-  }, [draft.id, draft.type, draft.parts, draft.faces, params, info, execute]);
+  }, [draft.id, draft.type, parts, draft.faces, params, info, execute]);
+  // The newest Run, for an Enter whose field commit lands in the same turn (see `onKeyDown`).
+  const runRef = useRef(run);
+  runRef.current = run;
 
   const cancelRun = useCallback(() => {
     if (draft.nodeId === null) return;
@@ -130,7 +158,12 @@ function CardBody({ draft }: { draft: OperationDraft }) {
     void execute("operation.cancel", { op: draft.nodeId }).catch(() => undefined);
   }, [draft.nodeId, execute]);
 
-  const include = useCallback((name: string) => !HIDDEN.has(name), []);
+  // An implicit operation's form shows only the parameters its kind reads (a sphere has no edge
+  // lengths); the kind is the form's own value, so changing it changes the fields at once.
+  const include = useCallback(
+    (name: string) => !HIDDEN.has(name) && !(implicit && IMPLICIT_HIDDEN.has(name)) && implicitShows(draft.type, { ...values, ...params }, name),
+    [draft.type, implicit, values, params],
+  );
   const jsonText = useCallback((name: string, value: unknown) => operationJsonText(value), []);
 
   const pickSeed = (
@@ -154,13 +187,29 @@ function CardBody({ draft }: { draft: OperationDraft }) {
   );
   const labelAction = useCallback((name: string) => (name === "seed" ? pickSeed : null), [pickSeed]);
 
+  const shown = { ...values, ...params };
+  const label = implicitTitle(draft.type, shown) ?? info?.label ?? draft.type;
+  const nameOf = (id: string): string => findNode(tree, id)?.name ?? id;
+  const roles = implicit ? targetAndTools(draft.type, parts) : null;
+  const [targetWord, toolWord] = roleWords(draft.type, shown.op);
+
+  // Enter in a field runs the card (review finding B9). The field's own Enter commits first, in the
+  // same turn; the run waits for that commit to reach the form's state. A field that refuses its
+  // value stops the Enter there, so a refused value is never run.
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return;
+    if (!(e.target instanceof HTMLElement) || !enterRunsCard(e.target) || busy || running) return;
+    e.preventDefault();
+    window.setTimeout(() => void runRef.current(), 0);
+  };
+
   const pickedLine = draft.faces !== null ? `Reads ${reads.inputs.length} part${reads.inputs.length === 1 ? "" : "s"} and the picked faces` : `Reads ${reads.inputs.length} part${reads.inputs.length === 1 ? "" : "s"}`;
   const error = draft.error || refused;
   // A run the user cancelled says so quietly: pressing Cancel is news, not a failure.
   const cancelled = draft.error !== "" && draft.cancelled;
 
   return (
-    <section className="operation-card glass" aria-label={`${label} operation`} data-ws="operation-card">
+    <section className="operation-card glass" aria-label={`${label} operation`} data-ws="operation-card" onKeyDown={onKeyDown}>
       <header className="operation-card-head">
         <span className="section-title">{label}</span>
         <IconButton label="Close" onClick={close}>
@@ -168,7 +217,34 @@ function CardBody({ draft }: { draft: OperationDraft }) {
         </IconButton>
       </header>
       <div className="operation-card-body">
-        <p className="muted m-0 text-[11.5px]">{pickedLine}</p>
+        {!implicit && <p className="muted m-0 text-[11.5px]">{pickedLine}</p>}
+        {roles !== null && (
+          <div className="operation-roles" data-ws="operation-roles">
+            <span className="muted">{targetWord}</span>
+            <span className="operation-role-name" data-ws="operation-target">
+              {roles.target === null ? "Pick a body first" : nameOf(roles.target)}
+            </span>
+            {roles.tools.length > 0 && (
+              <>
+                <span className="muted">{toolWord}</span>
+                <span className="operation-role-name" data-ws="operation-tools">
+                  {roles.tools.map(nameOf).join(", ")}
+                </span>
+                <span className="operation-role-swap">
+                  <IconButton
+                    label={`Swap: keep ${nameOf(roles.tools[0])} and use ${roles.target === null ? "the other" : nameOf(roles.target)} on it`}
+                    disabled={busy || running}
+                    onClick={() => setParts((p) => swapTarget(p))}
+                    data-ws="operation-swap"
+                  >
+                    <ArrowUpDown size={13} />
+                  </IconButton>
+                </span>
+              </>
+            )}
+          </div>
+        )}
+        {draft.type === "implicit_sketch" && shown.profile === "custom" && <EditSketchButton opId={null} params={shown} />}
         {schema && (
           <SchemaFields
             properties={schema.properties}
@@ -179,6 +255,8 @@ function CardBody({ draft }: { draft: OperationDraft }) {
             jsonText={jsonText}
             labelAction={labelAction}
             disabled={busy}
+            unitSystem={implicit ? GEOMETRY_UNIT_SYSTEM : undefined}
+            optionLabel={implicit ? optionLabel : undefined}
           />
         )}
         {error !== "" &&
@@ -202,7 +280,7 @@ function CardBody({ draft }: { draft: OperationDraft }) {
         ) : (
           <>
             <Button onClick={close}>Cancel</Button>
-            <Button variant="primary" disabled={busy} onClick={() => void run()}>
+            <Button variant="primary" disabled={busy} onClick={() => void run()} title="Run (Enter)" aria-keyshortcuts="Enter">
               <Play size={14} /> {busy ? "Running…" : "Run"}
             </Button>
           </>

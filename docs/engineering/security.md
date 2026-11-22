@@ -27,6 +27,8 @@ summary.
 | Journals | `stokes.api.journal` | each record validated against the command schema before execution |
 | LLM tool calls | `stokes.llm`, `stokes.mcp` | parameters validated by the command schema like any client; results are data |
 | Project files (`project.json`) | `stokes.model.persist` | schema version, migrations, size limit, no path fields trusted without containment checks |
+| The implicit mesher's output (ADR-0035) | `stokes.implicit.meshfile`, `stokes.implicit.runner` | the program is found only at fixed places or `STOKES_IMPLICIT_MESHER`; argv list, explicit working folder, minimal environment, 30-minute timeout, kill-on-close Job Object on Windows; stdout lines cut at 4096 characters and parsed as JSON only; the mesh file's magic, both counts against its size, a 64 M triangle cap, every index and every position checked before use |
+| Implicit recipes (ADR-0035) | `stokes.geometry.operations.implicit` | built from the tree, then checked again in the worker: types, at most 64 chained and 10,000 operations, every number finite; graphs are built by the builders only, never parsed from text and never evaluated as code; at most 100,000 nodes and constants within ±1e9 |
 | Workspace documents, presets and theme files (ADR-0015) | `stokes.workspace` | 256 KiB and 32 levels of nesting, JSON without NaN, a project's file must resolve inside the project folder, every value checked by kind (theme tokens cannot hold `url()` or leave their declaration), preset names restricted to `a-z 0-9 _ -`; bad content is reported and ignored, never executed |
 
 **Agent log parsers** (`agent/stokes_agent/parsers/`) run on utility output the agent did not
@@ -66,6 +68,14 @@ with a positional argument (`flags.POSITIONAL`): one feature angle, 0 to 180 wit
 decimals, matched in full and taken once. A cfMesh step may carry `threads` (1 to 256); the
 agent sets `OMP_NUM_THREADS` in that process's environment only, and refuses `threads` on any
 other utility and on every external step.
+
+**The adjoint of ADR-0038** adds `adjointShapeOptimisationFoam` (Foundation 14's own solver) to
+`jobs.ALLOWED_UTILITIES` and the engine utilities, with no flags: it reads only the case Stokes
+wrote. **`job.sensitivity`** reads that case back in the agent (`stokes_agent.foamascii`): ASCII
+only, every file capped at 1 GiB, every count checked against its list, paths resolved inside the
+job folder by the job store. Patch names given by the caller must be identifiers, and the time a
+written number or `latest`. The solver's own `shapeSensitivity` (ADR-0041 decision 8) goes through
+the same reader; a value that is not finite is refused rather than passed on.
 
 **How a job takes the external profile** (T-309). `job.create` takes `profile: "external"`, and
 the agent records it in the job's own record. From then on every check of that job uses the

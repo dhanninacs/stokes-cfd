@@ -46,6 +46,7 @@ from stokes.mesh.two_d import TwoD, check_radius, from_settings, refuse_reserved
 if TYPE_CHECKING:  # pragma: no cover - typing only, so numpy stays off the import path
     from stokes.api.session import Session
     from stokes.model.nodes import Node
+    from stokes.model.project import Project
 
 log = get_logger(__name__)
 
@@ -278,28 +279,70 @@ def _two_d_sides(
     return kept, tuple(sorted(set(unmapped) | lost)), still
 
 
-def snapshot_for(session: Session, settings: Node) -> Any:
+def snapshot_for(session: Session, settings: Node, *, project: Project | None = None) -> Any:
     """The snapshot the configured mesher needs. **The one entry point callers should use.**
 
     A `MeshSnapshot` describes six box sides, which is all blockMesh can mesh; snappyHexMesh follows
     the part's own surfaces and needs `SnappySnapshot` instead. Choosing between them here means the
     service never has to know which driver it is about to run, and a new mesher adds one branch in
     one place rather than a check at every call site.
+
+    ``project`` is a copy of the tree taken on the session thread, for a caller that builds the
+    snapshot on a worker (`MeshService`'s preparation, ADR-0024 addendum 2026-11-14): the worker
+    reads the copy, never the live tree a command may be changing. ``settings`` must be the copy's
+    node then. None reads the session's own project, as before.
     """
-    from stokes.mesh.model import CFMESH_MESHERS
+    from stokes.mesh.model import CFMESH_MESHERS, GMSH_MESHERS
     from stokes.model import registry
 
     mesher = str(_params(settings, registry)["mesher"])
+    # **The keyword only when given**, so a test that replaces a builder with a two-argument
+    # stand-in keeps working on the inline path.
+    extra: dict[str, Any] = {} if project is None else {"project": project}
     if mesher == "snappy":
-        return build_snappy_snapshot(session, settings)
+        from stokes.mesh.conjugate import build_conjugate_snapshot, is_conjugate
+
+        tree = project if project is not None else session.require_project()
+        # **More than one region with a body is a multi-region mesh** (ADR-0042). The other
+        # meshers still mesh the domain part alone.
+        if str(_params(settings, registry)["domain"]) == "part" and is_conjugate(tree):
+            return build_conjugate_snapshot(session, settings, **extra)
+        return build_snappy_snapshot(session, settings, **extra)
     if mesher in CFMESH_MESHERS:
-        return build_cfmesh_snapshot(session, settings, mesher)
-    if mesher == "gmsh":
-        return build_gmsh_snapshot(session, settings)
-    return build_snapshot(session, settings)
+        return build_cfmesh_snapshot(session, settings, mesher, **extra)
+    if mesher in GMSH_MESHERS:
+        return build_gmsh_snapshot(session, settings, mesher, **extra)
+    return build_snapshot(session, settings, **extra)
 
 
-def build_cfmesh_snapshot(session: Session, settings: Node, mesher: str) -> Any:
+def build_gmsh_snapshot(
+    session: Session, settings: Node, mesher: str, *, project: Project | None = None
+) -> Any:
+    """The snappy record, re-labelled for Gmsh (ADR-0043).
+
+    **Gmsh needs what snappy needs** - a surface per tag, per-surface sizes, wall layers - and,
+    unlike cfMesh, keeps the per-tag STLs as they are: its script merges one file per tag and
+    names a physical group after each. Only a `part` domain, for the same reason as cfMesh: it
+    meshes the inside of the closed surface.
+    """
+    import dataclasses
+
+    from stokes.model import registry
+
+    domain = str(_params(settings, registry)["domain"])
+    if domain != "part":
+        raise MeshInvalid(
+            f"{mesher} meshes a part's own volume; the {domain!r} domain needs snappyHexMesh",
+            details={"code": "mesh.domain_unsupported", "mesher": mesher, "domain": domain},
+        )
+    extra: dict[str, Any] = {} if project is None else {"project": project}
+    snap = build_snappy_snapshot(session, settings, **extra)
+    return dataclasses.replace(snap, mesher=mesher)
+
+
+def build_cfmesh_snapshot(
+    session: Session, settings: Node, mesher: str, *, project: Project | None = None
+) -> Any:
     """The snappy record, re-labelled for a cfMesh mesher and with its surfaces joined (ADR-0032).
 
     **cfMesh needs what snappy needs** - a surface per tag, per-surface sizes, wall layers - so the
@@ -324,7 +367,8 @@ def build_cfmesh_snapshot(session: Session, settings: Node, mesher: str) -> Any:
             f"{mesher} meshes a part's own volume; the {domain!r} domain needs snappyHexMesh",
             details={"code": "mesh.domain_unsupported", "mesher": mesher, "domain": domain},
         )
-    snap = build_snappy_snapshot(session, settings)
+    extra: dict[str, Any] = {} if project is None else {"project": project}
+    snap = build_snappy_snapshot(session, settings, **extra)
     joined = "".join(
         text
         for surface in snap.surfaces
@@ -333,104 +377,9 @@ def build_cfmesh_snapshot(session: Session, settings: Node, mesher: str) -> Any:
     return dataclasses.replace(snap, mesher=mesher, stl_files={SURFACE_FILE: joined})
 
 
-def build_gmsh_snapshot(session: Session, settings: Node) -> Any:
-    """The snappy record, re-labelled for Gmsh, with the face groups the script needs.
-
-    **Gmsh reads the part's B-rep, not the staged surfaces** (`stokes.mesh.drivers.gmsh`), so on
-    top of what cfMesh gets this adds, under `gmsh`: each patch's faces as Gmsh surface numbers
-    (Stokes face ``i`` is surface ``i + 1``, which the script verifies), every face's bounding box
-    from the display mesh (what the script checks the numbering against), the part's diagonal, and
-    the spec the geometry worker exports the part from when the job is staged.
-
-    Refused by name: a mesh-only part (it has no B-rep), a domain other than `part`, a 2D mode.
-    """
-    import dataclasses
-
-    import numpy as np
-
-    from stokes.geometry.shapes import part_spec
-    from stokes.geometry.store import GeometryStore
-    from stokes.mesh.drivers.gmsh import SURFACE_FILE
-    from stokes.mesh.drivers.snappy import GEOMETRY_DIR
-    from stokes.model import registry
-
-    own = _params(settings, registry)
-    domain = str(own["domain"])
-    if domain != "part":
-        raise MeshInvalid(
-            f"Gmsh meshes a part's own volume; the {domain!r} domain needs snappyHexMesh",
-            details={"code": "mesh.domain_unsupported", "mesher": "gmsh", "domain": domain},
-        )
-    if from_settings(own) is not None:
-        raise MeshInvalid(
-            "Gmsh meshes in 3D only; switch 2D off, or use blockMesh or snappyHexMesh for 2D",
-            details={"code": "mesh.two_d_unsupported", "mesher": "gmsh"},
-        )
-    snap = build_snappy_snapshot(session, settings)
-    project = session.require_project()
-    part_node = _part(project, own["domain_part"])
-    if str(part_node.params.get("family") or "") == "mesh":
-        raise MeshInvalid(
-            f"{part_node.name!r} is a mesh-only import with no CAD surfaces, and Gmsh meshes from "
-            "the CAD. Import a STEP version, or use snappyHexMesh or a cfMesh type.",
-            details={"code": "mesh.mesh_only", "mesher": "gmsh", "part": str(part_node.id)},
-        )
-    store = GeometryStore.of(session)
-    part_basis = store.basis(part_node)
-    mesh = store.mesh(str(part_node.id))
-    if mesh is None:
-        raise MeshInvalid(
-            "the domain part has no display mesh yet; wait for its import",
-            details={"code": "mesh.invalid", "part": str(part_node.id)},
-        )
-    positions, indices, face_ids = _arrays(mesh)
-    points = np.asarray(positions, dtype="float64")
-    corners = np.asarray(indices)
-    owners = np.asarray(face_ids)
-    count = int(owners.max()) + 1 if owners.size else 0
-    boxes: list[list[float]] = []
-    for face in range(count):
-        used = np.unique(corners[owners == face])
-        if used.size == 0:
-            raise MeshInvalid(
-                f"face {face} of {part_node.name!r} has no triangles, so Gmsh's numbering cannot "
-                "be checked; re-import the part",
-                details={"code": "mesh.invalid", "part": str(part_node.id), "face": face},
-            )
-        box = points[used]
-        boxes.append([*box.min(axis=0).tolist(), *box.max(axis=0).tolist()])
-    tag_faces, _kinds, _members, _digests = _tag_faces(project, part_node, count, part_basis)
-    groups: dict[str, list[int]] = {}
-    tagged: set[int] = set()
-    for surface in snap.surfaces:
-        faces = tag_faces.get(str(surface.name))
-        if faces:
-            groups[str(surface.region or surface.name)] = sorted(f + 1 for f in faces)
-            tagged.update(faces)
-    rest = sorted(set(range(count)) - tagged)
-    if rest:
-        # The faces in no tag: the snappy record calls them `unassigned`, typed `wall`.
-        groups["unassigned"] = [f + 1 for f in rest]
-    lo, hi = points.min(axis=0), points.max(axis=0)
-    joined = "".join(
-        text
-        for surface in snap.surfaces
-        if (text := snap.stl_files.get(f"{GEOMETRY_DIR}/{surface.file}"))
-    )
-    return dataclasses.replace(
-        snap,
-        mesher="gmsh",
-        stl_files={SURFACE_FILE: joined},
-        gmsh={
-            "groups": groups,
-            "boxes": boxes,
-            "diagonal": float(np.linalg.norm(hi - lo)),
-            "part_spec": part_spec(part_node, store.shape_dir(), part_basis),
-        },
-    )
-
-
-def build_snappy_snapshot(session: Session, settings: Node) -> Any:  # noqa: PLR0915 - one read, in order
+def build_snappy_snapshot(  # noqa: PLR0915 - one read, in order
+    session: Session, settings: Node, *, project: Project | None = None
+) -> Any:
     """Read the tree and the geometry store into a `SnappySnapshot`. Writes nothing.
 
     **The snappy path needs a different record from blockMesh's, and this is it.** `MeshSnapshot`
@@ -459,7 +408,7 @@ def build_snappy_snapshot(session: Session, settings: Node) -> Any:  # noqa: PLR
     from stokes.mesh.drivers.snappy import SNAP_CONTROLS, Feature, SnappySnapshot
     from stokes.model import registry
 
-    project = session.require_project()
+    project = project if project is not None else session.require_project()
     own = _params(settings, registry)
     base_size = float(own["base_size"])
     margin = float(own["margin"])
@@ -570,9 +519,16 @@ def build_snappy_snapshot(session: Session, settings: Node) -> Any:  # noqa: PLR
         surfaces, surface_files, stl_files = _drop_slab_surfaces(surfaces, surface_files, stl_files)
 
     # **The background box.** `part` hugs the body (5 % breathing room so castellation has cells to
-    # cut); `enclosure` is the wind tunnel, grown by the margin the user set.
+    # cut); `enclosure` is the wind tunnel, grown by the margin the user set. The 5 % is of the
+    # part's largest side, and at least two base cells: it was a flat 0.05 m, which around a
+    # 130 mm manifold meshed at 1 mm made a background of 3.7 M cells for a mesh of about 50 k,
+    # and snappy spent minutes refining cells it then threw away (measured 2026-11-14, ADR-0040).
     inside = domain != "enclosure"
-    grown = _aligned_box(part_bbox, 0.05 if inside else (margin or 5.0), base_size)
+    extent = max(
+        part_bbox[3] - part_bbox[0], part_bbox[4] - part_bbox[1], part_bbox[5] - part_bbox[2]
+    )
+    breathing = max(0.05 * extent, 2.0 * base_size)
+    grown = _aligned_box(part_bbox, breathing if inside else (margin or 5.0), base_size)
 
     found = inside_point_or_coarse(positions, indices, grown, outside=not inside)
     point = found.point
@@ -906,7 +862,16 @@ def _snappy_surfaces(
         name = "unassigned"
         file_name = f"{name}.stl"
         files[name] = file_name
-        low, high = level_pair(base_size, base_size)
+        # **A size the user set reaches the untagged skin too** (2026-11-20): `unassigned` was
+        # always meshed at the base size, so a body or surface size never refined the walls a
+        # user leaves untagged - on the gyroid exchanger that is the whole lattice, and cfMesh at
+        # 0.8 mm with a 0.4 mm surface size lost the outlet (4,337 cells against snappy's 72,925).
+        # With neither set it stays the base size, as before (the golden files say so).
+        body_size = (local or {}).get("size")
+        asked = [s for s in (body_size, surface_size) if s is not None and float(s) > 0.0]
+        target = float(asked[0]) if asked else float(base_size)
+        low, high = level_pair(base_size, target)
+        high += int((local or {}).get("refinement") or 0)
         surfaces.append(
             Surface(
                 name=name,
@@ -915,7 +880,7 @@ def _snappy_surfaces(
                 patch_type="wall",
                 level_min=low,
                 level_max=high,
-                requested=float(base_size),
+                requested=target,
             )
         )
     return tuple(surfaces), files
@@ -1075,7 +1040,9 @@ def _snappy_features(surface_files: dict[str, str]) -> list[tuple[str, int]]:
     return [(name, 2) for name in surface_files]
 
 
-def build_snapshot(session: Session, settings: Node) -> MeshSnapshot:
+def build_snapshot(
+    session: Session, settings: Node, *, project: Project | None = None
+) -> MeshSnapshot:
     """Read the tree and the geometry store into a `MeshSnapshot`. Writes nothing.
 
     Runs on the calling (session) thread: it reads nodes and a mesh, and every part of it is
@@ -1086,7 +1053,7 @@ def build_snapshot(session: Session, settings: Node) -> MeshSnapshot:
     from stokes.mesh.model import SETTINGS_PATH  # noqa: F401 - documents where settings live
     from stokes.model import registry
 
-    project = session.require_project()
+    project = project if project is not None else session.require_project()
     own = _params(settings, registry)
     mesher = str(own["mesher"])
     base_size = float(own["base_size"])

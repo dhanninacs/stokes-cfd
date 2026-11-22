@@ -100,6 +100,9 @@ export const BASIC: Readonly<Record<string, readonly string[]>> = {
 /** Basic names whose exact field also stays in Advanced, because the Basic control is a preset of it. */
 export const ALSO_ADVANCED: Readonly<Record<string, readonly string[]>> = {
   mesh_settings: BASIC_MESH,
+  // The residual target is on the Run card and in Basic, and stays under Run limits too, beside the
+  // iteration limit it is read with.
+  solver_settings: ["residual_target"],
 };
 
 /** The node types whose page is split into Basic and Advanced. */
@@ -224,6 +227,9 @@ export function changedFromDefault(properties: Record<string, ParamSchema>, para
     const schema = properties[name];
     if (held === undefined || held === null || held === "") return false;
     const wanted = plain(schema?.default);
+    // A size with no default is empty at 0 as well ("0 inherits", `stokes.mesh.sizing`): a new body
+    // carries `mesh_size` 0 m, which lit the dot on every fresh body.
+    if ((wanted === undefined || wanted === null) && isRecord(params[name]) && held === 0) return false;
     if (wanted === undefined || wanted === null) return true;
     return JSON.stringify(held) !== JSON.stringify(wanted);
   });

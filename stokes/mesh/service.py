@@ -9,9 +9,13 @@ node** at `/mesh/results/<mesher>` up to date.
 
 Three threads are involved and each is only allowed to do one thing:
 
-1. **The session thread** — where commands run. `generate` builds the snapshot, writes the case and
-   starts the job here. Every change to the tree happens here, through
-   `GeometryStore.on_session_thread`, because that is where the model is safe to touch.
+1. **The session thread** — where commands run. Every change to the tree happens here, through
+   `GeometryStore.on_session_thread`, because that is where the model is safe to touch. When
+   `mesh.generate` runs on it (the server), it only validates, copies the tree and returns
+   `preparing`; a `stokes-mesh-prepare` worker builds the snapshot, probes the host, writes the
+   case, stages it and starts the job, emitting `mesh.preparing` per step and honouring
+   `mesh.cancel` between steps and staging chunks (ADR-0024 addendum 2026-11-14). Off the session
+   thread (CLI, replay, `wait=True`) the same steps run on the caller's thread.
 2. **The runner's event thread** — `LocalRunner`'s asyncio loop, where the agent delivers
 events. The
    listener runs here and **must return at once**: it maps an event to a service event and hands any
@@ -40,9 +44,10 @@ import json
 import math
 import shutil
 import threading
+import time
 from collections import OrderedDict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -137,6 +142,15 @@ class _FidelityCase:
         files = getattr(snap, "stl_files", None)
         if not files:
             return None
+        zones = {f"{z.file}" for z in getattr(snap, "zones", ()) if getattr(z, "file", "")}
+        if zones:
+            # A multi-region mesh's zone surfaces lie inside it (ADR-0042): its boundary never
+            # follows them, and they are the largest files staged (80 MB each on a lattice core).
+            files = {
+                path: text for path, text in files.items() if path.rsplit("/", 1)[-1] not in zones
+            }
+            if not files:
+                return None
         lo = getattr(snap, "background_min", None)
         hi = getattr(snap, "background_max", None)
         length = 0.0
@@ -148,6 +162,50 @@ class _FidelityCase:
             characteristic_length=length,
             cell_size=float(size) if size else None,
         )
+
+
+#: The steps of a generate before its job runs, in order (ADR-0024 addendum 2026-11-14).
+PREPARE_STEPS = ("snapshot", "probe", "compile", "stage", "start")
+
+
+class _PrepareCancelled(Exception):
+    """Internal: Cancel was pressed during preparation. Never leaves the service."""
+
+
+@dataclass
+class _Preparation:
+    """One press of Generate, from the command to its job's start.
+
+    **Its own cancel flag, not the service's**: a newer press cancels this one without touching
+    the flag the next preparation will use.
+    """
+
+    result_id: str
+    host: str
+    force: bool
+    #: The copy of the tree the worker reads; None reads the live project (the inline path).
+    source: Project | None = None
+    cancel: threading.Event = field(default_factory=threading.Event)
+    done: threading.Event = field(default_factory=threading.Event)
+    step: str = ""
+    #: The result node this preparation made, once it has made one.
+    created: str | None = None
+    started: float = field(default_factory=time.monotonic)
+
+    def elapsed(self) -> float:
+        """Seconds since the press."""
+        return time.monotonic() - self.started
+
+    def to_dict(self) -> dict[str, Any]:
+        """For `mesh.status`."""
+        return {
+            "result": self.result_id,
+            "step": self.step,
+            "step_number": PREPARE_STEPS.index(self.step) + 1 if self.step else 0,
+            "steps": len(PREPARE_STEPS),
+            "elapsed": round(self.elapsed(), 3),
+            "cancelling": self.cancel.is_set(),
+        }
 
 
 @dataclass(frozen=True)
@@ -323,6 +381,8 @@ class MeshService:
         #: builds a snapshot per call. One slot: a revision supersedes the one before it.
         self._prepared: dict[str, Any] | None = None
         self._prepared_revision: int | None = None
+        #: The `mesh.generate` being prepared (snapshot to job start), or None.
+        self._preparing: _Preparation | None = None
 
     @classmethod
     def of(cls, session: Session) -> MeshService:
@@ -341,28 +401,176 @@ class MeshService:
         host: str | None,
         force: bool,
         result_id: str | None,
+        *,
+        background: bool = False,
     ) -> dict[str, Any]:
-        """Build, write and start a mesh job. Runs on the session thread, inside the command.
+        """Build, write and start a mesh job: the snapshot, probe, compile, stage and start steps.
 
         Raises `MeshInvalid` for settings that cannot be a case — those are raised on replay too,
         and a replay that cannot build the same snapshot should stop rather than write a different
         result. **A missing host does not raise**: it writes a `skipped` result, so a journal
         recorded on a machine with OpenFOAM replays on one without.
+
+        **`background=True` returns at once** with `state: "preparing"` and runs the five steps on
+        a `stokes-mesh-prepare` worker (ADR-0024 addendum 2026-11-14). The command asks for it when
+        it runs on the session thread - the server's event loop, which non-negotiable 7 says must
+        never wait on an STL export or an upload. The worker reads a copy of the tree taken here,
+        changes the live tree only through `on_session_thread`, emits `mesh.preparing` per step,
+        and checks a cancel flag between steps and between staging chunks. A refusal it meets
+        becomes `mesh.failed` + `mesh.prepared` instead of an exception, since nobody is waiting
+        for one. Elsewhere (the CLI, replay, `wait=True`) the same steps run on the calling thread,
+        exactly as before.
         """
-        from stokes.mesh.snapshot import snapshot_for
-        from stokes.run import staging
-        from stokes.run.hosts import HostRegistry
+        from stokes.model.ids import ID_RE, new_id
 
         settings = project.find(SETTINGS_PATH)
         if settings is None:
             raise MeshInvalid("there is no mesh settings node; run mesh.configure first")
+        if result_id is not None and not ID_RE.match(result_id):
+            raise MeshInvalid(f"{result_id!r} is not a node id")
         host = host or str(settings.params.get("host") or "local")
-        snap = snapshot_for(self._session, settings)
-        if not force:
-            reused = self._reuse(snap, host)
-            if reused is not None:
-                return reused
+        prep = _Preparation(result_id=result_id or new_id("n"), host=host, force=force)
+        if background:
+            from stokes.model.project import Project as ProjectType
 
+            # **A copy of the tree, taken HERE, on the session thread** (the review's item 3): the
+            # worker builds the snapshot from it, so a command that changes the model meanwhile
+            # cannot be half-read. The copy is JSON-deep, like `_GradientCheck`'s.
+            prep.source = ProjectType.from_json(project.to_json(), node_registry=project.registry)
+        self._begin(prep)
+        if not background:
+            try:
+                info = self._prepare(prep)
+            finally:
+                self._end(prep)
+            info.pop("outcome", None)
+            return info
+        threading.Thread(
+            target=self._prepare_in_background,
+            args=(prep,),
+            name="stokes-mesh-prepare",
+            daemon=True,
+        ).start()
+        return {
+            "result": prep.result_id,
+            "path": "",
+            "state": "preparing",
+            "job": "",
+            "basis": "",
+            "reused": False,
+            "warnings": [],
+            "steps": list(PREPARE_STEPS),
+        }
+
+    # ------------------------------------------------------------------ preparation
+
+    def _begin(self, prep: _Preparation) -> None:
+        """Make ``prep`` the current preparation, stopping any earlier one first."""
+        with self._lock:
+            previous = self._preparing
+            self._preparing = prep
+        if previous is not None:
+            # **The newer press wins.** The earlier worker sees its flag at the next step boundary
+            # and stops; a result it had already made ends `cancelled`.
+            previous.cancel.set()
+
+    def _end(self, prep: _Preparation) -> None:
+        """The preparation has ended, however: release `wait()` and forget it."""
+        with self._lock:
+            if self._preparing is prep:
+                self._preparing = None
+        prep.done.set()
+
+    def _prepare_in_background(self, prep: _Preparation) -> None:
+        """The worker: run the steps, turn a refusal into events, always announce the end."""
+        outcome = "started"
+        error: tuple[str, str] | None = None
+        try:
+            info = self._prepare(prep)
+            outcome = str(info.get("outcome") or "started")
+        except Exception as exc:
+            code = str(getattr(exc, "code", "") or "mesh.error")
+            message = str(getattr(exc, "message", "") or exc) or type(exc).__name__
+            if not isinstance(exc, MeshInvalid):
+                log.warning("mesh preparation failed", extra=fields(step=prep.step), exc_info=True)
+            outcome, error = "failed", (code, message)
+            self._fail_preparation(prep, code, message)
+        finally:
+            self._end(prep)
+        extra = {"code": error[0], "message": error[1]} if error is not None else {}
+        self._emit(
+            "mesh.prepared",
+            node_id=prep.result_id,
+            outcome=outcome,
+            elapsed=round(prep.elapsed(), 3),
+            **extra,
+        )
+
+    def _fail_preparation(self, prep: _Preparation, code: str, message: str) -> None:
+        """A refusal met on the worker: the result it made (if any) ends `failed`, else an event."""
+        project = self._session.project
+        result = project.find(prep.created) if project is not None and prep.created else None
+        if project is not None and result is not None:
+            self._on_session(lambda: self._fail(project, result, code, message))
+            return
+        self._emit("mesh.failed", node_id=prep.result_id, path="", code=code, message=message)
+
+    def _enter(self, prep: _Preparation, step: str, **extra: Any) -> None:
+        """Enter a step (after checking the cancel flag) and say so in `mesh.preparing`."""
+        self._checkpoint(prep)
+        prep.step = step
+        self._emit_step(prep, **extra)
+
+    def _emit_step(self, prep: _Preparation, **extra: Any) -> None:
+        self._emit(
+            "mesh.preparing",
+            node_id=prep.result_id,
+            step=prep.step,
+            step_number=PREPARE_STEPS.index(prep.step) + 1,
+            steps=len(PREPARE_STEPS),
+            elapsed=round(prep.elapsed(), 3),
+            **extra,
+        )
+
+    def _checkpoint(self, prep: _Preparation) -> None:
+        """Stop here when Cancel was pressed: raises `_PrepareCancelled`."""
+        if prep.cancel.is_set():
+            raise _PrepareCancelled
+
+    def _on_session(self, action: Callable[[], Any]) -> Any:
+        """Run a tree change where commands run (inline when this already is that thread)."""
+        from stokes.geometry.store import GeometryStore
+
+        return GeometryStore.of(self._session).on_session_thread(action, self._cancel)
+
+    def _prepare(self, prep: _Preparation) -> dict[str, Any]:
+        """Snapshot, probe, compile, stage, start. Runs on the caller's thread or the worker."""
+        try:
+            return self._prepare_steps(prep)
+        except _PrepareCancelled:
+            return self._prepare_cancelled(prep)
+
+    def _prepare_steps(self, prep: _Preparation) -> dict[str, Any]:
+        """The five steps, in order; each ends at a cancel checkpoint."""
+        from stokes.mesh.snapshot import snapshot_for
+        from stokes.run.hosts import HostRegistry
+
+        live = self._session.require_project()
+        source = prep.source if prep.source is not None else live
+        settings = source.find(SETTINGS_PATH)
+        if settings is None:
+            raise MeshInvalid("there is no mesh settings node; run mesh.configure first")
+        host = prep.host
+
+        self._enter(prep, "snapshot")
+        snap = snapshot_for(self._session, settings, project=prep.source)
+        self._checkpoint(prep)
+        if not prep.force:
+            reused = self._on_session(lambda: self._reuse(snap, host))
+            if reused is not None:
+                return {**reused, "outcome": "reused"}
+
+        self._enter(prep, "probe")
         runner = HostRegistry.of(self._session).runner(host)
         install: str | None = None
         engine = ""
@@ -374,47 +582,68 @@ class MeshService:
                 install = (record.get("record") or {}).get("default_install_id")
                 engine = _engine_of(record.get("record") or {})
             except Exception:
-                log.warning("the host probe failed", extra=fields(host=host))
+                log.warning("the host probe failed", extra=fields(host=host), exc_info=True)
                 install = None
+        self._checkpoint(prep)
         if not runner.available or not install:
             # **`skipped`, never `failed`** (ADR-0024): a machine without OpenFOAM is a fact about
             # the machine, and a replay that stops there is a replay that cannot be replayed.
             why = runner.why or NO_INSTALL_ADVICE
-            return self._no_host(project, snap, host, why, result_id)
+            info = self._on_session(lambda: self._no_host(live, snap, host, why, prep.result_id))
+            prep.created = prep.result_id
+            return {**info, "outcome": "skipped"}
 
+        self._enter(prep, "compile")
         engine = engine or "org-14"
         # **The case is built BEFORE anything is replaced**: a snapshot the driver cannot express
         # raises here, and a refusal must not leave a `running` result behind with no job.
         basis, files, job_steps = self._case_for(snap, engine)
+        self._checkpoint(prep)
         # **One result, so the previous run must stop first.** A job that kept going would write its
-        # state into the node that replaced it, and the user would see the old mesh's outcome on the
-        # new node. `_replace` removes the node; this stops the process behind it.
-        # **The job's own event, created BEFORE `cancel()`.** `cancel()` does not clear
-        # `_finished`, so
-        # creating it here is what closes the first window: from this instant a `wait()` waits
-        # on THIS
+        # state into the node that replaced it. **The job's own event, created BEFORE the cancel**:
+        # `_cancel_job()` does not clear `_finished`, so from this instant a `wait()` waits on THIS
         # job, however far the generate has got.
         self._new_job_event()
-        self.cancel()
-        # **And the old job is forgotten at once** (FIXES-B B8). Its final event can still arrive
-        # after `_replace` has pointed `_result_id` at the NEW result; with `_job` still naming the
-        # old job it would pass the listener's job check and mark the new result cancelled. With
-        # `_job` cleared, every event of the old job is ignored, and `_finish` re-checks the job.
-        with self._lock:
-            self._job = None
-        result = self._replace(project, snap, host, basis, engine, result_id)
-        self._reset(result, snap, engine, basis)
+        self._cancel_job()
 
+        def replace() -> Node:
+            # **And the old job is forgotten at once** (FIXES-B B8). Its final event can still
+            # arrive after `_replace` has pointed `_result_id` at the NEW result; with `_job` still
+            # naming the old job it would pass the listener's job check and mark the new result
+            # cancelled. With `_job` cleared, every event of the old job is ignored.
+            with self._lock:
+                self._job = None
+            made = self._replace(live, snap, host, basis, engine, prep.result_id)
+            self._reset(made, snap, engine, basis)
+            return made
+
+        result: Node = self._on_session(replace)
+        prep.created = str(result.id)
+        return self._stage_and_start(prep, live, result, runner, install, files, job_steps)
+
+    def _stage_and_start(
+        self,
+        prep: _Preparation,
+        live: Project,
+        result: Node,
+        runner: Any,
+        install: str,
+        files: dict[str, str],
+        job_steps: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """The last two steps: send the case (in chunks, cancellable) and start the job."""
+        from stokes.run import staging
+
+        total = sum(len(v.encode("utf-8")) for v in files.values())
+        self._enter(prep, "stage", bytes_sent=0, bytes_total=total)
         try:
             # **An explicit timeout, because this call WRITES the case.** `job.create` stages every
             # file, and the default is 60 s (`LocalRunner.call`) — a large case on a slow disk could
-            # approach that, and every other call in this service names its own timeout. `job.start`
-            # below keeps the default on purpose: it only spawns a process.
+            # approach that, and every other call in this service names its own timeout.
             #
             # **`staging.stage`, not a bare `job.create`**: a case whose surfaces exceed one payload
-            # goes up in chunks through `job.put`, which is the agent's own mechanism and was
-            # unreachable from any client until now. A finned part's ASCII STL is tens of MiB, so
-            # the inline-only path could not stage the parts this exists to mesh.
+            # goes up in chunks through `job.put`, the agent's own mechanism. The cancel flag is
+            # read between chunks, and a cancelled upload deletes its half-staged job.
             created = staging.stage(
                 runner.call,
                 files,
@@ -422,26 +651,85 @@ class MeshService:
                 install=install,
                 label=result.id,
                 timeout=CREATE_TIMEOUT_S,
+                on_bytes=lambda sent, size: self._emit_step(
+                    prep, bytes_sent=sent, bytes_total=size
+                ),
+                cancelled=prep.cancel.is_set,
             )
+        except staging.StagingCancelled as exc:
+            raise _PrepareCancelled from exc
         except Exception as exc:
-            self._fail(project, result, "mesh.no_host", f"the host refused the job: {exc}")
-            return self._info()
+            refused = f"the host refused the job: {exc}"
+            self._on_session(lambda: self._fail(live, result, "mesh.no_host", refused))
+            return {**self._info(), "outcome": "failed"}
         job = str(created["job"])
+        if prep.cancel.is_set():
+            # Created, never started: removed, so `job.list` does not offer it.
+            self._discard_job(runner, job)
+            raise _PrepareCancelled
+        self._enter(prep, "start")
         with self._lock:
             self._job = job
             self._total = len(job_steps)
             self._done_steps = 0
         try:
             self._subscribe(runner)
-            project.set_param(result.id, "job", job)
+            self._on_session(lambda: live.set_param(result.id, "job", job))
             runner.call("job.start", job=job)
         except Exception as exc:
             # **A job that cannot start must end the result** (FIXES-B B3). Outside the `try`, the
             # result stayed `running` for ever and `_job` stayed set, so `wait` never returned and
             # the next generate cancelled a job that never ran. `_fail` releases the runner state.
             self._discard_job(runner, job)
-            self._fail(project, result, "mesh.no_host", f"the host could not start the job: {exc}")
-        return self._info()
+            refused = f"the host could not start the job: {exc}"
+            self._on_session(lambda: self._fail(live, result, "mesh.no_host", refused))
+            return {**self._info(), "outcome": "failed"}
+        with self._lock:
+            # **The hand-over to `cancel()`'s job path is under the lock**, so a Cancel pressed
+            # now either still sees the preparation (and its flag is read just below) or sees the
+            # job (and cancels it the ordinary way): there is no instant in which it sees neither.
+            if self._preparing is prep:
+                self._preparing = None
+            late = prep.cancel.is_set()
+        if late:
+            self._cancel_job()
+        return {**self._info(), "outcome": "started"}
+
+    def _prepare_cancelled(self, prep: _Preparation) -> dict[str, Any]:
+        """Cancel during preparation: the result it made ends `cancelled`; else nothing changed."""
+        project = self._session.project
+        result = project.find(prep.created) if project is not None and prep.created else None
+        with self._lock:
+            current = self._result_id == prep.created
+            if current:
+                self._job = None
+        if project is not None and result is not None and current:
+            self._on_session(lambda: self._finish_with(project, result, "cancelled"))
+        elif project is not None and result is not None:
+            # A newer press has taken over the service: mark this node only, and leave the
+            # service's job and wait event (now the newer press's) alone.
+            def mark() -> None:
+                project.set_param(result.id, "state", "cancelled")
+                result.status = "failed"  # ADR-0024 4.2: a cancelled result reads as failed
+                self._emit("node.changed", node_id=result.id, path=result.path, param="state")
+                self._emit("mesh.cancelled", node_id=result.id, path=result.path)
+
+            self._on_session(mark)
+        else:
+            # **The previous mesh stays as it was**: nothing was replaced yet, so there is no node
+            # to mark, and the event carries the id this press would have used.
+            self._emit("mesh.cancelled", node_id=prep.result_id, path="")
+        log.info("mesh preparation cancelled", extra=fields(step=prep.step))
+        return {
+            "result": prep.created,
+            "path": result.path if result is not None else "",
+            "state": "cancelled",
+            "job": "",
+            "basis": "",
+            "reused": False,
+            "warnings": [],
+            "outcome": "cancelled",
+        }
 
     def _discard_job(self, runner: Any, job: str) -> None:
         """Best effort: remove a job that was created and never started. Never raises."""
@@ -585,6 +873,22 @@ class MeshService:
         # driver of its own.
         patch_types = driver_for(str(snap.mesher)).patch_types(snap)
         result.meta["patch_types"] = dict(sorted(patch_types.items()))
+        # **The regions of a multi-region mesh** (ADR-0042): what the solve snapshot writes one
+        # case per, and which is which kind. Absent for one region.
+        zones = tuple(getattr(snap, "zones", ()) or ())
+        if zones:
+            patches = dict(getattr(snap, "region_patches", {}) or {})
+            result.meta["regions"] = [
+                {
+                    "name": zone.name,
+                    "kind": zone.kind,
+                    "part": zone.part,
+                    "patches": list(patches.get(zone.name, ())),
+                }
+                for zone in zones
+            ]
+            result.meta["interfaces"] = [list(pair) for pair in snap.interfaces]
+            result.meta["default_region"] = str(snap.default_region)
         # **What 2D this mesh was built as** (ADR-0031), so Results can show the plane it was
         # meshed in even after the settings change. Absent for a 3D mesh.
         two_d = dict(getattr(snap, "two_d", {}) or {})
@@ -636,27 +940,8 @@ class MeshService:
         driver = driver_for(str(snap.mesher))
         basis = mesh_basis(snap, driver.DRIVER_VERSION, engine)
         files = driver.write(snap)
-        # **A driver that reads the B-rep** (Gmsh) names the files to export here: the driver is
-        # pure, and an export needs the geometry worker. Done at generate only, never for a
-        # precheck or an estimate, which build the same snapshot many times.
-        exports = getattr(driver, "geometry_exports", None)
-        if exports is not None:
-            for path, spec in exports(snap):
-                files[path] = self._exported_step(spec)
         steps = driver.steps(snap)
         return basis, files, steps
-
-    def _exported_step(self, spec: dict[str, Any]) -> str:  # Any: JSON part spec
-        """One part as STEP text, in metres, written by the geometry worker (`export_step`)."""
-        import tempfile
-        from pathlib import Path
-
-        from stokes.geometry.worker import acquire
-
-        with tempfile.TemporaryDirectory(prefix="stokes-gmsh-") as folder:
-            out = Path(folder) / "domain.step"
-            acquire().export_step([spec], out, names=[str(spec.get("name") or "part")])
-            return out.read_text(encoding="utf-8", errors="strict")
 
     def _cells(self, snap: Any) -> int:
         """The cell count the chosen driver's background block will produce.
@@ -803,7 +1088,7 @@ class MeshService:
             job_status = runner.call("job.status", job=job, timeout=30.0)
         except Exception:
             log.warning("could not read the job status", extra=fields(job=job))
-        error = job_status.get("error") or None
+        error = _gmsh_error(job_status, job_status.get("error") or None)
         # **The job's own duration, in seconds**, from the record the agent wrote: its first step's
         # `started` (or `created`) to its `ended` (FIXES-B B2).
         seconds = _job_seconds(job_status)
@@ -822,6 +1107,30 @@ class MeshService:
         # step's coverage table comes from `reports["snappyHexMesh"]` through the sibling
         # accessor.
         layers = _layer_report_of(job_status)
+        # **Two fluids that share faces fail the mesh** (ADR-0042): the wall between them is
+        # thinner than the mesh could hold, and the solver would treat them as one wall apart.
+        touching = _fluids_touching(job_status, result.meta.get("regions"))
+        region_order = _region_order(job_status)
+        # **A multi-region mesh that kept the background box leaked** (ADR-0042): the bodies'
+        # outer skins did not close, so the cells around them were kept and belong to no region.
+        leaked = _background_faces(report) if result.meta.get("regions") else 0
+        if state == "done" and not error and leaked:
+            state = "failed"
+            error = {
+                "code": "mesh.leaked",
+                "message": f"the mesh kept {leaked} faces of the box around the bodies: their "
+                "outer surfaces do not close where the bodies meet; check that the bodies "
+                "share their walls exactly, or use a larger base size",
+            }
+        if state == "done" and not error and touching:
+            first, second, faces = touching
+            state = "failed"
+            error = {
+                "code": "mesh.fluids_touch",
+                "message": f"the fluids {first} and {second} touch on {faces} faces: the wall "
+                "between them is thinner than the mesh can hold; use a smaller base size or a "
+                "thicker wall",
+            }
         # **The surfaces are fetched here, on this worker thread, before the tree changes**
         # (T-210): the fetch blocks on the agent, and the session thread must not wait on it. A job
         # that did not end `done` has no mesh to draw.
@@ -846,6 +1155,7 @@ class MeshService:
                 surfaces=surfaces,
                 fidelity=fidelity,
                 layers=layers,
+                region_order=region_order,
             ),
             self._cancel,
         )
@@ -862,6 +1172,7 @@ class MeshService:
         surfaces: _Surfaces | None = None,
         fidelity: dict[str, Any] | None = None,
         layers: dict[str, Any] | None = None,
+        region_order: list[str] | None = None,
     ) -> None:
         """Set the result's final state on the session thread and emit the matching event.
 
@@ -880,6 +1191,9 @@ class MeshService:
             if surfaces is not None and result is None:
                 self._remove_surfaces(result_id)
             return
+        if region_order:
+            # The regions by the index the split gave them (ADR-0042): the run's merge needs it.
+            result.meta["region_order"] = list(region_order)
         code, message = _error_of(error)
         if state == "done":
             final, code, message = "done", "", ""
@@ -1537,6 +1851,18 @@ class MeshService:
         discarded to keep a linter quiet, which is the same shape as the `del path` removed from
         `_finish`.
         """
+        with self._lock:
+            prep = self._preparing
+            if prep is not None:
+                # **During preparation there is no job to ask yet**: the flag is read by the
+                # worker between steps and between staging chunks, and the worker cancels the job
+                # itself if it had just started it (`_prepare_steps`' hand-over).
+                prep.cancel.set()
+                return True
+        return self._cancel_job()
+
+    def _cancel_job(self) -> bool:
+        """Ask the running job (not a preparation) to stop. Returns whether there was one."""
         from stokes.run.hosts import HostRegistry
 
         with self._lock:
@@ -1560,11 +1886,20 @@ class MeshService:
         service with no job AND no event has nothing to wait for; a service with an event waits on
         **that job's** event, whatever `_job` currently says.
         """
+        limit = WAIT_SECONDS if timeout is None else timeout
+        deadline = time.monotonic() + limit
+        with self._lock:
+            prep = self._preparing
+        # **A preparation first** (ADR-0024 addendum 2026-11-14): until it ends, `_finished` may
+        # still be the previous job's, already set, and returning on it would tell journal replay
+        # that a mesh it has only begun to prepare is done.
+        if prep is not None and not prep.done.wait(limit):
+            return False
         with self._lock:
             finished = self._finished
         if finished is None:
             return True
-        return finished.wait(WAIT_SECONDS if timeout is None else timeout)
+        return finished.wait(max(0.0, deadline - time.monotonic()))
 
     def settle(self, timeout: float | None, *, coalesce: bool = False) -> None:
         """Session hook: journal replay waits here between records (ADR-0022 decision 10.1).
@@ -1592,7 +1927,11 @@ class MeshService:
         with self._lock:
             job, step, done, total = self._job, self._step, self._done_steps, self._total
             warnings = list(self._warnings)
+            prep = self._preparing
         return {
+            # **The preparation in flight, or {}**: its step and seconds so far, so a client that
+            # connects mid-press can draw the same line the `mesh.preparing` events draw.
+            "preparing": prep.to_dict() if prep is not None else {},
             "state": str(result.params.get("state")) if result is not None else "",
             "result": str(result.id) if result is not None else None,
             "path": result.path if result is not None else "",
@@ -1827,6 +2166,11 @@ class MeshService:
             self._scratch = None
             self._prepared = None
             self._prepared_revision = None
+            prep = self._preparing
+        # **A preparation is not a job yet**: nothing on a host would survive for it, so it stops
+        # at its next step rather than staging a case for a project that is no longer open.
+        if prep is not None:
+            prep.cancel.set()
 
     # ------------------------------------------------------------------ helpers
 
@@ -2016,6 +2360,44 @@ def _layer_report_of(status: dict[str, Any]) -> dict[str, Any]:
     return found if isinstance(found, dict) else {}
 
 
+def _background_faces(report: dict[str, Any]) -> int:
+    """The faces checkMesh counted on the background block's own patch; 0 when there is none."""
+    for row in report.get("patches") or []:
+        if isinstance(row, dict) and row.get("name") == "background":
+            return int(row.get("faces") or 0)
+    return 0
+
+
+def _region_order(status: dict[str, Any]) -> list[str]:
+    """The region names in the split's own index order, or an empty list."""
+    report = (status.get("reports") or {}).get("splitMeshRegions")
+    rows = report.get("regions") if isinstance(report, dict) else None
+    return [str(row.get("name")) for row in rows or [] if isinstance(row, dict)]
+
+
+def _fluids_touching(status: dict[str, Any], regions: Any) -> tuple[str, str, int] | None:
+    """The first interface the split reported between two fluid regions, with its face count.
+
+    Read from the `splitMeshRegions` step's report and the region kinds the result recorded; None
+    when the mesh has one region, the step did not run, or every interface has a solid side.
+    """
+    report = (status.get("reports") or {}).get("splitMeshRegions")
+    if not isinstance(report, dict) or not isinstance(regions, list):
+        return None
+    fluids = {
+        str(region.get("name"))
+        for region in regions
+        if isinstance(region, dict) and region.get("kind") != "solid"
+    }
+    for row in report.get("interfaces") or []:
+        if not isinstance(row, dict):
+            continue
+        owner, neighbour = str(row.get("owner")), str(row.get("neighbour"))
+        if owner in fluids and neighbour in fluids:
+            return owner, neighbour, int(row.get("faces") or 0)
+    return None
+
+
 def _quality_ok(report: dict[str, Any], thresholds: dict[str, float]) -> bool:
     """Whether the mesh meets the bar: OpenFOAM's verdict **and** this project's thresholds.
 
@@ -2034,6 +2416,25 @@ def _quality_ok(report: dict[str, Any], thresholds: dict[str, float]) -> bool:
         float(non_ortho) <= thresholds["max_non_ortho"]
         and float(skew) <= thresholds["max_skewness"]
     )
+
+
+def _gmsh_error(status: dict[str, Any], error: Any) -> Any:
+    """A failed Gmsh job's error, in Gmsh's own words and with the measured cause (ADR-0043).
+
+    The agent says only "gmsh exited 1"; the `gmsh` step's report carries the errors Gmsh printed
+    (`stokes.mesh.drivers.gmsh.explain_failure`). Any other job, or a report with no error, keeps
+    the error as it came.
+    """
+    report = (status.get("reports") or {}).get("gmsh")
+    if not error or not isinstance(report, dict):
+        return error
+    from stokes.mesh.drivers.gmsh import explain_failure
+
+    message = explain_failure(report)
+    if message is None:
+        return error
+    code = error.get("code") if isinstance(error, dict) else None
+    return {"code": str(code or "mesh.error"), "message": message}
 
 
 def _error_of(error: Any) -> tuple[str, str]:

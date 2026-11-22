@@ -26,7 +26,7 @@ def test_a_derived_field_is_packed_with_its_own_range() -> None:
     assert header["field"] == "p_total" and header["units"] == "m2/s2"
     assert (header["min"], header["max"]) == (1.0, 3.0)
     values = np.frombuffer(payload, dtype="<f4", offset=4 + length)
-    assert values.tolist() == [1.0, 1.0, 3.0]
+    assert values[0] == 1.0 and np.isnan(values[1]) and values[2] == 3.0
 
 
 def test_no_calculator_means_no_payload_and_a_bad_expression_is_a_400() -> None:

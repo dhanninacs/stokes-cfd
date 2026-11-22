@@ -1,4 +1,4 @@
-"""The `coupled.simple` writer: the incompressible case plus `COUPLED` (ADR-0035).
+"""The `coupled.simple` writer: the incompressible case plus `COUPLED` (ADR-0044).
 
 coupledSimpleFoam reads an ordinary steady incompressible OpenFOAM 14 case and **one** extra
 sub-dictionary, `COUPLED` in `system/fvSolution`; `foamRun` ignores `COUPLED` and the coupled
@@ -9,7 +9,7 @@ with three changes, and the same directory still runs under `foamRun` for a comp
   runs its own outer loop; `controlDict` does not stop it), the settings' `residual_target` as
   `residualControl` for `U` and `p` (and `T` with energy), the backend, and the pressure pinned
   at cell 0 for a closed domain. On one core the backend is the serial direct `SparseLU`; on more
-  it is PETSc over MPI with `PETSC_OPTIONS` and the settings beside it (ADR-0035 decision 9).
+  it is PETSc over MPI with `PETSC_OPTIONS` and the settings beside it (ADR-0044 decision 9).
 * `system/fvSchemes` gains the two stress-term entries the coupled assembly reads,
   `div((nu*dev2(T(grad(U)))))` and `div(devTauCorrFlux)` (both in the solver's own tutorials), and
   `div(phi,T)` with energy on.
@@ -49,7 +49,7 @@ APPLICATION = "coupledSimpleFoam"
 TURBULENCE: tuple[str, ...] = names_for(ENGINE)
 
 #: The largest 3D mesh the serial direct solver (Eigen `SparseLU`) is offered on. Measured on a
-#: laminar 3D tee (ADR-0035 decision 3, 2026-11-21, 24-core WSL host): 72,965 cells converged
+#: laminar 3D tee (ADR-0044 decision 3, 2026-11-21, 24-core WSL host): 72,965 cells converged
 #: in 18 iterations, 17.8 min, 10.4 GB; 136,878 cells took 26 GB and ~440 s per iteration and
 #: had not converged after 30 min; 347,604 cells exhausted ~45 GB in the first factorisation.
 #: The iterative alternatives are no rescue in serial: Eigen `BiCGSTAB` took ~585 s and serial
@@ -57,7 +57,7 @@ TURBULENCE: tuple[str, ...] = names_for(ENGINE)
 #: not limited.
 DIRECT_MAX_CELLS_3D = 80_000
 
-#: **The parallel backend's settings** (ADR-0035 decision 9), used whenever `cores > 1`: PETSc
+#: **The parallel backend's settings** (ADR-0044 decision 9), used whenever `cores > 1`: PETSc
 #: `KSPFBCGS` with a Schur field split, the velocity block ILU under block Jacobi and the pressure
 #: (Schur) block one hypre BoomerAMG V-cycle with hypre's three-dimensional settings. The inner
 #: tolerance adapts per outer iteration (Eisenstat-Walker, 1e-8..1e-2), the preconditioner is

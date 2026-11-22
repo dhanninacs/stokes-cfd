@@ -66,3 +66,15 @@ describe("a window item outranks a command whose identifier merely shares a word
     }
   });
 });
+
+describe("the word Fast finds the panel before the raw commands", () => {
+  it("ranks the Fast mode entry above fast.stop and its siblings", () => {
+    const entries = [
+      ...["fast.stop", "fast.start", "fast.status", "fast.check", "fast.configure"].map((name) => ({ name, label: name.replace(".", " "), description: "the preview" })),
+      { name: "Open Fast mode", description: "Show it on the right" },
+      { name: "Fast mode", description: "Open the GPU preview's panel" },
+    ];
+    expect(rankCommands(entries, "Fast", [], (i) => i.name)[0]?.command.name).toBe("Fast mode");
+    expect(rankCommands(entries, "fast mode", [], (i) => i.name)[0]?.command.name).toBe("Fast mode");
+  });
+});

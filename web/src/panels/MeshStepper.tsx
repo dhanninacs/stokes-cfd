@@ -19,6 +19,7 @@ import { findNode, useStore } from "../state/store";
 import { useWorkspace } from "../workspace/store";
 import { registerAction } from "../app/actions";
 import { cancelMesh, generateMesh, useGenerateState, useMeshContext } from "./meshRun";
+import MeshPreparing from "./MeshPreparing";
 import { headWords, stepHeading, stepperRows, type TasksReply } from "./meshTasks";
 
 /**
@@ -266,7 +267,8 @@ export default function MeshStepper({ foot = true }: {
             </Button>
           )}
         </div>
-        {!generate.enabled && !running && (
+        {busy && !running && <MeshPreparing />}
+        {!generate.enabled && !running && !busy && (
           <p className="muted stepper-why" data-ws="stepper-why">
             {generate.reason}
           </p>

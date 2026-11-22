@@ -185,4 +185,9 @@ describe("the empty-project hint", () => {
     expect(showImportHint({ hasProject: false, tree: empty, uploading: false, importing: false })).toBe(false);
     expect(showImportHint({ hasProject: true, tree: null, uploading: false, importing: false })).toBe(false);
   });
+  it("is gone the moment a sketch is finished: while its body builds, and once its operation is in the tree", () => {
+    expect(showImportHint({ hasProject: true, tree: empty, uploading: false, importing: false, building: true })).toBe(false);
+    const withOperation = { type: "root", children: [{ type: "group", children: [{ type: "implicit_sketch" }] }] };
+    expect(showImportHint({ hasProject: true, tree: withOperation, uploading: false, importing: false })).toBe(false);
+  });
 });

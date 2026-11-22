@@ -623,6 +623,52 @@ def split_faces(
     return np.asarray(np.unique(labels, return_inverse=True)[1], dtype=np.uint32).reshape(-1)
 
 
+def shading_groups(
+    positions: F32 | F64,
+    triangles: U32 | I64,
+    angle_deg: float = FEATURE_ANGLE_DEG,
+    sliver: int = 4,
+) -> U32:
+    """The groups a display mesh is shaded smooth within: :func:`split_faces`, with every group of
+    at most ``sliver`` triangles merged into the neighbouring group whose normal it matches best.
+
+    A mesh made by dual contouring (an implicit part, ADR-0035) has one or two narrow triangles
+    along a sharp edge, at an angle between the two faces. On their own they are groups of their
+    own, with a normal of their own, and they draw as dark ticks along the edge. Merged into a
+    face they blend in at their (small) area's weight, and the edge stays sharp. Faces and tags
+    are not affected: this only chooses which vertices share a normal.
+    """
+    groups = split_faces(positions, triangles, angle_deg).astype(np.int64)
+    count = int(triangles.shape[0])
+    if count == 0:
+        return groups.astype(np.uint32)
+    pos = np.asarray(positions, dtype=np.float64)
+    tri = np.asarray(triangles, dtype=np.int64)
+    normal = np.cross(pos[tri[:, 1]] - pos[tri[:, 0]], pos[tri[:, 2]] - pos[tri[:, 0]])
+    length = np.linalg.norm(normal, axis=1, keepdims=True)
+    normal = np.divide(normal, length, out=np.zeros_like(normal), where=length > 0)
+    # Neighbours across shared edges (by vertex index; the mesher's vertices are welded).
+    edges = np.sort(np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]]), axis=1)
+    owner = np.tile(np.arange(count), 3)
+    order = np.lexsort((edges[:, 1], edges[:, 0]))
+    edges, owner = edges[order], owner[order]
+    same = (edges[1:] == edges[:-1]).all(axis=1)
+    left, right = owner[:-1][same], owner[1:][same]
+    pairs = np.concatenate([np.stack([left, right], 1), np.stack([right, left], 1)])
+    for _ in range(3):
+        sizes = np.bincount(groups)
+        small = sizes[groups] <= sliver
+        candidate = pairs[small[pairs[:, 0]] & ~small[pairs[:, 1]]]
+        if candidate.shape[0] == 0:
+            break
+        agree = np.einsum("ij,ij->i", normal[candidate[:, 0]], normal[candidate[:, 1]])
+        best = np.lexsort((-agree, candidate[:, 0]))
+        first = np.unique(candidate[best, 0], return_index=True)[1]
+        chosen = candidate[best][first]
+        groups[chosen[:, 0]] = groups[chosen[:, 1]]
+    return np.asarray(np.unique(groups, return_inverse=True)[1], dtype=np.uint32).reshape(-1)
+
+
 # ------------------------------------------------------------------ shared
 
 

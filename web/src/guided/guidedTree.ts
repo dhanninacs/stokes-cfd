@@ -19,6 +19,20 @@ export interface Body {
   id: string;
   name: string;
   role: Role;
+  /** The body the mesh settings name as the fluid (`domain_part`): the first of several fluids. */
+  primary?: boolean;
+  /** The region that holds the body, when one does: its material in plain words, or null without one. */
+  region?: BodyRegion;
+}
+
+/** The region a body is in (ADR-0042: every body of a region is meshed and solved as its own region). */
+export interface BodyRegion {
+  id: string;
+  name: string;
+  kind: "fluid" | "solid";
+  materialName: string | null;
+  /** The library id the material came from ("water_liquid", "aluminium"), or "". */
+  libraryId: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,16 +86,87 @@ export function readBodies(tree: NodeSummary | null): Body[] {
   const settings = meshSettings(tree);
   const domainPart = typeof settings?.params.domain_part === "string" ? settings.params.domain_part : null;
   const enclosure = typeof settings?.params.box === "string" ? settings.params.box : null;
+  // A part an implicit operation reads is a step of the body that operation makes (a union's inputs,
+  // a sketch before its rotation; ADR-0035). The server hides it and takes it out of the simulation
+  // when the operation is made, so it is not a body of its own to say the role of. Imported and
+  // B-rep parts are listed whatever their state: a user who left one out can bring it back here.
+  const regions = bodyRegions(tree);
   const out: Body[] = [];
   visit(find(tree, "/geometry"), (node) => {
-    if (node.type === "part") out.push({ id: node.id, name: node.name, role: roleOf(node, domainPart, enclosure) });
+    if (node.type !== "part") return;
+    const step = node.params.family === "implicit" && node.params.visible === false && node.params.simulate === false;
+    if (step) return;
+    const region = regions.get(node.id);
+    let role = roleOf(node, domainPart, enclosure);
+    // A body in a region is what its region is: a second fluid is a fluid, and a body given a solid
+    // material is a solid even when it was the first one marked as the fluid.
+    if (region !== undefined && role !== "left_out" && role !== "hole") role = region.kind;
+    out.push({ id: node.id, name: node.name, role, ...(domainPart === node.id ? { primary: true } : {}), ...(region ? { region } : {}) });
   });
   return out;
 }
 
-/** The body that is the fluid, or null. */
+/** Each body's region, by body id: the region nodes, the bodies their tags hold whole, and their materials. */
+export function bodyRegions(tree: NodeSummary | null): Map<string, BodyRegion> {
+  const tags = new Map<string, NodeSummary>();
+  const materials = new Map<string, NodeSummary>();
+  visit(tree, (node) => {
+    if (node.type === "tag") tags.set(node.id, node);
+    else if (node.type === "material") materials.set(node.id, node);
+  });
+  const out = new Map<string, BodyRegion>();
+  visit(find(tree, "/regions"), (node) => {
+    if (node.type !== "region") return;
+    const tag = tags.get(String(node.params.tag ?? ""));
+    if (tag === undefined) return;
+    const held = typeof node.params.material === "string" ? materials.get(node.params.material) : undefined;
+    const libraryId = typeof held?.params.fluid === "string" ? held.params.fluid : "";
+    const region: BodyRegion = {
+      id: node.id,
+      name: node.name,
+      kind: node.params.kind === "solid" ? "solid" : "fluid",
+      materialName: held === undefined ? null : plainMaterialName(held.name, libraryId),
+      libraryId,
+    };
+    for (const part of wholeBodies(tag.params.members)) out.set(part, region);
+  });
+  return out;
+}
+
+/** The body ids a region tag holds whole, from its stored members (JSON text, or already a list). */
+function wholeBodies(stored: unknown): string[] {
+  let members: unknown = stored;
+  if (typeof stored === "string") {
+    try {
+      members = stored.trim() === "" ? [] : JSON.parse(stored);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(members)) return [];
+  const out: string[] = [];
+  for (const member of members) {
+    if (!isRecord(member) || typeof member.part !== "string") continue;
+    if (member.faces === undefined || member.faces === null || member.faces === "all") out.push(member.part);
+  }
+  return out;
+}
+
+/** The fluid body: the one the mesh settings name when it is a fluid, else the first fluid; or null. */
 export function fluidBody(bodies: readonly Body[]): Body | null {
-  return bodies.find((b) => b.role === "fluid") ?? null;
+  return bodies.find((b) => b.role === "fluid" && b.primary === true) ?? bodies.find((b) => b.role === "fluid") ?? null;
+}
+
+/** What the Fluid card says under the name of a body beside the first fluid. */
+export function otherBodyLine(body: Body): string {
+  if (body.region === undefined) return "Not in the simulation";
+  const kind = body.region.kind === "solid" ? "Solid" : "Fluid";
+  return body.region.materialName === null ? `${kind} · no material` : `${kind} · ${body.region.materialName}`;
+}
+
+/** The bodies that take part in the simulation: every fluid and every solid a region holds. */
+export function simulatedBodies(bodies: readonly Body[]): Body[] {
+  return bodies.filter((b) => b.role === "fluid" || (b.role === "solid" && b.region !== undefined));
 }
 
 /** An imported OpenFOAM case (a `foam_case` node, ADR-0029): the project is the case, not CAD. */
@@ -153,7 +238,7 @@ function first(root: NodeSummary | null | undefined, match: (node: NodeSummary) 
 }
 
 /** The library ids the cards know by a plain name. */
-const PLAIN_NAMES: Record<string, string> = { water_liquid: "Water", air: "Air" };
+const PLAIN_NAMES: Record<string, string> = { water_liquid: "Water", air: "Air", aluminium: "Aluminium", copper: "Copper" };
 
 /** "Water" for the built-in water, else the node's name with its underscores read as spaces. */
 export function plainMaterialName(name: string, libraryId: string): string {

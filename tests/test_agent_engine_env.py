@@ -241,6 +241,86 @@ def test_utilities_asks_the_captured_path_not_this_process(
 
 
 @POSIX_ONLY
+def test_the_probe_reports_the_cfmesh_programs_a_host_has_and_null_for_the_rest(
+    tmp_path: Path,
+) -> None:
+    """A host with `cartesianMesh` on the captured PATH reports its path; one without reports
+    null (present key, no program), which is how the Mesh card tells "absent" from "not asked"."""
+    from stokes.mesh.catalogue import mesher_needs
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool = bin_dir / "cartesianMesh"
+    tool.write_text("#!/bin/sh\necho hi\n")
+    tool.chmod(0o755)
+    with_it = utilities(capture_env(_exports(tmp_path, f"export PATH={bin_dir}:$PATH\n", "a")))
+    without = utilities(capture_env(_exports(tmp_path, "", "b")))
+    assert with_it["cartesianMesh"] == str(tool)
+    assert with_it["tetMesh"] is None
+    assert "cartesianMesh" in without and without["cartesianMesh"] is None
+    for mesher in ("cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex"):
+        assert set(mesher_needs(mesher)) <= set(with_it)
+
+
+def test_the_native_tool_table_reports_the_cfmesh_programs_everywhere(tmp_path: Path) -> None:
+    """The FoamWin path (`native_tools`) needs no bash: an install that ships the cfMesh programs
+    reports them, one that lacks them reports null for the same names."""
+    tool = str(tmp_path / "cartesianMesh.exe")
+    shipped = engine_env.EngineEnv(
+        "x",
+        {},
+        "OpenFOAM",
+        "14",
+        "org",
+        0.0,
+        native_tools={"blockMesh": "b", "cartesianMesh": tool},
+    )
+    lacking = engine_env.EngineEnv(
+        "x", {}, "OpenFOAM", "14", "org", 0.0, native_tools={"blockMesh": "b"}
+    )
+    assert utilities(shipped)["cartesianMesh"] == tool
+    assert utilities(lacking)["cartesianMesh"] is None
+    assert utilities(lacking)["polyDualMesh"] is None
+    assert set(utilities(lacking)) == set(engine_env.UTILITIES)
+
+
+def test_the_sourcing_shell_knows_the_account_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenFOAM's bashrc builds ``$HOME/OpenFOAM/$USER-14`` for a user's own programs. Without USER
+    it was ``~/OpenFOAM/-14`` and the cfMesh meshers built there were not on the captured PATH:
+    the WSL host refused a mesh job with "cartesianMesh is not on the engine's PATH" (2026-11-18).
+    Runs everywhere: it reads the environment the function builds, it does not source anything."""
+    monkeypatch.delenv("USER", raising=False)
+    monkeypatch.delenv("LOGNAME", raising=False)
+    for key in engine_env._INHERITED_RUNTIME:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr("getpass.getuser", lambda: "alice")
+    environment = engine_env._sourcing_environment()
+    assert environment["USER"] == environment["LOGNAME"] == "alice"
+    assert set(environment) == {"PATH", "HOME", "USER", "LOGNAME"}  # still nothing OpenFOAM's
+    monkeypatch.setenv("USER", "bob")
+    assert engine_env._sourcing_environment()["USER"] == "bob"
+    monkeypatch.delenv("USER")
+    monkeypatch.setattr("getpass.getuser", lambda: (_ for _ in ()).throw(KeyError("no entry")))
+    assert "USER" not in engine_env._sourcing_environment()
+
+
+def test_the_sourcing_shell_keeps_the_mpi_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenFOAM's bashrc assumes the MPI runtime is already on the library path: sourced from a bare
+    shell, `blockMesh -help` failed on ``libmpi.so.40`` (Linux host, 2026-11-21). The caller's PATH,
+    LD_LIBRARY_PATH and OpenMPI prefixes pass through; nothing of another install does."""
+    monkeypatch.setenv("PATH", "/opt/mpi/bin:/usr/bin")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/mpi/lib")
+    monkeypatch.setenv("OPAL_PREFIX", "/opt/mpi")
+    monkeypatch.setenv("WM_PROJECT_DIR", "/elsewhere/OpenFOAM-13")
+    monkeypatch.setenv("BASH_ENV", "/tmp/evil")
+    environment = engine_env._sourcing_environment()
+    assert environment["PATH"] == "/opt/mpi/bin:/usr/bin"
+    assert environment["LD_LIBRARY_PATH"] == "/opt/mpi/lib"
+    assert environment["OPAL_PREFIX"] == "/opt/mpi"
+    assert "WM_PROJECT_DIR" not in environment and "BASH_ENV" not in environment
+
+
+@POSIX_ONLY
 def test_the_capture_is_cached_and_refresh_re_captures(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

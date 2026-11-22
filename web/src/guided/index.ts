@@ -1,7 +1,7 @@
 /**
  * Guided mode's public face. Other code imports from here and from nowhere deeper:
  *
- * * `openGuidedStep(name)` opens a step's card (`geometry`, `fluid`, `boundaries`, `mesh`, `run`, `results`,
+ * * `openGuidedStep(name)` opens a step's card (`geometry`, `fluid`, `boundaries`, `mesh`, `run`, `results`, `optimise`,
  *   or the older names `import` and `define`); it returns false in Full mode, so a caller can fall back.
  * * `useGuidedMode()` / `currentMode()` say which mode the window is in.
  *

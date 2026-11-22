@@ -83,7 +83,8 @@ def test_indented_multi_region_time_records_progress_without_merging_residuals()
     )
     report = parser.report()
     assert report["iterations"] == 1 and report["last_time"] == pytest.approx(0.5)
-    assert events[0][1]["residuals"] == {}
+    # ADR-0042: each region's residual is its own curve, keyed `<region>.<field>`.
+    assert events[0][1]["residuals"] == {"fluid.e": 0.2, "solid.e": 0.3}
 
 
 def test_the_two_space_solve_line_and_a_varying_solver_name() -> None:

@@ -54,7 +54,7 @@ def test_meshers_needs_no_project() -> None:
         "polyhex",
         "gmsh",
     ]
-    # **All seven are built** (ADR-0032 added the four cfMesh fills, ADR-0007 decision 5 Gmsh).
+    # **All seven are built** (ADR-0032 added the four cfMesh fills, ADR-0043 the Gmsh driver).
     assert [item["built"] for item in reply["meshers"]] == [True] * 7
     assert all(item["why"] for item in reply["meshers"]), "every mesher must say why"
     assert "properties" in reply["schema"]
@@ -131,42 +131,31 @@ def test_a_second_configure_is_one_more_undo_step(session: Session) -> None:
 def test_configure_refuses_a_mesher_that_is_not_built(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """**Repointed from cfMesh to Gmsh** (ADR-0032 built cfMesh; before that, from snappy).
+    """An unbuilt mesher is refused with the catalogue's reason, and the refusal leaves the
+    settings alone.
 
-    snappyHexMesh is a built mesher and the DEFAULT now, so the old form of this test asserted the
-    opposite of the decision. cfMesh is the one that is still unbuilt, and the test's real subject
-    is unchanged: an unbuilt mesher is refused with the catalogue's reason, and the refusal leaves
-    the settings alone.
+    **Every catalogued mesher is built since ADR-0043**, so the unbuilt entry is stood in for: the
+    rule still guards the next mesher listed before its driver exists.
     """
-    # **Every mesher is built now** (Gmsh was the last), so the catalogue entry is made unbuilt
-    # here: the subject - an unbuilt mesher is refused with its reason - outlives any one mesher.
-    import dataclasses
+    from stokes.api.commands import mesh as commands
+    from stokes.mesh.catalogue import MesherSpec
 
-    from stokes.mesh import catalogue
-
-    unbuilt = tuple(
-        dataclasses.replace(
-            spec,
-            built=False,
-            why="Gmsh has no driver yet; use the cfMesh tetrahedral type for tetrahedra",
-        )
-        if spec.id == "gmsh"
-        else spec
-        for spec in catalogue.MESHERS
-    )
-    monkeypatch.setattr(catalogue, "MESHERS", unbuilt)
+    unbuilt = MesherSpec("gmsh", "Gmsh", False, (), "no driver yet; use the tetrahedral type")
+    monkeypatch.setattr(commands, "find_mesher", lambda _id: unbuilt)
     with pytest.raises(StokesError) as caught:
         session.execute("mesh.configure", mesher="gmsh")
     assert caught.value.code == "mesh.not_built"
-    # The catalogue's reason reaches the message, so the user learns when it arrives.
-    # **The reason names what a user can do** (claude-win2's review item 9): it read
-    # "cfMesh waits for its OpenFOAM 14 build gate (T-162)", and neither the ticket nor the
-    # gate means anything outside this repository.
+    # The catalogue's reason reaches the message, so the user learns what to do instead.
     assert "no driver yet" in str(caught.value)
-    assert "tetrahedral" in str(caught.value)
     found = _settings(session)
     assert found is not None, "G2: the node exists from project.new"
     assert found.params["mesher"] == "snappy", "the refusal changed the mesher anyway"
+
+
+def test_configure_accepts_gmsh(session: Session) -> None:
+    """ADR-0043: Gmsh is a built mesher and can be chosen."""
+    session.execute("mesh.configure", mesher="gmsh")
+    assert _params(session)["mesher"] == "gmsh"
 
 
 def test_configure_ACCEPTS_snappy_because_it_is_the_default(session: Session) -> None:
@@ -391,6 +380,8 @@ def test_the_commands_do_not_include_the_ones_the_briefs_exclude(session: Sessio
         "mesh.quality",
         # Which kept mesh is in use (ADR-0034): one result per mesher, the user picks.
         "mesh.use",
+        # The volume mesh at the section plane, by region (2026-11-20): read-only, cut by the host.
+        "mesh.section",
     }
     for absent in ("mesh.set", "mesh.delete", "mesh.add_refinement", "mesh.add_layers"):
         assert absent not in names

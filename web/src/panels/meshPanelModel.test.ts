@@ -8,6 +8,9 @@ import { finenessChoices, layersFor } from "../setup/meshBasic";
 import type { NodeSummary } from "../api/types";
 import {
   ASPECT_RATIO_LIMIT,
+  applyHostTools,
+  mesherAvailability,
+  readHostTools,
   LOG_CAP,
   MESH_PHASES,
   NO_LIVE,
@@ -24,6 +27,11 @@ import {
   formatCount,
   formatSeconds,
   generateState,
+  preparingLine,
+  NO_PREPARE,
+  applyPrepareEvent,
+  prepareFraction,
+  readPrepareEvent,
   isActive,
   isStale,
   keptMeshes,
@@ -245,6 +253,53 @@ describe("quality against the thresholds", () => {
   });
 });
 
+describe("a Generate press before its job exists", () => {
+  it("names the step, the host and the whole seconds", () => {
+    expect(preparingLine("prepare", 0.4, "local").text).toBe("Preparing the case on local");
+    expect(preparingLine("prepare", 12.7, "wsl:Ubuntu").text).toBe("Preparing the case on wsl:Ubuntu · 12 s");
+    expect(preparingLine("prepare", 91, "").text).toBe("Preparing the case · 1 min 31 s");
+    expect(preparingLine("prepare", 5, "local").detail).toMatch(/Cancel stops it\.$/);
+    expect(preparingLine("configure", 2, "local").text).toBe("Making the mesh settings · 2 s");
+  });
+
+  it("says the server's own step, its number and, while staging, the bytes sent", () => {
+    expect(preparingLine("probe", 3.2, "local").text).toBe("Checking the host on local · 3 s");
+    expect(preparingLine("probe", 3.2, "local").detail).toBe("Step 2 of 5. Cancel stops it before the job starts.");
+    const progress = { stepNumber: 4, steps: 5, bytesSent: 8 * 1024 * 1024, bytesTotal: 20 * 1024 * 1024 };
+    expect(preparingLine("stage", 40, "wsl:Ubuntu", progress).text).toBe("Sending the case to the host on wsl:Ubuntu · 40 s");
+    expect(preparingLine("stage", 40, "wsl:Ubuntu", progress).detail).toBe("Step 4 of 5: 8.0 MiB of 20.0 MiB sent. Cancel stops it before the job starts.");
+  });
+
+  it("reads mesh.preparing and mesh.prepared, and nothing else", () => {
+    const step = readPrepareEvent("mesh.preparing", { node_id: "n_00000001", step: "stage", step_number: 4, steps: 5, elapsed: 2.5, bytes_sent: 10, bytes_total: 40 });
+    expect(step).toEqual({ kind: "step", nodeId: "n_00000001", step: "stage", stepNumber: 4, steps: 5, elapsed: 2.5, bytesSent: 10, bytesTotal: 40 });
+    expect(readPrepareEvent("mesh.prepared", { node_id: "n_00000001", outcome: "failed", code: "mesh.invalid", message: "no part" })).toEqual({ kind: "end", nodeId: "n_00000001", outcome: "failed", code: "mesh.invalid", message: "no part" });
+    expect(readPrepareEvent("mesh.preparing", { node_id: "n_00000001", step: "shell" })).toBeNull();
+    expect(readPrepareEvent("mesh.preparing", { step: "probe" })).toBeNull();
+    expect(readPrepareEvent("mesh.progress", { node_id: "n_00000001", step: "probe" })).toBeNull();
+  });
+
+  it("follows one press: adopts its id, moves by step and bytes, ends on mesh.prepared", () => {
+    const first = readPrepareEvent("mesh.preparing", { node_id: "n_00000001", step: "snapshot", step_number: 1, steps: 5 });
+    const other = readPrepareEvent("mesh.preparing", { node_id: "n_00000002", step: "start", step_number: 5, steps: 5 });
+    const stage = readPrepareEvent("mesh.preparing", { node_id: "n_00000001", step: "stage", step_number: 4, steps: 5, bytes_sent: 50, bytes_total: 100 });
+    const end = readPrepareEvent("mesh.prepared", { node_id: "n_00000001", outcome: "cancelled" });
+    if (first === null || other === null || stage === null || end === null) throw new Error("unread");
+    const a = applyPrepareEvent(NO_PREPARE, first);
+    expect(a.state.nodeId).toBe("n_00000001");
+    expect(a.state.step).toBe("snapshot");
+    expect(prepareFraction(a.state.progress)).toBe(0);
+    // Another press's event does not move this one.
+    expect(applyPrepareEvent(a.state, other).state).toBe(a.state);
+    const b = applyPrepareEvent(a.state, stage);
+    expect(prepareFraction(b.state.progress)).toBeCloseTo(3.5 / 5);
+    const c = applyPrepareEvent({ ...b.state, cancelling: true }, end);
+    expect(c.ended).toEqual({ outcome: "cancelled", message: "" });
+    expect(c.state).toEqual(NO_PREPARE);
+    expect(prepareFraction(null)).toBeNull();
+  });
+});
+
 describe("Generate and Cancel", () => {
   it("is enabled when everything it needs is there", () => {
     expect(generateState(input())).toEqual({ enabled: true, reason: "", label: "Generate", force: false });
@@ -254,7 +309,8 @@ describe("Generate and Cancel", () => {
     expect(generateState(input({ connected: false })).reason).toMatch(/Not connected/);
     expect(generateState(input({ hasProject: false })).reason).toBe("Open a project first.");
     expect(generateState(input({ phase: "running" })).reason).toBe("A mesh is already running.");
-    expect(generateState(input({ busy: true })).reason).toMatch(/last request/);
+    expect(generateState(input({ busy: true })).reason).toBe("Preparing the case. Cancel stops it.");
+    expect(generateState(input({ busy: true, busyStep: "configure" })).reason).toBe("Making the mesh settings first.");
     expect(generateState(input({ mesher: SNAPPY })).reason).toBe("snappyHexMesh is not available: snappyHexMesh arrives in T-150");
     expect(generateState(input({ hasPart: false })).reason).toMatch(/no part to mesh/);
     expect(generateState(input({ domain: "box", boxFilled: false })).reason).toMatch(/six numbers/);
@@ -577,6 +633,67 @@ describe("the Mesh page's fineness chips and the base size", () => {
   it("the layers switch writes the card's layer count when on and none when off", () => {
     expect(layersFor(true)).toBe(SWITCH_LAYERS);
     expect(layersFor(false)).toBe(0);
+  });
+});
+
+describe("a mesher follows what the host has", () => {
+  const CATALOGUE = readMeshers({
+    meshers: [
+      { id: "snappy", label: "snappyHexMesh", built: true, domains: ["part"], why: "", needs: [] },
+      { id: "cfmesh", label: "Hex-dominant", built: true, domains: ["part"], why: "", needs: ["cartesianMesh"] },
+      { id: "polyhex", label: "Poly-hexcore", built: true, domains: ["part"], why: "", needs: ["cartesianMesh", "polyDualMesh"] },
+      { id: "gmsh", label: "Gmsh", built: false, domains: [], why: "no driver yet", needs: [] },
+    ],
+  });
+
+  it("offers everything while the host has not answered", () => {
+    expect(mesherAvailability("cfmesh", null, CATALOGUE)).toEqual({ available: true, why: "" });
+    expect(applyHostTools(CATALOGUE, null).map((m) => m.built)).toEqual([true, true, true, false]);
+  });
+
+  it("offers a mesher whose program the host has", () => {
+    expect(mesherAvailability("cfmesh", { cartesianMesh: "/bin/cartesianMesh" }, CATALOGUE).available).toBe(true);
+  });
+
+  it("refuses one whose program the host lacks, and says which", () => {
+    expect(mesherAvailability("cfmesh", { cartesianMesh: null }, CATALOGUE)).toEqual({ available: false, why: "Not installed on this host: cartesianMesh" });
+  });
+
+  it("lists every missing program of a mesher that needs two", () => {
+    const tools = { cartesianMesh: null, polyDualMesh: null };
+    expect(mesherAvailability("polyhex", tools, CATALOGUE).why).toBe("Not installed on this host: cartesianMesh, polyDualMesh");
+    expect(mesherAvailability("polyhex", { cartesianMesh: "/x", polyDualMesh: null }, CATALOGUE).why).toBe("Not installed on this host: polyDualMesh");
+  });
+
+  it("does not count a program the host was never asked about, and a mesher with no needs is always available", () => {
+    expect(mesherAvailability("cfmesh", { blockMesh: "/x" }, CATALOGUE).available).toBe(true);
+    expect(mesherAvailability("snappy", { cartesianMesh: null }, CATALOGUE).available).toBe(true);
+    expect(mesherAvailability("nope", { cartesianMesh: null }, CATALOGUE).available).toBe(true);
+  });
+
+  it("keeps an unavailable mesher listed, unbuilt, with the reason, and Generate says why", () => {
+    const listed = applyHostTools(CATALOGUE, { cartesianMesh: null, polyDualMesh: "/x" });
+    expect(listed.map((m) => [m.id, m.built])).toEqual([["snappy", true], ["cfmesh", false], ["polyhex", false], ["gmsh", false]]);
+    expect(listed[1].why).toBe("Not installed on this host: cartesianMesh");
+    expect(listed[3].why).toBe("no driver yet");
+    const state = generateState({ connected: true, hasProject: true, phase: "none", stale: false, domain: "part", hasPart: true, boxFilled: false, mesher: listed[1], host: null, busy: false } as Parameters<typeof generateState>[0]);
+    expect(state.enabled).toBe(false);
+    expect(state.reason).toBe("Not installed on this host: cartesianMesh. Pick another mesher or host.");
+  });
+
+  it("reads the default install's programs from a host.probe record", () => {
+    const record = {
+      default_install_id: "e_b",
+      utilities: ["blockMesh"],
+      installs: [
+        { id: "e_a", supported: true, utilities: { cartesianMesh: "/a" } },
+        { id: "e_b", supported: true, utilities: { cartesianMesh: null, tetMesh: "/t" } },
+      ],
+    };
+    expect(readHostTools(record)).toEqual({ cartesianMesh: null, tetMesh: "/t" });
+    expect(readHostTools({ installs: [] })).toBeNull();
+    expect(readHostTools({ installs: [{ id: "e_a", supported: false, utilities: {} }] })).toBeNull();
+    expect(readHostTools(null)).toBeNull();
   });
 });
 

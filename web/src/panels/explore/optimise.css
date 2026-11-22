@@ -1,0 +1,363 @@
+/* The Optimise panel (ADR-0038): a narrow column of fields, the variables, the progress, the charts and the table. */
+.optimise-panel {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  font-size: 12.5px;
+  /* Stops short of the view buttons and the axis gizmo at the bottom right. */
+  max-height: calc(100vh - 290px);
+}
+.optimise-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.optimise-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  overflow-y: auto;
+}
+.optimise-body > * {
+  /* The body scrolls when it is taller than the panel; its children keep their size. */
+  flex-shrink: 0;
+}
+.optimise-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.optimise-field .select-wrap,
+.optimise-var-top .select-wrap {
+  min-width: 0;
+}
+.optimise-field select,
+.optimise-var-top select {
+  width: 100%;
+}
+.optimise-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.optimise-head {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* A variable: the quantity by name, its bounds in its unit, then its full reference. */
+.optimise-variable {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.optimise-var-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+.optimise-bounds {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 4px;
+}
+.optimise-bounds input {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.optimise-unit {
+  font-size: 11px;
+}
+.optimise-var-label {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.optimise-run {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  /* Stays at the foot of the panel while the form above it scrolls: on an 800 px window Start was the
+     last thing in view and Check gradient was under the fold. Once scrolled to, it moves with the page. */
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 -12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--panel-border);
+  background: var(--panel-solid);
+}
+/* Check gradient takes the second row, the width of the panel. */
+.optimise-run > [data-ws="optimise-check"] {
+  grid-column: 1 / -1;
+}
+.optimise-cycles {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.optimise-cycles input {
+  width: 56px;
+}
+.optimise-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.optimise-icon,
+.optimise-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.optimise-icon:hover,
+.optimise-add:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.optimise-add {
+  align-self: flex-start;
+  padding: 2px 6px;
+}
+.optimise-note,
+.optimise-status {
+  margin: 0;
+  font-size: 12px;
+}
+.optimise-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* What the run is doing now: one line, a thin bar, and the ways to stop it. */
+/* The run's progress and its Stop buttons stay in sight at the bottom of the scrolling body
+   (walkthrough 2026-11-18): below the fields, they were under the panel's fold while a run went on. */
+.optimise-progress {
+  position: sticky;
+  bottom: -12px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel-solid, var(--bg-elev));
+  box-shadow: 0 -8px 16px -12px rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+}
+.optimise-progress-text {
+  font-variant-numeric: tabular-nums;
+}
+.optimise-bar {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--track);
+}
+.optimise-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 160ms ease-out;
+}
+.optimise-progress-actions,
+.optimise-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The charts: each its own figure with its caption, so nothing wraps between two series. */
+.optimise-figure {
+  margin: 0;
+}
+.optimise-caption {
+  margin-bottom: 2px;
+  font-size: 11px;
+}
+.optimise-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel-solid);
+}
+.optimise-chart polyline {
+  fill: none;
+  stroke-width: 1.5;
+}
+.optimise-grid {
+  stroke: var(--panel-border);
+  stroke-width: 1;
+}
+.optimise-axis {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+.optimise-tick {
+  fill: var(--text-muted);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+.optimise-j polyline {
+  stroke: var(--accent);
+}
+.optimise-j circle {
+  fill: var(--accent);
+}
+.optimise-g polyline {
+  stroke: var(--text-muted);
+  stroke-dasharray: 4 3;
+}
+.optimise-g circle {
+  fill: var(--text-muted);
+}
+.optimise-chart circle.optimise-best-dot {
+  fill: var(--panel-solid);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* The cycles, one row each. */
+.optimise-table-wrap {
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+.optimise-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.optimise-table th,
+.optimise-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--panel-border);
+  text-align: right;
+  white-space: nowrap;
+}
+.optimise-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel-solid);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.optimise-table tr.best td {
+  color: var(--accent);
+}
+
+.optimise-best {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+.optimise-best-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.optimise-warn {
+  color: var(--warn);
+}
+.optimise-best .mono {
+  overflow-wrap: anywhere;
+}
+
+/* The flow split: the outlets to share among, the target, and the per-cycle shares. */
+.optimise-outlets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.optimise-outlets label,
+.optimise-choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.optimise-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px auto;
+  align-items: center;
+  gap: 6px;
+}
+.optimise-inline input {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.optimise-choice small {
+  margin-left: 22px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.optimise-dev polyline {
+  stroke: var(--ok);
+}
+.optimise-dev circle {
+  fill: var(--ok);
+}
+.optimise-target-line {
+  stroke: var(--warn);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.optimise-table td.off {
+  color: var(--warn);
+}
+.optimise-table td.on {
+  color: var(--ok);
+}
+.optimise-table caption {
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: left;
+  caption-side: top;
+}
+
+/* The gradient check's verdict and its rows. */
+.optimise-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.optimise-verdict-word {
+  font-weight: 600;
+}
+.optimise-verdict-word.ok {
+  color: var(--ok);
+}
+.optimise-verdict-word.warn {
+  color: var(--warn);
+}
+.optimise-verdict-word.bad {
+  color: var(--danger);
+}

@@ -5,7 +5,7 @@ import { readMeshers } from "./meshPanelModel";
 
 describe("mesher kinds (ADR-0032)", () => {
   it("the cfMesh fills follow the shape; blockMesh does not", () => {
-    for (const id of ["snappy", "cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex", "gmsh"]) expect(followsShape(id)).toBe(true);
+    for (const id of ["snappy", "cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex"]) expect(followsShape(id)).toBe(true);
     expect(followsShape("blockmesh")).toBe(false);
     expect(isCfMesh("polyhex")).toBe(true);
     expect(isCfMesh("snappy")).toBe(false);
@@ -14,7 +14,6 @@ describe("mesher kinds (ADR-0032)", () => {
   it("the Cores line says how the count is spent", () => {
     expect(coresDescription("snappy", "mpi")).toContain("MPI");
     expect(coresDescription("cfmesh_poly", "threads")).toContain("OpenMP threads");
-    expect(coresDescription("gmsh", "threads")).toBe("Gmsh meshes in one process with this many threads.");
     expect(coresDescription("blockmesh", "serial")).toContain("serially");
     // An older server without `parallel` falls back on the id.
     expect(coresDescription("cfmesh", "")).toContain("OpenMP");
@@ -30,6 +29,17 @@ describe("mesher kinds (ADR-0032)", () => {
     expect(meshSettingIncluded("feature_angle", ctx)).toBe(false);
     expect(meshSettingIncluded("feature_angle", { ...ctx, mesher: "polyhex" })).toBe(true);
     expect(meshSettingIncluded("first_layer_height", { ...ctx, layerMode: "first_height" })).toBe(true);
+  });
+
+  it("Gmsh follows the shape and takes the layer, size and feature-angle controls (ADR-0043)", () => {
+    expect(followsShape("gmsh")).toBe(true);
+    expect(isCfMesh("gmsh")).toBe(false);
+    expect(coresDescription("gmsh", "serial")).toBe("Gmsh runs serially. Choose snappyHexMesh or a cfMesh type to mesh with several cores.");
+    const ctx = { mesher: "gmsh", domain: "part", layerMode: "final_ratio" };
+    for (const name of ["layers", "surface_size", "expansion_ratio", "final_ratio", "feature_angle"]) expect(meshSettingIncluded(name, ctx)).toBe(true);
+    expect(meshSettingIncluded("first_layer_height", { ...ctx, layerMode: "first_height" })).toBe(true);
+    expect(meshSettingIncluded("final_ratio", { ...ctx, layerMode: "first_height" })).toBe(false);
+    for (const name of ["min_thickness_ratio", "layer_feature_angle", "margin"]) expect(meshSettingIncluded(name, ctx)).toBe(false);
   });
 
   it("the catalogue's parallel word is read", () => {

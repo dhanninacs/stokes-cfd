@@ -47,6 +47,7 @@ import {
   type Verdict,
 } from "./meshPanelModel";
 import { cancelMesh, generateMesh, loadMeshContext, useGenerateState, useMeshContext } from "./meshRun";
+import MeshPreparing from "./MeshPreparing";
 import MeshBasic from "./MeshBasic";
 import SettingsNodeFields from "./SettingsNodeFields";
 
@@ -328,7 +329,8 @@ export default function MeshPanel({ hideInAdvanced = [] }: {
             </>
           )}
         </p>
-        {!generate.enabled && !cancel.visible && (
+        {busy && !cancel.visible && <MeshPreparing />}
+        {!generate.enabled && !cancel.visible && !busy && (
           <p className="muted mesh-hint" data-ws="mesh-why">
             {generate.reason}
           </p>

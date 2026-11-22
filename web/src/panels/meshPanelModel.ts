@@ -39,6 +39,50 @@ function strings(value: unknown): string[] {
 }
 
 // ---------------------------------------------------------------------------------------------- the mesher catalogue
+/**
+ * What a host reports about its programs: name -> where it is, or null when the host looked and has
+ * none. A name that is not a key was not asked about (an older agent), which is not a refusal.
+ */
+export type HostTools = Readonly<Record<string, string | null>>;
+
+/**
+ * The programs of the install a mesh will run on, from a `host.probe` record: the default install's
+ * own `utilities` (resolved on that install's captured PATH, which is what the job launches
+ * against). The record's top-level `utilities` is a different thing - a list of what sits in the
+ * install's bin folder - so it is not read. Null when the host or its install is not known.
+ */
+export function readHostTools(record: unknown): HostTools | null {
+  if (!isRecord(record) || !Array.isArray(record.installs)) return null;
+  const wanted = text(record.default_install_id);
+  const install = record.installs.find((entry) => isRecord(entry) && entry.supported === true && (wanted === "" || entry.id === wanted));
+  if (!isRecord(install) || !isRecord(install.utilities)) return null;
+  const out: Record<string, string | null> = {};
+  for (const [name, where] of Object.entries(install.utilities)) out[name] = typeof where === "string" && where !== "" ? where : null;
+  return Object.keys(out).length === 0 ? null : out;
+}
+
+/**
+ * Whether a host can run a mesher. With no answer from the host yet (null) everything is available:
+ * a refusal is never guessed. With one, a mesher is unavailable when a program it needs is reported
+ * missing; a program the host was not asked about does not count against it.
+ */
+export function mesherAvailability(mesherId: string, hostTools: HostTools | null, meshers: readonly Pick<MesherInfo, "id" | "needs">[]): { available: boolean; why: string } {
+  if (hostTools === null) return { available: true, why: "" };
+  const needs = meshers.find((m) => m.id === mesherId)?.needs ?? [];
+  const missing = needs.filter((name) => Object.prototype.hasOwnProperty.call(hostTools, name) && hostTools[name] === null);
+  return missing.length === 0 ? { available: true, why: "" } : { available: false, why: `Not installed on this host: ${missing.join(", ")}` };
+}
+
+/** The catalogue as this host sees it: a mesher the host cannot run stays listed, unbuilt, with the reason. */
+export function applyHostTools(meshers: readonly MesherInfo[], hostTools: HostTools | null): MesherInfo[] {
+  if (hostTools === null) return [...meshers];
+  return meshers.map((m) => {
+    if (!m.built) return m;
+    const answer = mesherAvailability(m.id, hostTools, meshers);
+    return answer.available ? m : { ...m, built: false, why: answer.why, hostWhy: answer.why };
+  });
+}
+
 /** One entry of `mesh.meshers` (`stokes/mesh/catalogue.py`): `built` false carries the reason in `why`. */
 export interface MesherInfo {
   id: string;
@@ -59,6 +103,10 @@ export interface MesherInfo {
   outputStructures: string[];
   /** How `cores` is spent: `mpi`, `threads` or `serial` (ADR-0032); "" from a server that does not say. */
   parallel?: string;
+  /** The programs beyond a plain install this mesher launches (`mesh.meshers`); absent from an older server. */
+  needs?: string[];
+  /** Set by `applyHostTools` when the chosen host lacks a program this mesher needs: the sentence saying which. */
+  hostWhy?: string;
   /**
    * Whether this mesher grows boundary layers; null from a server that does not say, which a client treats
    * as "can" so an older build never shows a false notice.
@@ -88,6 +136,7 @@ export function readMeshers(payload: unknown): MesherInfo[] {
       */
       outputStructures: strings(entry.output_structures),
       parallel: text(entry.parallel),
+      needs: strings(entry.needs),
       layers: typeof entry.layers === "boolean" ? entry.layers : null,
       layersWhy: text(entry.layers_why),
     });
@@ -112,7 +161,7 @@ export const MESHER_STEPS: Readonly<Record<string, readonly string[]>> = {
   // A planar symmetry face is flattened and its type set back (stokes/mesh/drivers/cfmesh.py).
   cfmesh_poly: ["pMesh", "improveSymmetryPlanes", "symmetryType", "checkMesh"],
   polyhex: ["cartesianMesh", "polyDualMesh", "checkMesh"],
-  // Gmsh on the part's CAD, then the converter and the wall/symmetry types (stokes/mesh/drivers/gmsh.py).
+  // Gmsh's script, the conversion and the wall/symmetry types set (stokes/mesh/drivers/gmsh.py).
   gmsh: ["gmsh", "gmshToFoam", "patchType", "checkMesh"],
 };
 
@@ -660,6 +709,115 @@ export interface GenerateInput {
   host: { name: string; available: boolean; why: string } | null;
   /** A configure or generate call is in flight from this panel. */
   busy: boolean;
+  /** Which part of the press is in flight (see `PrepareStep`); "" when the panel does not say. */
+  busyStep?: PrepareStep | "";
+}
+
+/**
+ * What a press of Generate does before the job exists, in order: the settings node is made when there is none
+ * (`configure`), then `mesh.generate` answers `preparing` at once (`prepare`, until the first event) and a worker on
+ * the server runs the named steps, each announced by a `mesh.preparing` event (ADR-0024 addendum 2026-11-14):
+ * `snapshot` (the surfaces), `probe` (the host), `compile` (the case files), `stage` (the upload, with bytes) and
+ * `start`. `mesh.prepared` ends it. **`mesh.cancel` works throughout**: the worker reads the flag between steps and
+ * between staging chunks.
+ */
+export type ServerPrepareStep = "snapshot" | "probe" | "compile" | "stage" | "start";
+export type PrepareStep = "configure" | "prepare" | ServerPrepareStep;
+
+/** The server's steps in order, as `mesh.preparing` names them. */
+export const SERVER_PREPARE_STEPS: readonly ServerPrepareStep[] = ["snapshot", "probe", "compile", "stage", "start"];
+
+/** Each step as a person says it, for the line under the button. */
+export const PREPARE_STEP_WORDS: Readonly<Record<ServerPrepareStep, string>> = {
+  snapshot: "Building the surfaces",
+  probe: "Checking the host",
+  compile: "Writing the case files",
+  stage: "Sending the case to the host",
+  start: "Starting the job",
+};
+
+function isServerStep(step: string): step is ServerPrepareStep {
+  return (SERVER_PREPARE_STEPS as readonly string[]).includes(step);
+}
+
+/** Where the server's preparation is, from its events; the numbers are null until the first event. */
+export interface PrepareProgress {
+  stepNumber: number;
+  steps: number;
+  bytesSent: number | null;
+  bytesTotal: number | null;
+}
+
+/** A `mesh.preparing` or `mesh.prepared` event, typed; null for anything else. */
+export type PrepareEvent =
+  | ({ kind: "step"; nodeId: string; step: ServerPrepareStep; elapsed: number } & PrepareProgress)
+  | { kind: "end"; nodeId: string; outcome: string; code: string; message: string };
+
+export function readPrepareEvent(event: string, data: Record<string, unknown>): PrepareEvent | null {
+  const nodeId = text(data.node_id);
+  if (nodeId === "") return null;
+  if (event === "mesh.prepared") return { kind: "end", nodeId, outcome: text(data.outcome), code: text(data.code), message: text(data.message) };
+  if (event !== "mesh.preparing") return null;
+  const step = text(data.step);
+  if (!isServerStep(step)) return null;
+  const steps = num(data.steps) ?? SERVER_PREPARE_STEPS.length;
+  const index = num(data.step_number) ?? SERVER_PREPARE_STEPS.indexOf(step) + 1;
+  return {
+    kind: "step",
+    nodeId,
+    step,
+    stepNumber: Math.min(Math.max(1, Math.round(index)), Math.max(1, steps)),
+    steps: Math.max(1, Math.round(steps)),
+    elapsed: Math.max(0, num(data.elapsed) ?? 0),
+    bytesSent: num(data.bytes_sent),
+    bytesTotal: num(data.bytes_total),
+  };
+}
+
+/** The preparation a press is following: the result id the server chose, its step and progress, and a Cancel asked. */
+export interface PrepareState {
+  nodeId: string;
+  step: PrepareStep | "";
+  progress: PrepareProgress | null;
+  cancelling: boolean;
+}
+
+export const NO_PREPARE: PrepareState = { nodeId: "", step: "", progress: null, cancelling: false };
+
+/**
+ * The preparation after one event, and whether it has ended. An event for another press is ignored; with no id yet
+ * (the `mesh.generate` answer can arrive after the first event) the event's id is adopted.
+ */
+export function applyPrepareEvent(state: PrepareState, event: PrepareEvent): { state: PrepareState; ended: { outcome: string; message: string } | null } {
+  if (state.nodeId !== "" && state.nodeId !== event.nodeId) return { state, ended: null };
+  if (event.kind === "end") return { state: NO_PREPARE, ended: { outcome: event.outcome, message: event.message } };
+  const progress: PrepareProgress = { stepNumber: event.stepNumber, steps: event.steps, bytesSent: event.bytesSent, bytesTotal: event.bytesTotal };
+  return { state: { ...state, nodeId: event.nodeId, step: event.step, progress }, ended: null };
+}
+
+/** How far the preparation is, 0 to 1: the steps done, plus the share of the upload sent while staging. */
+export function prepareFraction(progress: PrepareProgress | null): number | null {
+  if (progress === null || progress.stepNumber < 1) return null;
+  const within = progress.bytesSent !== null && progress.bytesTotal !== null && progress.bytesTotal > 0 ? Math.min(1, progress.bytesSent / progress.bytesTotal) : 0;
+  return Math.min(1, (progress.stepNumber - 1 + within) / progress.steps);
+}
+
+function mib(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+/** The line shown while a press of Generate has not yet started a job: the step, the host and the seconds so far. */
+export function preparingLine(step: PrepareStep | "", seconds: number, host: string, progress: PrepareProgress | null = null): { text: string; detail: string } {
+  const whole = Math.floor(seconds);
+  const took = whole >= 1 ? ` · ${whole < 60 ? `${whole} s` : formatSeconds(whole)}` : "";
+  const where = host !== "" ? ` on ${host}` : "";
+  if (step === "configure") return { text: `Making the mesh settings${took}`, detail: "The project has no mesh settings yet: they are made from the defaults first." };
+  if (isServerStep(step)) {
+    const count = progress !== null ? `Step ${progress.stepNumber} of ${progress.steps}` : `Step ${SERVER_PREPARE_STEPS.indexOf(step) + 1} of ${SERVER_PREPARE_STEPS.length}`;
+    const sent = step === "stage" && progress !== null && progress.bytesSent !== null && progress.bytesTotal !== null && progress.bytesTotal > 0 ? `: ${mib(progress.bytesSent)} of ${mib(progress.bytesTotal)} sent` : "";
+    return { text: `${PREPARE_STEP_WORDS[step]}${where}${took}`, detail: `${count}${sent}. Cancel stops it before the job starts.` };
+  }
+  return { text: `Preparing the case${where}${took}`, detail: "The server is preparing the case: the surfaces, the host, the case files, then the upload. Cancel stops it." };
 }
 
 export interface GenerateState {
@@ -684,8 +842,12 @@ export function generateState(input: GenerateInput): GenerateState {
   if (!input.connected) return no("Not connected to the Stokes server.");
   if (!input.hasProject) return no("Open a project first.");
   if (isActive(input.phase)) return no("A mesh is already running.");
-  if (input.busy) return no("Working on the last request.");
-  if (input.mesher !== null && !input.mesher.built) return no(`${input.mesher.label} is not available: ${input.mesher.why}`);
+  if (input.busy) return no(input.busyStep === "configure" ? "Making the mesh settings first." : "Preparing the case. Cancel stops it.");
+  if (input.mesher !== null && !input.mesher.built) {
+    // A host that lacks the mesher's program says so in one sentence, with the way out.
+    if (input.mesher.hostWhy) return no(`${input.mesher.hostWhy}. Pick another mesher or host.`);
+    return no(`${input.mesher.label} is not available: ${input.mesher.why}`);
+  }
   if (input.domain === "box") {
     if (!input.boxFilled) return no("Give the box six numbers (min and max on x, y and z).");
   } else if (!input.hasPart) {

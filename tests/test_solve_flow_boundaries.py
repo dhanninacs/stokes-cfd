@@ -82,3 +82,17 @@ def test_a_lost_symmetry_plane_does_not_refuse(monkeypatch: pytest.MonkeyPatch) 
     """Its faces become wall: a different wall, not a different problem."""
     _mesh(monkeypatch, {"cold_inlet": COLD, "hot_inlet": HOT, "outlet": OUT})
     snapshot._require_flow_boundaries_meshed(_Project([COLD, HOT, OUT, SYM]), {})
+
+
+def test_a_mesh_with_negative_cells_is_refused_and_other_failed_checks_are_not() -> None:
+    """**A negative volume is a wrong cell, not a poor one** (cfMesh polyhedral with layers on the
+    gyroid exchanger: 12 such cells, and the solve ran)."""
+    with pytest.raises(SolveInvalid) as caught:
+        snapshot._require_sound_cells({"quality": {"negative_volume_cells": 12}})
+    assert caught.value.code == "solve.negative_cells"
+    assert "12 cells of negative volume" in str(caught.value)
+    # Skewness, a mesh in pieces, unused points: warnings, not refusals.
+    snapshot._require_sound_cells(
+        {"quality": {"negative_volume_cells": None, "regions": 2, "unused_points": 374461}}
+    )
+    snapshot._require_sound_cells({})

@@ -1325,6 +1325,15 @@ select.field {
     transform: translateX(185%);
   }
 }
+/* A Generate press before its job exists: the step, the host and the time (MeshPreparing). */
+.mesh-preparing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mesh-preparing p {
+  margin: 0;
+}
 .mesh-actions {
   display: flex;
   gap: 8px;

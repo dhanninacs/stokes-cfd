@@ -1,6 +1,6 @@
 # Production readiness
 
-**Checked 2026-11-09** on the Windows host with the FoamWin OpenFOAM 14 install, branch `windows`.
+**Checked 2026-11-20** (first written 2026-11-09) on the Windows host with the FoamWin OpenFOAM 14 install, branch `windows`.
 This is a record of what was run and what is open, not a promise: an item is only "verified" if the
 command beside it was run and passed.
 
@@ -8,15 +8,17 @@ command beside it was run and passed.
 
 | Check | Command | Result |
 |---|---|---|
-| Lint, format | `ruff check .` and `ruff format --check .` | clean, 713 files |
-| Types | `mypy` | clean, 342 files (the browser review harnesses under `tools/` are excluded, see `pyproject.toml`) |
-| Python tests | `pytest -q` | 4,789 passed, 0 failed, 265 skipped (tests that need an engine or a display) |
-| Front-end tests, types, build | `npm test`, `npm run typecheck`, `npm run build` in `web/` | 2,334 tests pass, clean, builds |
+| Lint, format | `ruff check .` and `ruff format --check .` | clean, 835 files |
+| Types | `mypy` | clean, 403 files (the browser review harnesses under `tools/` are excluded, see `pyproject.toml`) |
+| Python tests | `pytest -q` with `STOKES_FOAMWIN_ENV` set | 5,327 passed, 0 failed, 266 skipped (tests that need an engine or a display); without an OpenFOAM install the two install tests skip with the reason |
+| Front-end tests, types, build | `npm test`, `npm run typecheck`, `npm run build` in `web/` | 2,532 tests pass, clean, builds |
 | Layering, IP, OpenFOAM-content gates | `tools/check_forbidden_imports.py`, `check_ip.py`, `check_no_foam_content.py` | clean |
 | Licences | `tools/audit_licenses.py`, `tools/audit_js_licenses.py` | 117 Python and 76 JS packages clean |
 | Vulnerabilities | `pip-audit`, `npm audit --omit=dev` | none known |
-| Performance budgets | `pytest -m perf` | 18 of 18 pass |
+| Performance budgets | `pytest -m perf` | 19 of 19 pass |
 | Real end-to-end on Windows | the mixing-elbow walkthrough in the app: mesh (snappy, tet, polyhedral), 4-core solve with k-omega SST, results, autosave and restore | works; see `CHANGELOG.md` |
+| Desktop window (QtWebEngine host) on the current build | `python -m stokes.app --project … --drive --setup … --screenshot …` | 2026-11-20: the plate exchanger opened; section (solid and mesh cells), wall-following streamlines, five-level 3-D contours and Rotate on a CAD body clicked through by script; two defects found and fixed (a rotated CAD body's original stayed simulated; contour levels outside the legend's range) |
+| FoamWin release ZIP, fresh install | `sha256sum OF14-win.zip`; unzip into an empty folder; `of14-smoke-test.ps1`, `of14-mesh-test.ps1`, `of14-cfmesh-test.ps1`, `of14-runtime-test.ps1`; `tools/e2e_duct.py` with `STOKES_FOAMWIN_ENV` on the fresh folder | 2026-11-20: checksum matches `SHA256SUMS.txt` (ccd243ed...); all four package tests pass (blockMesh, checkMesh, icoFoam; parallel snappy on 2 ranks; cfMesh with layers; foamRun, foamPostProcess, foamToVTK); Stokes duct end to end 4 of 4 PASS (residuals 6 decades, mass 1.6e-7, dp 1.059x developed, wall p monotonic). This is the 7 Nov ZIP; FoamWin's fix branch is in no release |
 | CI | `.github/workflows/ci.yml` | runs all of the above on Windows and Linux, Python 3.13 and 3.14 (front-end tests added 2026-11-09) |
 
 ## Not production-ready: needs the owner or a toolchain this host lacks
@@ -28,7 +30,7 @@ command beside it was run and passed.
    the owner's decision to ship unsigned.
 2. **Trade-mark search for "Stokes"** (open question A3, the owner's task).
 3. **Version.** The package is `0.0.1.dev0`. The first release number is the owner's call.
-4. **FoamWin is not release-verified.** `docs/HANDOVER.md`: no `#codeStream` compiler in the package
+4. **FoamWin: the shipped ZIP installs and runs (2026-11-20, see Verified), but it is not rebuilt.** `docs/HANDOVER.md`: no `#codeStream` compiler in the package
    (U2), `libinterRegionFvModels.dll` not copied or tested, the packaged ZIP not rebuilt since the last
    tool changes. The Gmsh driver is not wired and cfMesh was built against an older OpenFOAM target.
 5. **One M0 geometry performance gate is still open.** A cold open of a saved 4,500-part project is now 1.5 s (was 49.5 s). STEP import of the 4,500-solid, 52 MB pin grid is 41 s on a 24-CPU host (was 75 s) against a 30 to 40 s target; the 26.5 s OCCT read is the floor. Measured on this host, not on the owner's laptop.
@@ -45,6 +47,14 @@ command beside it was run and passed.
   Mesh card (`docs/TASKLIST.md`). Polyhedral and snappyHexMesh meshes are not affected.
 - The elbow solves stop at 500 iterations as "not converged" with residuals just above the 1e-4 target.
   The answers are consistent between meshes, so this is a setting to decide, not a defect.
+
+## Owner decisions (2026-11-21)
+
+- **Installer:** not required for now. The deliverable is the code in the repository (the app runs from source with
+  `python -m stokes.app`); the signed Nuitka build of ADR-0009 stays the plan for a later release, and no unsigned
+  PyInstaller stopgap is made.
+- **Version:** stays `0.0.1.dev0` for now; no release number chosen.
+- **FoamWin:** the changes Stokes needs are listed in `docs/FOAMWIN-REQUESTS.md` (F1-F5); the owner updates FoamWin.
 
 ## What a release still needs, in order
 

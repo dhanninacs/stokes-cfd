@@ -9,7 +9,9 @@ boolean's tools) with their versions and the specs the shape provider loads them
 (:func:`stokes.geometry.operations.output_basis`) and against which staleness is judged. What
 cannot run is refused here, before any worker starts: a part that is gone or not a part, a
 mesh-only part (``geometry.mesh_only``), too few inputs, an operation that would read its own
-output through the operations before it.
+output through the operations before it. An implicit operation (ADR-0035) reads implicit parts
+only, and its plan carries each input's **recipe** (:func:`implicit_recipe`) instead of a B-rep to
+load.
 
 Import rule: the standard library, the model and the light geometry modules; the store is passed
 in. No OCP, no numpy.
@@ -23,9 +25,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from stokes.geometry.errors import MeshOnly, OperationInvalid
-from stokes.geometry.model import OPERATION_COMMON, OPERATIONS_PATH, TAG_TYPE, operation_type
+from stokes.geometry.model import (
+    BREPLESS_FAMILIES,
+    OPERATION_COMMON,
+    OPERATIONS_PATH,
+    TAG_TYPE,
+    is_implicit_operation,
+    operation_type,
+)
 from stokes.model.ids import is_id
 from stokes.model.nodes import QuantityValue
+from stokes.model.schema import VECTOR_AXES
 
 if TYPE_CHECKING:
     from stokes.geometry.store import GeometryStore
@@ -101,7 +111,8 @@ def build_plan(
     folder = geo.shape_dir()
     bases = {n.id: geo.basis(n) for n in nodes}
     rebuild: list[str] = []
-    if check_cache:
+    implicit = is_implicit_operation(node.type)
+    if check_cache and not implicit:
         for n in nodes:
             upstream = str(n.params.get("derived") or "")
             if upstream and not fresh(brep_path(folder, n.id), bases[n.id]):
@@ -117,11 +128,31 @@ def build_plan(
         [n.id for n in nodes],
         bases,
         seed,
-        [part_spec(n, folder, bases[n.id]) for n in nodes],
+        [
+            _implicit_spec(project, n) if implicit else part_spec(n, folder, bases[n.id])
+            for n in nodes
+        ],
         folder,
         refs,
         list(dict.fromkeys(rebuild)),
     )
+
+
+def compound_si(node: Node, name: str, kind: str) -> Any:  # Any: JSON
+    """A vector's three components, or a map's entries by name, in SI (ADR-0037): the form the
+    operation builders read (a vector as a list of three numbers)."""
+    prefix = f"{name}."
+    if kind == "vector":
+        values = []
+        for axis in VECTOR_AXES:
+            stored = node.params.get(prefix + axis)
+            values.append(stored.value if isinstance(stored, QuantityValue) else 0.0)
+        return values
+    return {
+        key[len(prefix) :]: value.value
+        for key, value in node.params.items()
+        if key.startswith(prefix) and isinstance(value, QuantityValue)
+    }
 
 
 def _params(project: Project, node: Node) -> tuple[dict[str, Any], list[str]]:
@@ -149,6 +180,9 @@ def _params(project: Project, node: Node) -> tuple[dict[str, Any], list[str]]:
     for spec in project.spec_of(node).params:
         if spec.name in OPERATION_COMMON:
             continue
+        if spec.kind in ("vector", "quantity_map"):
+            params[spec.name] = compound_si(node, spec.name, spec.kind)
+            continue
         value = node.params.get(spec.name)
         if isinstance(value, QuantityValue):
             value = value.value
@@ -166,6 +200,15 @@ def _params(project: Project, node: Node) -> tuple[dict[str, Any], list[str]]:
                 current: Any = _parse(raw) if isinstance(raw, str) else raw or []  # Any: JSON
                 members = _on_reads(current, reads)
             params[f"{spec.name}_members"] = members
+    if node.type == "implicit_sketch" and isinstance(params.get("dimensions"), dict):
+        # A drawn sketch's coordinates may be expressions of its dimensions (ADR-0037): the run
+        # receives them as numbers.
+        from stokes.geometry.sketchexpr import resolve_entities
+
+        dims = {
+            name: project.value_of(node.id, f"dimensions.{name}") for name in params["dimensions"]
+        }
+        params["entities"] = resolve_entities(params.get("entities"), dims)
     return params, refs
 
 
@@ -194,13 +237,82 @@ def _input(project: Project, op: Node, part: str) -> Node:
             f"{op.path} reads {found.path}, a {found.type}, not a part",
             details={"op": op.id, "part": part},
         )
-    if found.params.get("family") == "mesh":
+    family = found.params.get("family")
+    if is_implicit_operation(op.type):
+        if family != "implicit":
+            raise OperationInvalid(
+                f"{op.path} reads {found.path}, which is not an implicit part: implicit "
+                "operations combine parts made with Create only",
+                details={"op": op.id, "part": part},
+            )
+        return found
+    if family == "implicit":
+        raise MeshOnly(
+            f"{found.path} is an implicit part (no B-rep): {op.type} needs a B-rep part; "
+            "use the implicit operations on it",
+            details={"op": op.id, "part": part},
+        )
+    if family in BREPLESS_FAMILIES:
         raise MeshOnly(
             f"{found.path} is a mesh-only part (no B-rep): {op.type} needs a B-rep part; "
             "import the CAD file (STEP, IGES or BREP) instead",
             details={"op": op.id, "part": part},
         )
     return found
+
+
+MAX_RECIPE_DEPTH = 64
+"""Chained implicit operations a recipe may hold (as :mod:`stokes.geometry.operations.implicit`)."""
+
+
+def _implicit_spec(project: Project, part: Node) -> dict[str, Any]:  # Any: JSON
+    """What an implicit operation's worker job needs of one input: its recipe."""
+    return {
+        "part": part.id,
+        "name": part.name,
+        "family": "implicit",
+        "recipe": implicit_recipe(project, part),
+    }
+
+
+def implicit_recipe(project: Project, part: Node, depth: int = 0) -> dict[str, Any]:  # Any: JSON
+    """The recipe of an implicit part: the operation that made it, its SI parameters and the
+    recipes of the parts it reads, as :func:`stokes.geometry.operations.implicit.body_of` reads
+    them. Built from the tree as it is, so the worker rebuilds the part's field without any file
+    of it (ADR-0035 decision 4: graphs are rebuilt from the operation nodes)."""
+    if depth > MAX_RECIPE_DEPTH:
+        raise OperationInvalid(
+            f"{part.path} is built from more than {MAX_RECIPE_DEPTH} chained operations",
+            details={"part": part.id},
+        )
+    op = project.find(str(part.params.get("derived") or ""))
+    if op is None or not is_implicit_operation(op.type):
+        raise OperationInvalid(
+            f"{part.path} has no implicit operation that makes it", details={"part": part.id}
+        )
+    params, _refs = _params(project, op)
+    kind = operation_type(op.type)
+    tool_ids: list[str] = []
+    for name in kind.part_params if kind is not None else ():
+        tool_ids.extend(str(v) for v in op.params.get(name) or [])
+    input_ids = [str(v) for v in op.params.get("inputs") or []]
+
+    def recipes(ids: list[str]) -> list[dict[str, Any]]:  # Any: JSON
+        out = []
+        for ident in ids:
+            node = _input(project, op, ident)
+            out.append(implicit_recipe(project, node, depth + 1))
+        return out
+
+    outputs = [str(v) for v in op.params.get("outputs") or []]
+    return {
+        "type": op.type,
+        "params": params,
+        "inputs": recipes(input_ids),
+        "tools": recipes(tool_ids),
+        # Which of the operation's outputs the part is (a split makes two, ADR-0036).
+        "output": outputs.index(part.id) if part.id in outputs else 0,
+    }
 
 
 def _check_cycle(project: Project, op: Node, parts: list[Node]) -> None:

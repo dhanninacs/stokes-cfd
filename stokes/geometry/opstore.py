@@ -65,7 +65,14 @@ from stokes.geometry.errors import (
     OperationFailed,
     OperationInvalid,
 )
-from stokes.geometry.model import GEOMETRY_PATH, OPERATIONS_PATH, TAG_TYPE, operation_type
+from stokes.geometry.model import (
+    GEOMETRY_PATH,
+    OPERATIONS_PATH,
+    TAG_TYPE,
+    implicit_output_name,
+    is_implicit_operation,
+    operation_type,
+)
 from stokes.geometry.opplan import Plan, build_plan, consumed, operations_in, referenced_tags
 from stokes.log import fields, get_logger
 from stokes.model.ids import stable_id
@@ -446,7 +453,7 @@ class OperationStore:
             params: dict[str, Any] = {
                 "derived": op.id,
                 "basis": shape.basis,
-                "family": "brep",
+                "family": shape.family,
                 "faces": shape.faces,
                 "bbox": list(shape.bbox),
                 "units": "mm",
@@ -457,7 +464,12 @@ class OperationStore:
                 if first is not None and isinstance(first.params.get("color"), str):
                     params["color"] = first.params["color"]
                 taken = {c.name for c in parts.children}
-                name = unique_name(node_name_for(shape.name, "part"), taken)
+                base = shape.name
+                if is_implicit_operation(op.type):
+                    # Named for what it is, or after the body it changes (review finding B8).
+                    target = str(first.name) if first is not None else None
+                    base = implicit_output_name(op.type, dict(op.params), target, shape.name)
+                name = unique_name(node_name_for(base, "part"), taken)
                 node = project.add(parts.id, "part", name, params, node_id=shape.part)
                 node.status = "new"
                 events.append(("node.added", {"node_id": node.id, "path": node.path}))
@@ -473,6 +485,8 @@ class OperationStore:
                 events.append(("node.changed", {"node_id": node.id, "path": node.path}))
             node.meta = {**node.meta, "derives_from": [op.id]}
             job.outputs[shape.index] = node.id
+            # A first, coarse look sends its shape before the final one (ADR-0039): the last counts.
+            job.shapes[:] = [s for s in job.shapes if s.get("index") != shape.index]
             job.shapes.append(
                 {
                     "index": shape.index,
@@ -692,8 +706,19 @@ class OperationStore:
         node_id = data.get("node_id")
         if name == "history.changed":
             self._resync(project)
-        elif isinstance(node_id, str):
+            return
+        if isinstance(node_id, str):
             self._changed(project, name, node_id, data.get("param"))
+        # An edit reaches further than its node: the expressions that read it were evaluated
+        # again (`also`), so an operation whose radius is `R` re-runs when `R` changes
+        # (ADR-0037). Too many to list (`resync`) means every operation is judged again.
+        if data.get("resync"):
+            self._reconsider([op.id for op in operations_in(project)])
+            return
+        for other in data.get("also") or ():
+            other_id = other.get("id") if isinstance(other, dict) else None
+            if isinstance(other_id, str) and other_id != node_id:
+                self._changed(project, "node.changed", other_id, None)
 
     def _changed(self, project: Project, name: str, node_id: str, param: Any) -> None:
         """A node event: an op's own parameter, a part it reads, a tag it references."""

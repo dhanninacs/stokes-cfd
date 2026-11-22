@@ -1,12 +1,13 @@
 ---
 title: Stokes, an OpenFOAM GUI for Windows and Linux
-description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Import STEP, click faces to set boundaries, mesh with snappyHexMesh or cfMesh, run and view results. Native on Windows without WSL, and on Linux.
+description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Import STEP or model the part in the app, click faces to set boundaries, preview the flow on the GPU, mesh with snappyHexMesh, cfMesh or Gmsh, run and view results. Native on Windows without WSL, and on Linux.
 ---
 
 Stokes is a desktop CFD workbench and graphical interface for OpenFOAM®
-Foundation 14. You import a STEP file, click faces to make them inlets, outlets,
-walls or symmetry planes, mesh with snappyHexMesh or cfMesh, run the solver and
-look at slices, streamlines and iso-surfaces, in one window. Every action is also
+Foundation 14. You import a STEP file or model the part in the app, click faces
+to make them inlets, outlets, walls or symmetry planes, preview the flow on the
+GPU, mesh with snappyHexMesh, cfMesh or Gmsh, run the solver and look at slices,
+streamlines and iso-surfaces, in one window. Every action is also
 an API command, so scripts and LLM agents can drive a simulation too.
 
 It runs natively on **Windows** (through [FoamWin](https://github.com/dhanninacs/foamWin),
@@ -44,8 +45,10 @@ for noncommercial use.
 | Linux x86-64 | Supported; less tested than Windows |
 | macOS | Not supported |
 | Geometry | STEP in the window; STEP, IGES and BREP from the command line |
-| Meshers | snappyHexMesh, blockMesh, cfMesh hex-dominant, tetrahedral and polyhedral, poly-hexcore; 2D modes |
-| Physics | Laminar, k-ε, k-ω SST, energy equation |
+| Modelling in the app | Primitives, sketches, booleans, patterns, offset and shell, gyroid, Schwarz P and diamond lattices |
+| Meshers | snappyHexMesh, blockMesh, cfMesh hex-dominant, tetrahedral and polyhedral, poly-hexcore, Gmsh (tetrahedra with prism layers); 2D modes |
+| Physics | Laminar, k-ε, k-ω SST, energy equation, conjugate heat transfer |
+| Fast mode | GPU lattice-Boltzmann preview for parts modelled in the app. A quick look, not a sign-off |
 | Installer | None yet; run from source |
 
 ---

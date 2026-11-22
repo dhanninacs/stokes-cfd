@@ -1,0 +1,85 @@
+/* The Fast mode panel (ADR-0047): a card of the right slot, laid out as the Optimise panel is. */
+.fast-panel {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  font-size: 12.5px;
+  /* Stops short of the view buttons and the axis gizmo at the bottom right. */
+  max-height: calc(100vh - 290px);
+}
+.fast-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.fast-title svg {
+  align-self: center;
+}
+.fast-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  overflow-y: auto;
+}
+.fast-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+}
+.fast-slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.fast-actions {
+  display: flex;
+  gap: 6px;
+}
+.fast-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+}
+.fast-legend-bar {
+  height: 10px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 3px;
+}
+.fast-legend-ends {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}
+.fast-stats {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.fast-alert {
+  font-size: 11.5px;
+  color: var(--danger);
+}
+.fast-caution {
+  color: var(--warning, var(--danger));
+}
+.fast-streams {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.fast-streams th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 2px 4px 2px 0;
+}
+.fast-streams td {
+  padding: 2px 4px 2px 0;
+  border-top: 1px solid var(--panel-border);
+  white-space: nowrap;
+}

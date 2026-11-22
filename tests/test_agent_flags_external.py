@@ -125,18 +125,28 @@ def test_current_profile_lists_are_unchanged() -> None:
         # (`foamDictionary` is pinned to that one edit by `flags.py`).
         "improveSymmetryPlanes",
         "foamDictionary",
-        # ADR-0007 decision 5: Gmsh on a script `lint_gmsh` checks line by line, and its
-        # converter; both pinned to one path each by `flags.POSITIONAL`.
+        # ADR-0038: Foundation 14's adjoint, on a case Stokes wrote; no flags.
+        "adjointShapeOptimisationFoam",
+        # ADR-0041: the open-source adjoint, for the flow split; no flags.
+        "adjointFoam",
+        # ADR-0042: a multi-region conjugate case; the split's two arguments are pinned.
+        "topoSet",
+        "splitMeshRegions",
+        "foamMultiRun",
+        # ADR-0043: Gmsh on the case's own script and its conversion, each with one pinned path.
         "gmsh",
         "gmshToFoam",
-        # ADR-0035: the coupled solver (no arguments) and the monitors after it (-latestTime).
+        # ADR-0044: the coupled solver (no arguments) and the monitors after it (-latestTime).
         "coupledSimpleFoam",
         "foamPostProcess",
     }
     assert current == jobs.ALLOWED_UTILITIES
     assert ALLOWED_FLAGS["foamRun"]["-solver"].pattern == r"^(incompressibleFluid|fluid)$"
     assert ALLOWED_FLAGS["blockMesh"] == {}
-    assert "topoSet" not in ALLOWED_FLAGS
+    # ADR-0042: `topoSet` runs on a Stokes case too now, and still takes no argument there.
+    assert ALLOWED_FLAGS["topoSet"] == {}
+    assert set(ALLOWED_FLAGS["splitMeshRegions"]) == {"-cellZones", "-defaultRegion"}
+    assert ALLOWED_FLAGS["splitMeshRegions"]["-cellZones"].pattern == r"^all$"
     assert "-dict" not in ALLOWED_FLAGS["blockMesh"]
 
 

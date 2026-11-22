@@ -177,6 +177,18 @@ def test_surface_size_changes_the_governed_surfaces_and_no_others() -> None:
     assert sized["wall_tag"][:2] != plain["wall_tag"][:2]
 
 
+def test_a_surface_or_body_size_reaches_the_untagged_walls_too() -> None:
+    """**`unassigned` follows a size the user set**; with none it stays at the base size.
+
+    It was always the base size, so on a body whose walls are left untagged (a lattice exchanger)
+    the surface size refined nothing and cfMesh lost the outlet.
+    """
+    assert _surfaces()["unassigned"][2] == 0.1
+    assert _surfaces(surface_size=0.025)["unassigned"][2] == 0.025
+    assert _surfaces(local={"size": 0.05}, surface_size=0.025)["unassigned"][2] == 0.05
+    assert _surfaces(surface_size=0.025)["unassigned"][:2] != _surfaces()["unassigned"][:2]
+
+
 def test_a_boundary_size_changes_only_that_surface() -> None:
     """**The whole point of the per-boundary size**: one boundary finer, the rest untouched."""
     plain = _surfaces()

@@ -105,7 +105,7 @@ interface Slot {
 }
 
 
-function styleOf(node: PartNode): PartStyle {
+export function styleOf(node: PartNode): PartStyle {
   // **`simulate` travels with the other display facts** (T-222): the viewport fades a body the user
   // left out, and it has to be told, because the scene never reads the model.
   return { color: node.color, visible: node.visible, opacity: node.opacity, simulate: node.simulate };

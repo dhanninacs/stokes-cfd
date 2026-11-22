@@ -49,6 +49,7 @@ import {
   type LookContext,
   type LookState,
   streamlinesStalled,
+  stopSummary,
 } from "./lookModel";
 
 /** A duct 1 m long (x), 0.2 m wide (y), 0.1 m tall (z). Shortest axis z. */
@@ -148,7 +149,7 @@ describe("lookAvailability", () => {
     const noPressureTemp = runFields({ slice: false, fields: [{ name: "U_mag", units: "m/s", min: 0, max: 1 }] });
     const a = lookAvailability(noPressureTemp);
     expect(a.iso).toBeNull(); // speed is contoured since 49d6c9e
-    expect(lookAvailability(runFields({ fields: [{ name: "k", units: "m2/s2", min: 0, max: 1 }] })).iso).toBe("Needs speed, T or p in the run");
+    expect(lookAvailability(runFields({ fields: [{ name: "alphat", units: "kg/m/s", min: 0, max: 1 }] })).iso).toBe("Needs speed, T or p in the run");
     // The lines are traced through the volume: a run with no slice can still give them, but not without U.
     expect(a.stream).toBe("Needs the velocity");
     expect(lookAvailability(runFields({ slice: false })).stream).toBeNull();
@@ -358,16 +359,16 @@ describe("pressing a tile", () => {
     const out = press("stream", start);
     expect(out.state.slices.list.every((s) => !s.visible)).toBe(true);
     expect(out.state.results.view.slice).toBe(false);
-    expect(asksOf(out.requests)).toEqual([{ kind: "askStreamlines", seeds: "inlet", count: 50, tubes: false }]);
+    expect(asksOf(out.requests)).toEqual([{ kind: "askStreamlines", seeds: "inlet", count: 50, tubes: false, trace: { direction: "forward", follow: true, reach: 5 } }]);
   });
   it("Stream seeds from the inlets by default, and from a line when the case has none", () => {
     const out = press("stream", stateOf(), ctxOf());
-    expect(asksOf(out.requests)).toEqual([{ kind: "askStreamlines", seeds: "inlet", count: 50, tubes: false }]);
+    expect(asksOf(out.requests)).toEqual([{ kind: "askStreamlines", seeds: "inlet", count: 50, tubes: false, trace: { direction: "forward", follow: true, reach: 5 } }]);
     const noInlet = press("stream", stateOf(), ctxOf({ hasInlet: false }));
-    expect(asksOf(noInlet.requests)).toEqual([{ kind: "askStreamlines", seeds: "line", count: 50, tubes: false }]);
+    expect(asksOf(noInlet.requests)).toEqual([{ kind: "askStreamlines", seeds: "line", count: 50, tubes: false, trace: { direction: "forward", follow: true, reach: 5 } }]);
     const sphere = press("stream", stateOf(), ctxOf());
     expect(asksOf(sphere.requests)).toHaveLength(1);
-    expect(asksOf(applyLookActions(stateOf(), activationActions("stream", stateOf(), ctxOf(), { ...DEFAULT_PREFS, streamSeeds: "sphere", streamCount: 200 })).requests)).toEqual([{ kind: "askStreamlines", seeds: "sphere", count: 200, tubes: false }]);
+    expect(asksOf(applyLookActions(stateOf(), activationActions("stream", stateOf(), ctxOf(), { ...DEFAULT_PREFS, streamSeeds: "sphere", streamCount: 200 })).requests)).toEqual([{ kind: "askStreamlines", seeds: "sphere", count: 200, tubes: false, trace: { direction: "forward", follow: true, reach: 5 } }]);
   });
   it("Iso asks for the middle of the field's range, speed when the view is on speed, and turns the slice off", () => {
     const out = press("iso", stateOf({ results: results({ slice: true }) }));
@@ -379,7 +380,7 @@ describe("pressing a tile", () => {
     expect(asksOf(out.requests)).toEqual([{ kind: "askIso", field: "p", value: 1 }]);
   });
   it("Iso asks for nothing in a run with neither speed, T nor p", () => {
-    const ctx = ctxOf({ data: runFields({ fields: [{ name: "k", units: "m2/s2", min: 0, max: 1 }] }) });
+    const ctx = ctxOf({ data: runFields({ fields: [{ name: "alphat", units: "kg/m/s", min: 0, max: 1 }] }) });
     expect(asksOf(press("iso", stateOf(), ctx).requests)).toEqual([]);
   });
 });
@@ -530,13 +531,13 @@ describe("controls", () => {
   it("Add parallel skips the mid-plane's own place", () => {
     expect(parallelOffset(sliceOn, ctxOf({ midPlane: { axis: "z", offset: 0.025 } }), "z")).toBeCloseTo(0.075);
   });
-  it("Iso: the value slider asks for a value of the field, the count offers one surface", () => {
+  it("Iso: the value slider asks for a value of the field, and the count offers several surfaces", () => {
     const [value, count] = controlsOf("iso", stateOf(), ctxOf());
     expect(value).toMatchObject({ kind: "slider", id: "value", value: 0.5, text: "1 m/s" });
     expect(count).toMatchObject({ kind: "choice", value: "1" });
-    expect((count as { options: { disabled?: string }[] }).options.map((o) => o.disabled !== undefined)).toEqual([false, true, true]);
+    expect((count as { options: { value: string; disabled?: string }[] }).options.map((o) => [o.value, o.disabled !== undefined])).toEqual([["1", false], ["3", false], ["5", false], ["8", false]]);
     const out = controlActions("iso", "value", "0.75", stateOf(), ctxOf());
-    expect(out.actions).toEqual([{ kind: "askIso", field: "U_mag", value: 1.5 }]);
+    expect(out.actions).toEqual([{ kind: "contours", contours: null }, { kind: "askIso", field: "U_mag", value: 1.5 }]);
     expect(out.prefs.isoFraction).toBe(0.75);
   });
   it("Iso reads the value back from the surface that is shown", () => {
@@ -544,23 +545,23 @@ describe("controls", () => {
     expect(controlsOf("iso", shown, ctxOf())[0]).toMatchObject({ value: 0.25, text: "305 K" });
   });
   it("Iso has no value to give without speed, T or p", () => {
-    const ctx = ctxOf({ data: runFields({ fields: [{ name: "k", units: "m2/s2", min: 0, max: 1 }] }) });
+    const ctx = ctxOf({ data: runFields({ fields: [{ name: "alphat", units: "kg/m/s", min: 0, max: 1 }] }) });
     expect((controlsOf("iso", stateOf(), ctx)[0] as { disabled?: string }).disabled).toBe("Needs speed, T or p in the run");
     expect(controlActions("iso", "value", "0.5", stateOf(), ctx).actions).toEqual([]);
   });
   it("Stream: a choice of seeds and a count asks for the lines again, and Inlet is off without an inlet", () => {
     const [seed, count, style] = controlsOf("stream", stateOf(), ctxOf({ hasInlet: false }));
     expect((seed as { options: { value: string; disabled?: string }[] }).options.find((o) => o.value === "inlet")?.disabled).toBe("No inlet found in the mesh");
-    expect((count as { options: { value: string }[] }).options.map((o) => o.value)).toEqual(["50", "100", "200"]);
+    expect((count as { options: { value: string }[] }).options.map((o) => o.value)).toEqual(["25", "50", "100", "200"]);
     const next = controlActions("stream", "seed", "sphere", stateOf(), ctxOf());
-    expect(next.actions).toEqual([{ kind: "askStreamlines", seeds: "sphere", count: 50, tubes: false }]);
+    expect(next.actions).toEqual([{ kind: "askStreamlines", seeds: "sphere", count: 50, tubes: false, trace: { direction: "forward", follow: true, reach: 5 } }]);
     expect(next.prefs.streamSeeds).toBe("sphere");
-    expect(controlActions("stream", "count", "200", stateOf(), ctxOf(), next.prefs).actions).toEqual([{ kind: "askStreamlines", seeds: "sphere", count: 200, tubes: false }]);
+    expect(controlActions("stream", "count", "200", stateOf(), ctxOf(), next.prefs).actions).toEqual([{ kind: "askStreamlines", seeds: "sphere", count: 200, tubes: false, trace: { direction: "forward", follow: true, reach: 5 } }]);
     expect(controlActions("stream", "count", "500", stateOf(), ctxOf()).actions).toEqual([]);
     // The Style choice: hairlines or tubes, asked again with the same seeds.
     expect((style as { options: { value: string }[] }).options.map((o) => o.value)).toEqual(["lines", "tubes"]);
     const tubes = controlActions("stream", "style", "tubes", stateOf(), ctxOf());
-    expect(tubes.actions).toEqual([{ kind: "askStreamlines", seeds: "inlet", count: 50, tubes: true }]);
+    expect(tubes.actions).toEqual([{ kind: "askStreamlines", seeds: "inlet", count: 50, tubes: true, trace: { direction: "forward", follow: true, reach: 5 } }]);
     // The Seeds row shows the kind the ask uses: Inlet reads as Line when the case has no inlet.
     expect(seed).toMatchObject({ value: "line" });
     expect(tubes.prefs.streamTubes).toBe(true);
@@ -864,5 +865,45 @@ describe("streamlinesStalled", () => {
   it("says nothing without lines or a box", () => {
     expect(streamlinesStalled([], box)).toBe(false);
     expect(streamlinesStalled([{ points: [[0, 0, 0], [0, 0, 0]] }], null)).toBe(false);
+  });
+});
+
+describe("streamline tracing settings", () => {
+  it("asks again with the direction, the wall rule and the length chosen", () => {
+    const back = controlActions("stream", "direction", "backward", stateOf(), ctxOf());
+    expect(back.prefs.streamDirection).toBe("backward");
+    expect(back.actions).toEqual([{ kind: "askStreamlines", seeds: "inlet", count: 50, tubes: false, trace: { direction: "backward", follow: true, reach: 5 } }]);
+    const stop = controlActions("stream", "walls", "stop", stateOf(), ctxOf(), back.prefs);
+    expect(stop.actions).toEqual([{ kind: "askStreamlines", seeds: "inlet", count: 50, tubes: false, trace: { direction: "backward", follow: false, reach: 5 } }]);
+    expect(controlActions("stream", "reach", "5", stateOf(), ctxOf()).prefs.streamReach).toBe(5);
+    expect(controlActions("stream", "reach", "7", stateOf(), ctxOf()).actions).toEqual([]);
+  });
+
+  it("says how many lines reached an opening, and why the rest ended", () => {
+    const found = stopSummary(["left_domain", "left_domain", "wall", "stagnation"]);
+    expect(found.text).toBe("2 of 4 lines reached an opening");
+    expect(found.tip).toContain("1 got stuck at a wall");
+    expect(stopSummary(["left_domain"], false).text).toBe("1 of 1 lines left the fluid");
+    expect(stopSummary([]).text).toBe("");
+  });
+});
+
+describe("3-D contours from the Iso look", () => {
+  it("a Count above one asks for a set of levels and takes the single surface away", () => {
+    const out = controlActions("iso", "count", "5", stateOf(), ctxOf());
+    expect(out.prefs.isoCount).toBe(5);
+    const set = out.actions.find((a) => a.kind === "contours");
+    expect(out.actions[0]).toEqual({ kind: "hideIso" });
+    expect(set !== undefined && set.kind === "contours" && set.contours !== null && set.contours.values.length).toBe(5);
+    const one = controlActions("iso", "count", "1", stateOf(), ctxOf(), out.prefs);
+    expect(one.actions[0]).toEqual({ kind: "contours", contours: null });
+    expect(one.actions[1]?.kind).toBe("askIso");
+  });
+
+  it("Glass draws the levels see-through and Solid opaque", () => {
+    const five = controlActions("iso", "count", "5", stateOf(), ctxOf()).prefs;
+    const solid = controlActions("iso", "glass", "solid", stateOf(), ctxOf(), five);
+    const set = solid.actions.find((a) => a.kind === "contours");
+    expect(set !== undefined && set.kind === "contours" ? set.contours?.opacity : null).toBe(1);
   });
 });

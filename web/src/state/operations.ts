@@ -234,7 +234,9 @@ export function ownParams(params: Record<string, unknown>): Record<string, unkno
 
 /** How a run reads the pick: a boolean takes the first body and the rest as its `tools`. */
 export function operationInputs(type: string, parts: readonly string[]): { inputs: string[]; tools: string[] } {
-  if (type === "boolean" && parts.length > 1) return { inputs: parts.slice(0, 1), tools: parts.slice(1) };
+  if ((type === "boolean" || type === "implicit_boolean") && parts.length > 1) return { inputs: parts.slice(0, 1), tools: parts.slice(1) };
+  // A shape or a sketch reads no part (ADR-0035): whatever is picked stays out of it.
+  if (type === "implicit_primitive" || type === "implicit_sketch") return { inputs: [], tools: [] };
   return { inputs: [...parts], tools: [] };
 }
 

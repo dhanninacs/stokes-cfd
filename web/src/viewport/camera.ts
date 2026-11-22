@@ -284,6 +284,7 @@ export class CameraRig {
 
   /** Re-aim a fit at the current size and free area: the one still animating, or the one still on screen. */
   private keepFitted(): void {
+    if (this.pinned !== null) return;
     if (this.tween?.refit) {
       this.tween.to = this.fitState(this.tween.refit, this.tween.to.up) ?? this.tween.to;
       return;
@@ -338,7 +339,8 @@ export class CameraRig {
    */
   private updateViewOffset(): void {
     const rect = this.free;
-    if (rect === null || rect.width <= 0 || rect.height <= 0 || this.canvasWidth <= 0 || this.canvasHeight <= 0) {
+    // A pinned view (the sketch's) is exact: no principal-point shift moves it off the drawing.
+    if (this.pinned !== null || rect === null || rect.width <= 0 || rect.height <= 0 || this.canvasWidth <= 0 || this.canvasHeight <= 0) {
       this.shift = { dx: 0, dy: 0 };
     } else {
       this.shift = this.centringFor(rect);
@@ -577,6 +579,7 @@ export class CameraRig {
 
   /** Frames the content, animated unless the user prefers reduced motion. */
   fit(dir?: THREE.Vector3, up?: THREE.Vector3): void {
+    if (this.pinned !== null) return;
     const to = this.fitState(dir, up);
     if (!to) return;
     this.userTouched = false;
@@ -586,6 +589,7 @@ export class CameraRig {
 
   /** Starts from a pulled-back, slightly turned view and settles into the fit. Used on load. */
   intro(): void {
+    if (this.pinned !== null) return;
     const to = this.fitState();
     if (!to) return;
     this.userTouched = false;
@@ -602,6 +606,7 @@ export class CameraRig {
    * restored. A state with no `up` leaves the up vector as it is.
    */
   restore(state: ViewState): void {
+    if (this.pinned !== null) return;
     this.endTween();
     this.applyState(state);
     this.controls.update();
@@ -612,6 +617,7 @@ export class CameraRig {
 
   /** Moves to `to`; with `refit` a later resize re-aims the move at the fit for the new size. */
   animateTo(to: ViewState, duration = FIT_DURATION, refit = false): void {
+    if (this.pinned !== null) return;
     if (prefersReducedMotion() || duration <= 0) {
       this.endTween();
       this.applyState(to);
@@ -646,6 +652,7 @@ export class CameraRig {
 
   /** Advances the animation and the controls; true when the camera moved. */
   update(dt: number): boolean {
+    if (this.pinned !== null) return false;
     let moved = false;
     const tween = this.tween;
     if (tween) {
@@ -671,8 +678,71 @@ export class CameraRig {
     return moved;
   }
 
+  // ------------------------------------------------------------------ the sketch's pinned view
+  /** What the camera was before `pin`, put back by `unpin`; null while not pinned. */
+  private pinned: { state: ViewState; orthographic: boolean; enabled: boolean } | null = null;
+
+  /** True while a sketch holds the camera face-on to its plane (ADR-0039). */
+  get isPinned(): boolean {
+    return this.pinned !== null;
+  }
+
+  /**
+   * Holds the camera orthographic at exactly `state` (ADR-0039: the sketch drawn over the 3D view).
+   *
+   * **Exact, not clamped and not shifted**: the sketcher's drawing and the model under it must agree to
+   * the pixel, so the zoom limits, the free-area centring and the controls are all out of the way while
+   * pinned (the controls are disabled; `update`, fits and restores do nothing). The first pin keeps the
+   * view it replaced, and `unpin` puts it back.
+   */
+  pin(state: ViewState): void {
+    if (this.pinned === null) {
+      this.endTween();
+      this.pinned = { state: this.getState(), orthographic: this.isOrthographic, enabled: this.controls.enabled };
+      this.controls.enabled = false;
+      if (this.camera !== this.orthographic) {
+        this.camera = this.orthographic;
+        this.controls.object = this.camera;
+        this.onProjectionChange(this.camera);
+      }
+      this.userTouched = true;
+      this.fitted = null;
+      this.shift = { dx: 0, dy: 0 };
+    }
+    const cam = this.orthographic;
+    this.updateOrthoFrustum();
+    this.controls.target.copy(state.target);
+    cam.position.copy(state.target).addScaledVector(state.dir, this.orthoDistance);
+    cam.zoom = this.orthoHeight / Math.max(state.span, 1e-12);
+    if (state.up !== undefined) this.setUp(state.up);
+    cam.lookAt(state.target);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    this.clipDistance = -1;
+    this.updateClipping();
+    this.onChange();
+  }
+
+  /** Gives the camera back as it was before `pin`. */
+  unpin(): void {
+    const was = this.pinned;
+    if (was === null) return;
+    this.pinned = null;
+    this.controls.enabled = was.enabled;
+    this.camera = was.orthographic ? this.orthographic : this.perspective;
+    this.controls.object = this.camera;
+    this.updateViewOffset();
+    this.applyState(was.state);
+    this.controls.update();
+    this.clipDistance = -1;
+    this.updateClipping();
+    this.onProjectionChange(this.camera);
+    this.onChange();
+  }
+
   // ------------------------------------------------------------------ projection
   setOrthographic(on: boolean): void {
+    if (this.pinned !== null) return;
     if (on === this.isOrthographic) return;
     const state = this.getState();
     this.endTween();

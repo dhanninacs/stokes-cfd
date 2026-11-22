@@ -43,6 +43,7 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 from stokes.compile.snapshot import (
+    ADJOINT_DEFAULTS,
     ENERGY_FIELDS,
     FLOW_FIELDS,
     KINDS,
@@ -87,6 +88,31 @@ def build_solve_snapshot(
     """
     require_mesh(mesh_status)
     project = session.require_project()
+    merged = _with_patch_meta(project, mesh_status)
+    if len(merged.get("regions") or ()) > 1:
+        from stokes.run.regions import build_multi_region
+
+        return build_multi_region(session, settings, merged)
+    return build_region_snapshot(session, settings, mesh_status)
+
+
+def build_region_snapshot(
+    session: Session,
+    settings: Node,
+    mesh_status: dict[str, Any],
+    *,
+    part_id: str = "",
+    held: tuple[str, ...] | None = None,
+    energy: bool | None = None,
+    engine: str = "",
+) -> SolveSnapshot:
+    """One region's case: the whole case of a one-region mesh, or one fluid of several.
+
+    ``part_id`` names the region's body and ``held`` the mesh patches it holds (None: all of
+    them); ``energy`` and ``engine`` override the settings' for a region of a multi-region case
+    (ADR-0042), which always solves energy with the `of14.fluid` writer.
+    """
+    project = session.require_project()
     # **The patches are on the RESULT NODE's meta, not in `status()`.** `status()` carries the
     # state,
     # the cell count and the quality — what a progress readout needs — while `patch_types` and
@@ -95,10 +121,23 @@ def build_solve_snapshot(
     # silent wrong
     # answer rather than a refusal. Found by running the snapshot against a real meshed duct.
     mesh_status = _with_patch_meta(project, mesh_status)
-    part_id = str(mesh_status.get("part") or "") or _domain_part(project)
+    part_id = part_id or str(mesh_status.get("part") or "") or _domain_part(project)
     nu = _viscosity(session, project, part_id)
-    params = settings.params
+    params = dict(settings.params)
+    if energy is not None:
+        params["energy"] = energy
+    if engine:
+        params["engine"] = engine
     energy = bool(params.get("energy"))
+    _require_flow_boundaries_meshed(project, mesh_status)
+    _require_sound_cells(mesh_status)
+    if held is not None:
+        # Only this region's patches from here on: its conditions and its monitors.
+        types = mesh_status.get("patch_types") or {}
+        mesh_status = {
+            **mesh_status,
+            "patch_types": {name: types[name] for name in types if name in held},
+        }
     patches = _patches(
         session,
         project,
@@ -107,7 +146,6 @@ def build_solve_snapshot(
         turbulence=str(params.get("turbulence") or "laminar") != "laminar",
         kinds=kinds_for(str(params.get("engine") or "")),
     )
-    _require_flow_boundaries_meshed(project, mesh_status)
     return SolveSnapshot(
         **(_energy_fields(session, project, part_id, params) if energy else {}),
         density_model=str(params.get("density_model") or "constant"),
@@ -149,11 +187,27 @@ def build_solve_snapshot(
             for name in _patch_names(mesh_status)
             if _kind_of(project, mesh_status, name) in ("velocity_inlet", "pressure_outlet")
         ),
+        **_adjoint_fields(params),
     )
 
 
+def _adjoint_fields(params: dict[str, Any]) -> dict[str, Any]:
+    """The adjoint's objective and outlets (ADR-0041), read only for the adjoint engine so another
+    engine's snapshot, and its basis, never carry them."""
+    if params.get("engine") != "of14.adjoint":
+        return {}
+    objective = str(params.get("adjoint_objective") or "pressure_loss")
+    outlets = params.get("adjoint_outlets") or []
+    return {
+        "adjoint_objective": objective,
+        "adjoint_outlets": tuple(str(name) for name in outlets)
+        if objective == "flow_split"
+        else (),
+    }
+
+
 def _factor(params: dict[str, Any], name: str) -> float | None:
-    """A relaxation factor (ADR-0036): the stored number, or None for the engine's own."""
+    """A relaxation factor (ADR-0045): the stored number, or None for the engine's own."""
     value = params.get(name)
     return None if value is None else float(value)
 
@@ -475,6 +529,27 @@ def _mesh_cells(mesh_status: dict[str, Any]) -> int:
 
 #: The kinds that carry the flow in or out: a run without one of them solves another problem.
 FLOW_KINDS = frozenset({"velocity_inlet", "mass_flow_inlet", "pressure_inlet", "pressure_outlet"})
+
+
+def _require_sound_cells(mesh_status: dict[str, Any]) -> None:
+    """Refuse a solve on a mesh with cells of negative volume.
+
+    **Measured on the gyroid exchanger (2026-11-20):** cfMesh's polyhedral mesh with layers had 12
+    cells of negative volume (aspect ratio 1.8e139); the quality said "not met" and the solve ran
+    anyway. A negative volume is not a poor cell but a wrong one: no setting of the solver makes its
+    answer mean anything. Other failed checks (skewness, non-orthogonality, unused points, a mesh in
+    pieces) stay warnings on the Mesh card, because the answer can still be right.
+    """
+    quality = mesh_status.get("quality") or {}
+    negative = quality.get("negative_volume_cells")
+    if isinstance(negative, int) and negative > 0:
+        raise SolveInvalid(
+            f"the mesh has {negative} cell{'' if negative == 1 else 's'} of negative volume, "
+            "which no solver can use: generate the mesh again with smaller cells, fewer or "
+            "thinner wall layers, or another mesher",
+            code="solve.negative_cells",
+            details={"negative_volume_cells": negative},
+        )
 
 
 def _require_flow_boundaries_meshed(project: Any, mesh_status: dict[str, Any]) -> None:
@@ -837,6 +912,9 @@ def solve_basis(snap: SolveSnapshot, mesh_basis: str, mesh_job: str, engine_stri
     without it, raising the count would hand back the old serial run as "already solved". One
     rank keeps the historical body, so a serial basis is unchanged.
 
+    **The adjoint's objective and outlets are in only away from their defaults** (ADR-0041), so a
+    pressure-loss adjoint run keeps the basis it had before the flow split's adjoint existed.
+
     **The energy fields are in only when energy is on** (ADR-0027 step 2), for the same reason: a
     flow-only project made before they existed keeps its basis, so its finished run is not
     reported stale by an upgrade that changed nothing about its case.
@@ -845,15 +923,21 @@ def solve_basis(snap: SolveSnapshot, mesh_basis: str, mesh_job: str, engine_stri
     energy writer (ADR-0027), so its `WRITER_VERSION` is the one that marks its runs stale.
     """
     from stokes.compile.coupled import simple as coupled_writer
-    from stokes.compile.of14 import WRITER_VERSION
+    from stokes.compile.of14 import WRITER_VERSION, multi_region
     from stokes.compile.of14 import fluid as fluid_writer
 
     writer = {
         fluid_writer.ENGINE: fluid_writer.WRITER_VERSION,
         coupled_writer.ENGINE: coupled_writer.WRITER_VERSION,
     }.get(snap.engine, WRITER_VERSION)
+    if snap.regions:
+        writer = f"{multi_region.WRITER_VERSION}+{fluid_writer.WRITER_VERSION}"
 
     physical_snapshot = asdict(snap)
+    if not snap.regions:
+        # Only a multi-region case carries them (ADR-0042); every other basis is unchanged.
+        physical_snapshot.pop("regions", None)
+        physical_snapshot.pop("region_order", None)
     cores = physical_snapshot.pop("cores", 1)
     # The cell count is the mesh's, and the mesh basis is already in the hash below.
     physical_snapshot.pop("cells", None)
@@ -863,7 +947,7 @@ def solve_basis(snap: SolveSnapshot, mesh_basis: str, mesh_job: str, engine_stri
     if not snap.energy:
         for name in ENERGY_FIELDS:
             physical_snapshot.pop(name, None)
-    for name, off in TRANSIENT_CONTROL_DEFAULTS.items():
+    for name, off in (*TRANSIENT_CONTROL_DEFAULTS.items(), *ADJOINT_DEFAULTS.items()):
         if physical_snapshot.get(name) == off:
             physical_snapshot.pop(name, None)
     # Unset relaxation is the engine's own value, already decided by the writer's version.
