@@ -2051,8 +2051,11 @@ class JobStore:
                 offset, tail, _ = self._read_new_lines(log_path, offset)
                 if tail:
                     dropped += self._take(job, step.name, pending, tail, parser)
-                break
-            if time.monotonic() - started > step.timeout_s:
+                # The cap holds for a step that already ended, too: one that wrote past it and
+                # exited between two checks was reported `done` with the whole log left on disk.
+                if not (log_path.exists() and log_path.stat().st_size > MAX_LOG_BYTES):
+                    break
+            elif time.monotonic() - started > step.timeout_s:
                 self._kill_group(process)
                 self._flush(job, step.name, pending, dropped, log_path, offset, parser)
                 return (
@@ -2064,7 +2067,8 @@ class JobStore:
                     },
                 )
             if log_path.exists() and log_path.stat().st_size > MAX_LOG_BYTES:
-                self._kill_group(process)
+                if rc is None:  # a reaped process's PID may already belong to another
+                    self._kill_group(process)
                 self._truncate_log(log_path)
                 offset = min(offset, MAX_LOG_BYTES)
                 self._flush(job, step.name, pending, dropped, log_path, offset, parser)

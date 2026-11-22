@@ -397,6 +397,26 @@ def test_the_log_cap_fails_the_step(
     assert state["error"]["code"] == "agent.log_limit"
 
 
+def test_the_log_cap_fails_a_step_that_already_ended(
+    tmp_path: Path, env: EngineEnv, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A step that wrote past the cap and exited between two size checks once came out `done`
+    with its whole log on disk (seen on CI). The checks are spaced out so that is what happens."""
+    monkeypatch.setattr(jobs, "MAX_LOG_BYTES", 4096)
+    monkeypatch.setattr(jobs, "LOG_SIZE_CHECK_S", 20.0)  # sleeps 2 s between checks
+    fake_utility(
+        env, "i=0; while [ $i -lt 2000 ]; do echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; i=$((i+1)); done"
+    )
+    store = make_store(tmp_path)
+    job = store.create({}, [Step("s", ("blockMesh",), timeout_s=60)])
+    store.start(job)
+    state = settle(store, job, timeout=30)
+    assert state["state"] == "failed"
+    assert state["error"]["code"] == "agent.log_limit"
+    log = (store.job_dir(job) / "log.s").read_bytes()
+    assert len(log) < 4096 + 200 and jobs.LOG_TRUNCATED_MARKER.encode() in log
+
+
 # ---------------------------------------------------------------- files
 
 
