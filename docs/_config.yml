@@ -12,7 +12,7 @@ social:
 # GoatCounter site code, e.g. "dhanninacs" for https://dhanninacs.goatcounter.com, from
 # https://www.goatcounter.com/signup. Empty turns analytics off entirely: no script, no requests, no
 # footer note. GoatCounter sets no cookies and stores no personal data, so there is no consent banner.
-goatcounter: ""
+goatcounter: "dhanninacs"
 plugins:
   - jekyll-sitemap
   - jekyll-seo-tag
