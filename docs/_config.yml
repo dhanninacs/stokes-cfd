@@ -9,9 +9,10 @@ social:
   links:
     - https://github.com/dhanninacs/stokes-cfd
     - https://www.linkedin.com/company/stokes-cfd/
-# Google Analytics 4 measurement ID (G-XXXXXXXXXX). Empty turns analytics and the consent banner off.
-# Even when set, nothing loads until a visitor allows it.
-ga4: ""
+# GoatCounter site code, e.g. "dhanninacs" for https://dhanninacs.goatcounter.com, from
+# https://www.goatcounter.com/signup. Empty turns analytics off entirely: no script, no requests, no
+# footer note. GoatCounter sets no cookies and stores no personal data, so there is no consent banner.
+goatcounter: ""
 plugins:
   - jekyll-sitemap
   - jekyll-seo-tag

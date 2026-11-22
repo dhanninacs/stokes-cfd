@@ -75,65 +75,28 @@
     select(tabs[linux ? 1 : 0], false);
   }
 
-  // Analytics: Google Analytics 4, loaded only after the visitor allows it. The measurement ID comes
-  // from a meta tag the layout writes when one is configured; with none, nothing here runs.
-  var gaMeta = document.querySelector('meta[name="stokes-ga4"]');
-  var gaId = gaMeta && gaMeta.content;
-  var CONSENT = "stokes-consent";
-  var consentBox = document.querySelector("[data-consent]");
-  function consent() {
-    try { return localStorage.getItem(CONSENT); } catch (e) { return null; }
-  }
-  function loadGa() {
-    if (!gaId || window.gtag) return;
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = function () { window.dataLayer.push(arguments); };
-    window.gtag("consent", "default", {
-      ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied", analytics_storage: "granted"
-    });
-    window.gtag("js", new Date());
-    window.gtag("config", gaId, { allow_google_signals: false, allow_ad_personalization_signals: false });
-    var s = document.createElement("script");
-    s.async = true;
-    s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(gaId);
-    document.head.appendChild(s);
-  }
-  function clearGaCookies() {
-    document.cookie.split(";").forEach(function (c) {
-      var name = c.split("=")[0].trim();
-      if (!/^_ga/.test(name)) return;
-      var host = location.hostname;
-      [host, "." + host].forEach(function (d) {
-        document.cookie = name + "=; Max-Age=0; path=/; domain=" + d;
-      });
-      document.cookie = name + "=; Max-Age=0; path=/";
-    });
-  }
-  function choose(value) {
-    try { localStorage.setItem(CONSENT, value); } catch (e) {}
-    consentBox.hidden = true;
-    if (value === "granted") { loadGa(); return; }
-    // Declined, or withdrawn after loading: stop further measurement and remove any cookies already set.
-    if (window.gtag) window.gtag("consent", "update", { analytics_storage: "denied" });
-    clearGaCookies();
-  }
+  // Analytics: GoatCounter, which counts visits without cookies, so there is no consent banner. The
+  // site code comes from a meta tag the layout writes when one is configured; with none, no request
+  // leaves the page. count.js sends the page view itself; named clicks and the demo video are events
+  // queued here until it arrives, so a click before load is not lost.
+  var gcMeta = document.querySelector('meta[name="stokes-goatcounter"]');
+  var gcSite = gcMeta && gcMeta.content;
+  var gcQueue = [];
   function track(name, label) {
-    if (window.gtag && consent() === "granted") window.gtag("event", name, { label: label });
+    var event = { path: name, title: label || name, event: true };
+    if (window.goatcounter && typeof window.goatcounter.count === "function") window.goatcounter.count(event);
+    else gcQueue.push(event);
   }
-  if (gaId && consentBox) {
-    var c = consent();
-    if (c === "granted") loadGa();
-    else if (c !== "denied") consentBox.hidden = false;
-    consentBox.querySelectorAll("[data-consent-choice]").forEach(function (b) {
-      b.addEventListener("click", function () { choose(b.getAttribute("data-consent-choice")); });
+  if (gcSite) {
+    var gcScript = document.createElement("script");
+    gcScript.async = true;
+    gcScript.setAttribute("data-goatcounter", "https://" + gcSite + ".goatcounter.com/count");
+    gcScript.src = "https://gc.zgo.at/count.js";
+    gcScript.addEventListener("load", function () {
+      if (!window.goatcounter || typeof window.goatcounter.count !== "function") return;
+      gcQueue.splice(0).forEach(function (event) { window.goatcounter.count(event); });
     });
-    document.querySelectorAll("[data-consent-open]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        consentBox.hidden = false;
-        var first = consentBox.querySelector("button");
-        if (first) first.focus();
-      });
-    });
+    document.head.appendChild(gcScript);
     // Named clicks: any element with data-track sends an event of that name.
     document.addEventListener("click", function (e) {
       var el = e.target.closest && e.target.closest("[data-track]");
