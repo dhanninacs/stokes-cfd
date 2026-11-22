@@ -36,13 +36,19 @@ def logged() -> Iterator[list[logging.LogRecord]]:
     logger.removeHandler(handler)
 
 
+def _qt(module: str) -> Any:  # Any: PySide6 is optional, so its types are not imported here
+    """Import a PySide6 module, or skip: without it, or (on a headless Linux runner) without the
+    system libraries Qt loads, such as ``libEGL.so.1``, which fail as a plain ``ImportError``."""
+    return pytest.importorskip(module, exc_type=ImportError)
+
+
 @pytest.fixture(scope="session")
 def qt_app() -> Any:  # Any: PySide6 is optional, so its types are not imported here
     """A Qt application on the offscreen platform, made once; the test skips without PySide6.
 
     Qt aborts the process when an icon is made before an application exists.
     """
-    widgets = pytest.importorskip("PySide6.QtWidgets")
+    widgets = _qt("PySide6.QtWidgets")
     app = widgets.QApplication.instance()
     if app is None:
         with pytest.MonkeyPatch.context() as patch:
@@ -158,7 +164,7 @@ def test_a_failed_call_is_a_warning_and_never_stops_the_start(
 # ------------------------------------------------------------------ the Linux desktop file name
 def _desktop_name_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Capture the names passed to ``QGuiApplication.setDesktopFileName``."""
-    from PySide6.QtGui import QGuiApplication
+    QGuiApplication = _qt("PySide6.QtGui").QGuiApplication  # noqa: N806 - the Qt class's name
 
     calls: list[str] = []
     monkeypatch.setattr(QGuiApplication, "setDesktopFileName", staticmethod(calls.append))

@@ -12,7 +12,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # This branch is the Windows code (ctypes.windll in agent/stokes_agent/probe.py and stokes/app/icon.py),
+        # which mypy on Linux reports as errors; the linux branch runs the Linux jobs.
+        os: [windows-latest]
         python: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +23,10 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
       - name: Install
-        run: python -m pip install -e ".[dev,agent]"
+        # The type check and the tests import the optional packages the code uses (PySide6, VTK, OCP),
+        # as the install guides do; with only `dev` and `agent`, mypy cannot find PySide6 and reports
+        # every `type: ignore` on a VTK call as unused.
+        run: python -m pip install -e ".[dev,agent,ui,extract,cad]"
       - name: Lint
         run: |
           ruff check .
