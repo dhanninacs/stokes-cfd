@@ -194,14 +194,17 @@ def dimension_of(q: Quantity, what: str) -> Dimension:
 def response_resolver(project: Project, study: Node) -> Resolver:
     """Names for a constraint written against the base case: the study's responses by name
     (their expressions evaluated now), then the project's parameters and node quantities."""
+    from stokes.explore.engine_geometry import base_resolver
+
     responses = {n.name: n for n in members(study, "responses", "response")}
+    base = base_resolver(project)  # parameters, node quantities and parts' measures
 
     def resolve(name: str) -> Quantity:
         node = responses.get(name)
         if node is None:
-            return project.resolve(name)
+            return base(name)
         dim = dimension(str(node.params.get("dimension")))
-        return project.evaluate(str(node.params.get("expression") or ""), dim)
+        return evaluate(str(node.params.get("expression") or ""), base, expect=dim)
 
     return resolve
 

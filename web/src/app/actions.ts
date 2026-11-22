@@ -176,8 +176,12 @@ export interface ActionSpec {
   id: string;
   /** What the action does, for menus, the ribbon and a future shortcut editor. */
   title: string;
-  /** `tree` actions are the tree's keys and fire only while it has the focus (treeKeyboard.ts). */
-  context: "global" | "tree";
+  /**
+   * `tree` actions are the tree's keys and fire only while it has the focus (treeKeyboard.ts);
+   * `build` actions have handlers only while the build ribbon is open (BuildRibbon.tsx), so their
+   * letters fall through to the global action of the same chord otherwise.
+   */
+  context: "global" | "tree" | "build";
   /** Fires while a text field has the focus (chords with Ctrl, as before); plain keys never do. */
   whileTyping?: boolean;
   /** Fires again while the key is held (undo and redo step on). */
@@ -235,6 +239,11 @@ export const ACTIONS: readonly ActionSpec[] = [
   spec("view.projection", "Switch between perspective and orthographic", { group: "view", label: (c) => (c.orthographic ? "Perspective" : "Orthographic") }),
   spec("view.mode.cycle", "Cycle shaded, shaded with edges, wireframe", { group: "view" }),
   spec("view.nav.cycle", "Cycle the mouse scheme: CAD, Orbit, Blender, Select/Orbit", { group: "view" }),
+  // The modeller's letters (review B10): handled only while the build ribbon is open.
+  spec("build.sketch", "Sketch: open the sketcher", { context: "build", group: "prepare" }),
+  spec("build.pull", "Pull: edit the depth of the picked sketched body", { context: "build", group: "prepare" }),
+  spec("build.move", "Move the picked body", { context: "build", group: "prepare" }),
+  spec("build.combine", "Combine the picked bodies", { context: "build", group: "prepare" }),
   spec("view.section", "Section view", { group: "view" }),
   spec("view.measure", "Measure", { group: "view" }),
   spec("view.probe", "Probe: read a field at a point", { group: "view" }),
@@ -280,6 +289,14 @@ export const ACTIONS: readonly ActionSpec[] = [
   spec("prepare.enclosure", "Enclose the picked bodies", { group: "prepare", enabled: needBodies(1, PICK_BODY) }),
   spec("prepare.extractFluid", "Extract the fluid around a seed point", { group: "prepare", enabled: needBodies(1, PICK_BODY) }),
   spec("prepare.boolean", "Fuse, cut or intersect the picked bodies", { group: "prepare", enabled: needBodies(2, PICK_TWO_BODIES) }),
+  // The implicit modeller (ADR-0035): app/CreateMenu.tsx installs the handlers. Shape reads no pick;
+  // Transform and Combine read bodies made with Create, which the menu checks by family.
+  spec("create.sketch", "Sketch a profile and pull or revolve it", { group: "prepare" }),
+  spec("create.shape", "Create a shape: box, cylinder, sphere, torus…", { group: "prepare" }),
+  spec("create.transform", "Move, rotate, mirror or scale the picked body", { group: "prepare", enabled: needBodies(1, PICK_BODY) }),
+  spec("create.combine", "Union, subtract, intersect or split the picked bodies", { group: "prepare", enabled: needBodies(1, PICK_BODY) }),
+  spec("create.pattern", "Copy the picked body in a row or around an axis", { group: "prepare", enabled: needBodies(1, PICK_BODY) }),
+  spec("create.modify", "Offset or shell the picked body", { group: "prepare", enabled: needBodies(1, PICK_BODY) }),
   spec("prepare.repair", "Heal, sew or solidify the picked bodies", {
     group: "prepare",
     enabled: (c) => (c.bodies >= 1 || c.faces > 0 ? true : "Repair needs a body, or the faces to remove"),

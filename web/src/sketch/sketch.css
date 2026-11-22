@@ -1,0 +1,561 @@
+/* The sketcher (ADR-0036): a panel over the viewport, tools left, drawing centre, table right. */
+.sketch-layer {
+  position: absolute;
+  /* Over the side docks (10), islands, view cube and context toolbar (14): the sketch is modal. */
+  z-index: 16;
+  top: 12px;
+  bottom: 64px;
+  display: flex;
+  pointer-events: none;
+}
+.sketch-panel {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  /* The chrome is solid; the drawing area is translucent so the model shows dimmed behind it
+     (review B1), registered to the sketch plane (ADR-0039: the camera looks at the plane face-on). */
+  background: transparent;
+  backdrop-filter: none;
+  pointer-events: auto;
+}
+.sketch-header,
+.sketch-tools,
+.sketch-side,
+.sketch-status,
+.sketch-confirm {
+  background: var(--panel-solid);
+}
+.sketch-spacer {
+  flex: 1;
+}
+.sketch-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 12.5px;
+}
+.sketch-confirm > span {
+  flex: 1;
+}
+.sketch-button.danger {
+  border-color: transparent;
+  background: #e5484d;
+  color: #fff;
+}
+.sketch-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.sketch-title {
+  font-weight: 600;
+}
+.sketch-planes {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+.sketch-planes button {
+  padding: 3px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.sketch-planes button.on {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.sketch-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sketch-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.sketch-icon:hover:not(:disabled),
+.sketch-icon.on {
+  background: var(--hover);
+  color: var(--text);
+}
+.sketch-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.sketch-button {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.sketch-button.primary {
+  border-color: transparent;
+  background: var(--accent-fill);
+  color: var(--accent-text);
+}
+.sketch-button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.sketch-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+.sketch-tools {
+  display: flex;
+  width: 74px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-right: 1px solid var(--panel-border);
+}
+.sketch-tool {
+  position: relative;
+  display: flex;
+  height: 46px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 10.5px;
+}
+.sketch-tool:hover {
+  background: var(--hover);
+}
+.sketch-tool.on {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.sketch-tool:not(.on) svg {
+  color: var(--text);
+}
+.sketch-key {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+}
+.sketch-sides {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+.sketch-sides input {
+  width: 50px;
+  margin-top: 2px;
+  padding: 2px 4px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--track);
+  color: var(--text);
+  text-align: center;
+}
+/* Fillet, under the tools while Select is on: a radius and one button. */
+.sketch-fillet {
+  gap: 3px;
+}
+.sketch-fillet .sketch-button {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.sketch-stage {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+}
+.sketch-canvas {
+  min-width: 0;
+  flex: 1;
+  /* The model shows dimmed and blurred behind the drawing: context, not a reference (it is not
+     registered to the sketch plane), and the text of overlays behind it stays unreadable. */
+  background: color-mix(in srgb, var(--panel-solid) 80%, transparent);
+  backdrop-filter: blur(6px);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+/* Registered to the 3D view (ADR-0039): the model behind is the sketch's reference, so it is dimmed
+   but sharp; the grid and the entities lie over it. */
+/* Covering the docks (a narrow window, or the tree and Details both open): the docks reach lower than
+   the sketcher and their last rows showed under it, and through its see-through canvas. They step
+   aside while the sketch covers them and come back with Finish or Cancel. */
+main:has(.sketch-layer.covering) .slot-left,
+main:has(.sketch-layer.covering) .slot-right {
+  visibility: hidden;
+}
+.sketch-layer.registered {
+  --sketch-dim: color-mix(in srgb, var(--panel-solid) 52%, transparent);
+}
+.sketch-layer.registered .sketch-canvas {
+  background: var(--sketch-dim);
+  backdrop-filter: none;
+}
+/* The plane picker of a new sketch (ADR-0039): three thumbnails over the drawing. */
+.sketch-plane-pick {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--panel-solid);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.35);
+  transform: translate(-50%, -50%);
+}
+.sketch-plane-pick-title {
+  font-weight: 600;
+}
+.sketch-plane-pick-row {
+  display: flex;
+  gap: 10px;
+}
+.sketch-plane-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 112px;
+  padding: 8px 6px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.sketch-plane-thumb .muted {
+  font-size: 11px;
+}
+.sketch-plane-thumb:hover,
+.sketch-plane-thumb.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.sketch-plane-quad {
+  fill: color-mix(in srgb, var(--accent) 30%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.2px;
+}
+.sketch-plane-axis line {
+  stroke: var(--text-muted);
+  stroke-width: 1.2px;
+}
+.sketch-plane-axis text {
+  fill: var(--text-muted);
+  font-size: 9px;
+}
+.sketch-plane-pick-hint {
+  font-size: 11.5px;
+}
+/* Covering the side docks (a narrow window): solid, the docks' text must not show through. */
+/* (Over the docks only: the canvas's inline gradient is solid where they are.) */
+.sketch-canvas.tool-select {
+  cursor: default;
+}
+.sketch-canvas.tool-select.over-entity {
+  cursor: pointer;
+}
+.sketch-canvas.tool-select.over-point {
+  cursor: move;
+}
+.sketch-grid {
+  stroke: var(--track);
+  stroke-width: 1;
+}
+.sketch-grid-major {
+  stroke: var(--panel-border);
+  stroke-width: 1;
+}
+.sketch-axis-u {
+  stroke: #e5484d;
+  stroke-opacity: 0.55;
+}
+.sketch-axis-v {
+  stroke: #46a758;
+  stroke-opacity: 0.55;
+}
+.sketch-axis-label {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+.sketch-entity,
+.sketch-preview {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.sketch-entity.selected {
+  stroke: var(--accent-strong);
+  stroke-width: 3.5;
+}
+.sketch-entity.hover {
+  stroke: var(--accent-strong);
+  stroke-width: 3;
+}
+.sketch-size text {
+  fill: var(--text);
+  font-size: 11.5px;
+  user-select: none;
+}
+.sketch-size-chip {
+  fill: var(--panel-solid);
+  stroke: var(--panel-border);
+  stroke-width: 1;
+}
+.sketch-size.bound text {
+  fill: var(--accent-ink);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.sketch-size.invalid text {
+  fill: #e5484d;
+}
+.sketch-size.invalid .sketch-size-chip {
+  stroke: #e5484d;
+}
+.sketch-size.editable {
+  cursor: text;
+}
+.sketch-size.editable:hover .sketch-size-chip {
+  stroke: var(--accent);
+}
+.sketch-size-edit {
+  position: absolute;
+  width: 96px;
+  padding: 2px 5px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--panel-solid);
+  color: var(--text);
+  font-size: 12px;
+}
+.sketch-entry {
+  position: absolute;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  background: var(--panel-solid);
+  pointer-events: none;
+  font-size: 11.5px;
+}
+.sketch-entry-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+.sketch-entry-field.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.sketch-entry-label,
+.sketch-entry-unit,
+.sketch-entry-live {
+  color: var(--text-muted);
+}
+.sketch-entry-text {
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.sketch-preview {
+  stroke-dasharray: 5 4;
+  stroke-opacity: 0.8;
+}
+.sketch-point {
+  fill: var(--panel-solid);
+  stroke: var(--text-muted);
+  stroke-width: 1.2;
+}
+.sketch-open {
+  fill: none;
+  stroke: #e5484d;
+  stroke-width: 2;
+}
+.sketch-draft-point {
+  fill: var(--accent);
+}
+.sketch-cursor circle {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.2;
+}
+.sketch-cursor circle.snap-point {
+  stroke: var(--accent-strong);
+  stroke-width: 2;
+}
+.sketch-cursor text {
+  fill: var(--text);
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: var(--panel-solid);
+  stroke-width: 3px;
+}
+.sketch-side {
+  display: flex;
+  /* 324 px: a line's four cells (start and end) and its bin fit on one row; at 272 they wrapped. */
+  width: 324px;
+  min-height: 0;
+  flex-direction: column;
+  border-left: 1px solid var(--panel-border);
+}
+.sketch-table {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.sketch-dims {
+  max-height: 45%;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 12px;
+}
+.sketch-dim-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+.sketch-dim-name {
+  width: 52px;
+}
+.sketch-dim-value {
+  min-width: 0;
+  flex: 1;
+}
+.sketch-dim-shown {
+  width: 64px;
+  font-size: 11px;
+  text-align: right;
+}
+.sketch-dim-problem {
+  color: #e5484d;
+}
+.sketch-dim-hint {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.sketch-num.invalid,
+.sketch-dim-shown.invalid {
+  border-color: #e5484d;
+  color: #e5484d;
+}
+.sketch-num.bound {
+  border-color: var(--accent-soft);
+  color: var(--accent-ink);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.sketch-table-head {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.sketch-empty {
+  padding: 8px 0;
+}
+.sketch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: default;
+}
+.sketch-row.selected {
+  background: var(--accent-soft);
+}
+.sketch-kind {
+  width: 34px;
+  color: var(--text-muted);
+}
+.sketch-pt {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.sketch-num {
+  width: 52px;
+  padding: 1px 4px;
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  background: var(--track);
+  color: var(--text);
+  font-size: 11.5px;
+}
+.sketch-status {
+  display: flex;
+  gap: 12px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 12px;
+}
+.sketch-status-text {
+  min-width: 0;
+  flex: 1;
+}
+.sketch-status-aside {
+  overflow: hidden;
+  max-width: 50%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sketch-status-text.good {
+  color: var(--accent-ink);
+}
+.sketch-status-text.hint {
+  color: var(--text-muted);
+}
+.sketch-status-text.bad {
+  color: #e5484d;
+}

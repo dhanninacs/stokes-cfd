@@ -27,6 +27,7 @@ import { monitorsOf } from "./monitorsModel";
 import { INITIAL_TURBULENCE_SECTION } from "./settingsPresentation";
 import type { TasksReply } from "./meshTasks";
 import type { RunSummary } from "./runApi";
+import { nestConsumedSteps } from "./bodySteps";
 
 export const VIRTUAL_PREFIX = "virtual:";
 
@@ -39,6 +40,11 @@ export interface OpenTarget {
   operation?: string;
   /** A real node to select, whose own page is the card (an existing operation node). */
   select?: string;
+  /**
+   * A registered panel to put on screen wherever the layout keeps it (the Explore tools: Optimise, the
+   * design table, the plots). They are not tabs beside Properties, so `panel` cannot name them.
+   */
+  show?: string;
 }
 
 /** What a virtual or placeholder row is, in `meta.row`; the tree panel acts on it. */
@@ -64,7 +70,10 @@ export type RowKind =
   | "result-streamlines"
   | "result-probe"
   | "result-report"
-  | "result-lod";
+  | "result-lod"
+  | "explore-optimise"
+  | "explore-table"
+  | "explore-plots";
 
 export interface RowMeta {
   row: RowKind;
@@ -175,6 +184,13 @@ export function openTargetOf(node: NodeSummary): OpenTarget | null {
         return { panel: "results", section: "results-report" };
       case "result-lod":
         return { panel: "results", section: "results-lod" };
+      // The Explore tools (the tree's door to what the flow strip's Optimise step opens).
+      case "explore-optimise":
+        return { panel: null, show: "optimise" };
+      case "explore-table":
+        return { panel: null, show: "design-table" };
+      case "explore-plots":
+        return { panel: null, show: "plots" };
     }
   }
   switch (node.type) {
@@ -537,6 +553,10 @@ export function decorateTree(root: NodeSummary | null, ctx: TreeContext): NodeSu
   const settings = findSolverSettings(root);
   const kids = root.children.map((group) => {
     switch (group.path) {
+      // A body an implicit operation consumed sits under that operation, not among the bodies
+      // (review finding B8): the bodies list holds what is being built.
+      case "/geometry":
+        return nestConsumedSteps(group, root);
       case "/mesh":
         return meshGroup(group, root, ctx);
       case "/physics":

@@ -221,3 +221,12 @@ def test_the_robust_range_follows_the_area_not_the_point_count() -> None:
     assert out["low"] > 1.9 and out["high"] <= 2.2
     with pytest.raises(ReportInvalid):
         weighted_range([(s, values)], 0.6)
+
+
+def test_a_histogram_leaves_out_triangles_with_no_value() -> None:
+    s = plate(4)
+    values = np.where(s.positions[:, 0] < 0.5, np.nan, 2.0)
+    out = histogram([(s, values)], bins=2)
+    assert out["min"] == pytest.approx(2.0) and sum(out["fraction"]) == pytest.approx(1.0)
+    with pytest.raises(ReportInvalid, match="no value"):
+        histogram([(s, np.full(s.positions.shape[0], np.nan))], bins=2)

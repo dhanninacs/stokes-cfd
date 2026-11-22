@@ -12,19 +12,30 @@
 import { useStore } from "../state/store";
 import { probeChart, probeCurve, probeRows } from "./probeModel";
 import { Note } from "../components/Note";
+import { Button } from "../components/ui";
+import { Tooltip } from "../components/Tooltip";
+import { runAction } from "../app/actions";
 
 const WIDTH = 264;
 const HEIGHT = 96;
 
 export default function ProbePanel() {
   const probe = useStore((s) => s.probe);
+  const picking = useStore((s) => s.probePick);
   const curve = probeCurve(probe.points, probe.values);
   const chart = probeChart(curve, WIDTH, HEIGHT);
   const hasValues = probe.phase === "ready" && probe.values.length > 0;
   return (
     <section className="mesh-section" aria-label="Probe" data-ws="results-probe">
       <div className="section-title">Probe</div>
-      {probe.phase === "idle" && <Note className="mesh-hint" tip="Press Probe, then click the model to read the field there.">Press Probe, then click</Note>}
+      <div className="guided-actions">
+        <Tooltip label="Click the model to read the field there (the value under the pointer also shows as you move)" side="top">
+          <Button active={picking} aria-pressed={picking} onClick={() => runAction("view.probe")} data-ws="results-probe-pick">
+            {picking ? "Click the model…" : "Probe a point"}
+          </Button>
+        </Tooltip>
+      </div>
+      {probe.phase === "idle" && !picking && <Note className="mesh-hint" tip="Moving the pointer over the coloured model shows the value under it; a probe keeps one here.">Hover reads, a probe keeps</Note>}
       {probe.phase === "preparing" && <p className="muted mesh-hint" data-ws="probe-preparing">Preparing the surface…</p>}
       {probe.phase === "outside" && <p className="muted mesh-hint" data-ws="probe-outside">{probe.message}</p>}
       {probe.phase === "failed" && <p className="muted mesh-hint" data-ws="probe-failed">{probe.message}</p>}

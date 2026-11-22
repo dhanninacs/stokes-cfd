@@ -1217,8 +1217,11 @@ def test_a_too_large_or_nonfinite_reply_is_refused_not_stored(tmp_path: Path) ->
     settle(session, info["path"])
     node = session.project.find(info["path"])
     deadline = time.monotonic() + 5
-    while time.monotonic() < deadline and node.meta.get("quality_dist") == {"pending": True}:
+    while time.monotonic() < deadline and (
+        "quality_dist" not in node.meta or node.meta["quality_dist"] == {"pending": True}
+    ):
         time.sleep(0.05)
+    assert "quality_dist" in node.meta, "the refused reply never reached the result"
     stored = node.meta["quality_dist"]
     assert "error" in stored, "a NaN reply must be refused, not stored"
     assert "non-finite" in stored["error"] or "too many" in stored["error"]

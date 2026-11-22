@@ -48,6 +48,11 @@ export interface MenuDeps {
   hide(patch: string): void;
   /** `shortcutHint`: the chord of an action, or undefined. */
   hint(id: string): string | undefined;
+  /**
+   * "Edit sketch" / "Edit <operation>" for a body an operation made (review finding B3): the first
+   * entry of the body's menu. Null or absent for an imported body.
+   */
+  edit?: { label: string; run(): void } | null;
 }
 
 export const SAMPLE_REASON = "The sample part has no node";
@@ -161,7 +166,10 @@ function isolateHide(deps: MenuDeps, wording: "body" | "part"): MenuEntry[] {
 }
 
 function bodyGroups(deps: MenuDeps): MenuItemSpec[][] {
+  const edit = deps.edit ?? null;
   return [
+    // The way back to what made the body leads, as a CAD body menu does.
+    edit === null ? [] : [{ id: "body.edit", label: edit.label, hint: "Double-click", onSelect: edit.run }],
     // **`view.fitSelection` is GONE, not disabled** (claude-win2's 2000 item 2: "implement or
     // hide"). It had no handler anywhere and its reason named a task; a row that is always greyed
     // with a promise is dead weight in a menu, and the spec's own words are to implement it or take

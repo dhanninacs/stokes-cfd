@@ -53,3 +53,42 @@ src/util       formatting helpers
 public/        served as is at the site root: favicon.png, the app icon artwork (a copy of
                stokes/app/assets/stokes.png) that the page links and the top-bar logo mark shows
 ```
+
+## GUI walks and the walkthrough recording
+
+The `walk_*.mjs` scripts drive the app through a real browser (Playwright) against a running server
+and print every problem they see: page errors, failed requests, alerts, a card that stays open. Each
+makes its own NEW projects in the folder it is given and writes a screenshot per action to
+`../.local/walk/<name>/`.
+
+```bash
+# a server with a home of its own, so the walks do not touch your recent list or layout
+STOKES_HOME=../.local/walk-home python -m stokes.server --port 8777      # prints the URL with its token
+
+cd web
+node walk_inventory_gui.mjs     "<url>" "<projects folder>"   # every card's controls
+node walk_build_gui.mjs         "<url>" "<projects folder>"   # every sketch and build tool, about 35 minutes
+node walk_lattice_gui.mjs       "<url>" "<projects folder>"   # the Lattice tool
+node walk_fast.mjs              "<url>" "<projects folder>"   # Fast mode: the panel, the plane, edits while it runs (needs a GPU)
+node walk_flow_gui.mjs          "<url>" "<projects folder>"   # sketch > fluid > boundaries > mesh > run > results
+node walk_optimise_step_gui.mjs "<url>" "<projects folder>"   # the Optimise step in both modes
+```
+
+Three environment variables: `STOKES_WALK_CHANNEL=chrome` (or `msedge`) drives an installed browser
+where Playwright's own has not been downloaded; `STOKES_WALK_SCHEME=dark` asks for the dark
+appearance; `STOKES_WALK_VIDEO=<folder>` records the page there as an .mp4, with an `ffmpeg` on the
+PATH (or `STOKES_WALK_FFMPEG`).
+
+`record_bend_walkthrough.mjs` is the recorded walkthrough: a 90 degree duct bend from a sketch with
+two named dimensions to an optimised shape (gradient check, cycles, Apply, the final solve), with a
+caption per step. It writes `marks.json` beside its screenshots; `cut_walkthrough.mjs` then runs the
+waits fast:
+
+```bash
+STOKES_WALK_CHANNEL=chrome STOKES_WALK_SCHEME=dark STOKES_WALK_VIDEO=out/video \
+  node record_bend_walkthrough.mjs "<url>" "<projects folder>" out --cycles=5 --speed=0.3
+node cut_walkthrough.mjs out/video/walk-<n>.mp4 out/marks.json bend-walkthrough.mp4 --wait=6
+```
+
+Two servers must not share a home while a walk runs: the workspace layout is one file per home, and
+switching Guided and Full in one window rearranges the other.

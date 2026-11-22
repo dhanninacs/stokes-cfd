@@ -186,6 +186,22 @@ def test_an_inlet_at_default_temperature_is_named(tmp_path: Path) -> None:
     assert "300 K" in named[0]["message"] and "inlet" in named[0]["message"]
 
 
+def test_an_inlet_at_300_k_beside_one_set_hotter_is_not_named(tmp_path: Path) -> None:
+    # A heat exchanger's cold stream is at 300 K on purpose: once another boundary's temperature
+    # was chosen, the default no longer reads as forgotten.
+    session = new_session(tmp_path)
+    body = cube_part(session)
+    fluid(session, body)
+    complete(session, body)
+    session.execute("solve.configure", engine="of14.fluid", values={"energy": True})
+    session.execute(
+        "boundary.set",
+        boundary=boundary_id(session, "outlet"),
+        values={"backflow_temperature": "350 [K]"},
+    )
+    assert "setup.no_inlet_temperature" not in codes(check(session))
+
+
 def test_a_kind_the_solver_cannot_write_is_an_error(tmp_path: Path) -> None:
     # **Said before the solve**: the writer has no pressure inlet, so the set-up is incomplete
     # now rather than refused by `solve.unsupported_kind` at run time.

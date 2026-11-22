@@ -26,6 +26,18 @@ SCAN_DIRS = ("stokes", "agent", "tests", "tools", "native", "web/src", "web/DESI
 # Installed packages (`web/node_modules`) are third-party code, not the repository's, and are
 # untracked; walking them takes over a minute and tests/test_gates.py gives the gate two.
 SKIP_FILES = {"ip_blocklist.txt", "ip_blocklist.example.txt", "check_ip.py"}
+# Cargo's build output and the installed program (ADR-0035) are untracked and generated, like
+# node_modules: they name the build machine's folders by design, and none of it is committed.
+BUILD_OUTPUT = (
+    ROOT / "native" / "implicit-mesh" / "target",
+    ROOT / "native" / "implicit-mesh" / "bin",
+)
+
+
+def _built(path: Path) -> bool:
+    return any(path.is_relative_to(folder) for folder in BUILD_OUTPUT)
+
+
 SKIP_SUFFIXES = {".pyc", ".png", ".jpg", ".npz", ".bin", ".stl", ".step"}
 MAX_FILE_BYTES = 8 * 1024 * 1024
 
@@ -70,6 +82,7 @@ def scan(terms: list[str]) -> list[str]:
                 or path.suffix in SKIP_SUFFIXES
                 or "__pycache__" in path.parts
                 or "node_modules" in path.parts
+                or _built(path)
                 or path.stat().st_size > MAX_FILE_BYTES
             ):
                 continue
@@ -116,6 +129,7 @@ def token_problems() -> list[str]:
                 not path.is_file()
                 or path.suffix in TOKEN_ALLOWED_SUFFIXES
                 or "node_modules" in path.parts
+                or _built(path)
             ):
                 continue
             if path.resolve() == Path(__file__).resolve():

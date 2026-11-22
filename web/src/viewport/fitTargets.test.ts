@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { fitCandidates, fitSourcesFor, fitTargetIds, isCutSource, missingPatchSources, namesOfSources } from "./fitTargets";
+import { fitCandidates, fitSourcesFor, fitTargetIds, isCutSource, isOverlaySource, missingPatchSources, namesOfSources } from "./fitTargets";
+import { FAST_SOURCE } from "../fast/fastModel";
 import { CAP_SOURCE, USER_SLICE_PREFIX } from "../panels/sliceModel";
 import { SLICE_SOURCE } from "../panels/fieldsModel";
 import { ISO_SOURCE } from "../panels/isoModel";
@@ -28,6 +29,11 @@ describe("what Fit frames", () => {
 describe("which scene sources are cuts", () => {
   it("matches the names the layers use (the list here is spelled out, so a rename shows up)", () => {
     for (const source of [SLICE_SOURCE, `${USER_SLICE_PREFIX}s1`, CAP_SOURCE, ISO_SOURCE]) expect(isCutSource(source)).toBe(true);
+  });
+  it("draws Fast mode's plane in every stage, and never frames the view on it", () => {
+    expect(isOverlaySource(FAST_SOURCE)).toBe(true);
+    expect(isCutSource(FAST_SOURCE)).toBe(true);
+    for (const source of [SLICE_SOURCE, CAP_SOURCE, ISO_SOURCE, "mesh:n12", "n12"]) expect(isOverlaySource(source)).toBe(false);
   });
   it("leaves a patch and a part alone", () => {
     expect(isCutSource("mesh:n12")).toBe(false);

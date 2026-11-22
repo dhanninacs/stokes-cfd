@@ -48,7 +48,7 @@ export const NO_SURFACE_MESH_NOTE =
   "to inspect, so this page shows what it receives.";
 
 /** The blockMesh page's line, with no field beside it. */
-export const BLOCKMESH_NOTE = "Surfaces and sharp edges apply to snappyHexMesh and the cfMesh types only";
+export const BLOCKMESH_NOTE = "Surfaces and sharp edges apply to snappyHexMesh, the cfMesh types and Gmsh only";
 
 /** The feature-angle field's label words: the unit is part of the meaning. */
 export function angleLabel(angle: number): string {

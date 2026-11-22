@@ -61,7 +61,7 @@ from stokes.engines.turbulence import names_for
 
 from . import turbulence
 from .boundaries import pressure_field, validate_patch, velocity_field
-from .control import average_function, stop_function, transient_write
+from .control import average_function, purge_write, stop_function, transient_write
 
 #: The dialect and its version. **`WRITER_VERSION` enters the run basis** (T-214): two runs whose
 #: cases differ only by this writer's output must not be confused for the same run.
@@ -272,9 +272,8 @@ def _control_dict(snap: SolveSnapshot) -> Dict:
         Entry("deltaT", snap.delta_t if snap.transient else 1),
         # timeStep/write_interval, or physical write times and the adaptive step (`control.py`).
         *transient_write(snap),
-        # Two kept: the last two are useful and a long run must not fill the disk with every
-        # iteration.
-        Entry("purgeWrite", 2),
+        # A steady run keeps its last two iterations; a transient one every time it wrote.
+        Entry("purgeWrite", purge_write(snap)),
         Entry("writeFormat", Word("ascii")),
         Entry("writePrecision", 8),
         Entry("writeCompression", Word("off")),
@@ -461,7 +460,7 @@ def _steady_solution(snap: SolveSnapshot) -> Dict:
 def _steady_relaxation(snap: SolveSnapshot) -> Dict:
     """SIMPLEC's factors: `U` and `".*"` (the turbulence equations) 0.9, pressure unrelaxed.
 
-    The user's factors replace these (ADR-0036): `relax_pressure` adds `fields { p ...; }`, which
+    The user's factors replace these (ADR-0045): `relax_pressure` adds `fields { p ...; }`, which
     SIMPLEC with `consistent yes` normally goes without, `relax_velocity` sets `U` and
     `relax_turbulence` sets `".*"`. With none set the dictionary is the one written before.
     """

@@ -39,6 +39,10 @@
         {
           "id": "plots",
           "order": 2
+        },
+        {
+          "id": "optimise",
+          "order": 3
         }
       ]
     },

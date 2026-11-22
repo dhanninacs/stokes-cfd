@@ -21,7 +21,19 @@ if TYPE_CHECKING:
 MAX_JSON_BYTES = 64 * 1024
 """Default limit of a ``json`` parameter's serialised value (64 KB)."""
 
-Kind = Literal["quantity", "number", "int", "bool", "string", "enum", "ref", "array", "json"]
+Kind = Literal[
+    "quantity",
+    "number",
+    "int",
+    "bool",
+    "string",
+    "enum",
+    "ref",
+    "array",
+    "json",
+    "vector",
+    "quantity_map",
+]
 KINDS: tuple[str, ...] = (
     "quantity",
     "number",
@@ -32,7 +44,18 @@ KINDS: tuple[str, ...] = (
     "ref",
     "array",
     "json",
+    "vector",
+    "quantity_map",
 )
+VECTOR_AXES: tuple[str, ...] = ("x", "y", "z")
+"""The components of a ``vector`` parameter, each stored as its own quantity (ADR-0037)."""
+MAP_ENTRY = "entry"
+"""Dimension marker of a ``quantity_map`` entry: read from the unit the entry is stored in."""
+MAP_DIMENSIONS: tuple[str, ...] = ("length", "angle", "dimensionless")
+"""The dimensions a ``quantity_map`` entry may have (a sketch's driving dimensions)."""
+MAX_MAP_ENTRIES = 64
+INTEGER_TOLERANCE = 1e-9
+"""How far from a whole number an ``integer`` quantity may be (it is refused, never rounded)."""
 NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 COLOR_PATTERN = r"#[0-9a-f]{6}"
 DYNAMIC = "dynamic"
@@ -89,6 +112,13 @@ class ParamSpec:
     #: The tree's eye is the control; this keeps the parameter out of the grid without taking it
     #: out of the model.
     hidden: bool = False
+    #: A dimensionless ``quantity`` that must hold a whole number (a pattern's count, a polygon's
+    #: sides): an expression may give it, a value off a whole number is refused (ADR-0037).
+    integer: bool = False
+    #: Set on the quantity spec of one component of a ``vector`` or one entry of a
+    #: ``quantity_map``: the compound parameter's name. The component's own name is
+    #: ``<parameter>.<component>`` (``position.x``, ``dimensions.W``).
+    component_of: str | None = None
     #: **A number that may be left unset**: null is stored, null clears a set value, and the
     #: schema says `["number", "null"]` with `x-optional`, so a form can offer an empty field.
     #: The unset state means "the consumer decides" (a solver's relaxation factor left to the
@@ -96,15 +126,16 @@ class ParamSpec:
     optional: bool = False
 
     def __post_init__(self) -> None:
-        if not NAME_RE.match(self.name):
+        valid_name = (
+            all(NAME_RE.match(part) for part in self.name.split(".")) and self.name.count(".") == 1
+            if self.component_of is not None
+            else NAME_RE.match(self.name)
+        )
+        if not valid_name:
             raise ValidationError(f"invalid parameter name {self.name!r}")
         if self.kind not in KINDS:
             raise ValidationError(f"unknown parameter kind {self.kind!r}")
-        if self.kind == "quantity":
-            if self.dimension is None:
-                raise ValidationError(f"quantity parameter {self.name!r} needs a dimension")
-            if self.dimension != DYNAMIC and self.dimension not in DIMENSIONS:
-                raise ValidationError(f"unknown dimension {self.dimension!r} for {self.name!r}")
+        self._check_quantity_kinds()
         if self.kind == "array" and self.dimension is not None and self.dimension not in DIMENSIONS:
             raise ValidationError(f"unknown dimension {self.dimension!r} for {self.name!r}")
         if self.kind == "enum" and not self.choices:
@@ -124,6 +155,38 @@ class ParamSpec:
                 raise ValidationError(f"only json parameters take max_bytes ({self.name!r})")
             if self.max_bytes <= 0:
                 raise ValidationError(f"max_bytes of {self.name!r} must be positive")
+
+    def _check_quantity_kinds(self) -> None:
+        """The rules of the quantity kinds: a quantity's dimension, a vector's dimension and three
+        defaults, and an integer that is a dimensionless quantity (ADR-0037)."""
+        if self.kind == "quantity":
+            if self.dimension is None:
+                raise ValidationError(f"quantity parameter {self.name!r} needs a dimension")
+            if self.dimension not in (DYNAMIC, MAP_ENTRY) and self.dimension not in DIMENSIONS:
+                raise ValidationError(f"unknown dimension {self.dimension!r} for {self.name!r}")
+        if self.kind == "vector":
+            if self.dimension is None or self.dimension not in DIMENSIONS:
+                raise ValidationError(f"vector parameter {self.name!r} needs a dimension")
+            if self.default is not None and len(tuple(self.default)) != len(VECTOR_AXES):
+                raise ValidationError(f"vector parameter {self.name!r} needs three defaults")
+        if self.integer and (self.kind != "quantity" or self.dimension != "dimensionless"):
+            raise ValidationError(f"only dimensionless quantities are integer ({self.name!r})")
+
+    def _compound_schema(self) -> dict[str, Any]:
+        """The schema extensions of a ``vector`` or a ``quantity_map`` (ADR-0037)."""
+        if self.kind == "vector":
+            return {
+                "type": "object",
+                "x-kind": "vector",
+                "x-dimension": self.dimension,
+                "x-components": list(VECTOR_AXES),
+            }
+        return {
+            "type": "object",
+            "x-kind": "quantity_map",
+            "x-dimensions": list(MAP_DIMENSIONS),
+            "x-max-entries": MAX_MAP_ENTRIES,
+        }
 
     def json_schema(self) -> dict[str, Any]:
         schema: dict[str, Any] = {"title": self.label or self.name}
@@ -173,6 +236,10 @@ class ParamSpec:
                 schema["x-kind"] = "json"
                 if self.max_bytes is not None:
                     schema["x-max-bytes"] = self.max_bytes
+        # The compound kinds and the integer flag (ADR-0037), as expressions: the function sits at
+        # the linter's branch limit.
+        schema.update(self._compound_schema() if self.kind in ("vector", "quantity_map") else {})
+        schema.update({key: True for key in ("x-integer",) if self.integer})
         if self.default is not None:
             schema["default"] = self.default
         return schema
@@ -230,6 +297,45 @@ def validate_number_between(label: str, low: float, high: float) -> Callable[[No
     return check
 
 
+def component_spec(node_spec: NodeSpec, name: str) -> ParamSpec | None:
+    """The quantity spec of ``<parameter>.<component>``: one axis of a ``vector`` or one entry
+    of a ``quantity_map`` (ADR-0037). None when ``name`` names neither.
+
+    Each component is stored and evaluated as an ordinary quantity under its dotted name, so the
+    dependency graph, undo, persistence and study targets treat it like any other quantity.
+    """
+    base, _, part = name.partition(".")
+    if not part or "." in part:
+        return None
+    owner = next((s for s in node_spec.params if s.name == base), None)
+    if owner is None:
+        return None
+    if owner.kind == "vector" and part in VECTOR_AXES:
+        return _component(owner, name, str(owner.dimension), owner.label, part.upper())
+    if owner.kind == "quantity_map" and NAME_RE.match(part):
+        return _component(owner, name, MAP_ENTRY, owner.label, part)
+    return None
+
+
+def _component(owner: ParamSpec, name: str, dim: str, label: str, part: str) -> ParamSpec:
+    return _COMPONENTS.setdefault(
+        (id(owner), name),
+        ParamSpec(
+            name,
+            "quantity",
+            label=f"{label or owner.name} {part}",
+            dimension=dim,
+            doc=owner.doc,
+            component_of=owner.name,
+        ),
+    )
+
+
+_COMPONENTS: dict[tuple[int, str], ParamSpec] = {}
+"""Component specs made once per (compound spec, name). Keyed by the compound spec's identity:
+a spec may hold an unhashable default, and node specs live as long as the registry."""
+
+
 @dataclass(frozen=True)
 class NodeSpec:
     """A node type: its parameters and which child types it accepts."""
@@ -251,6 +357,10 @@ class NodeSpec:
         for spec in self.params:
             if spec.name == name:
                 return spec
+        if "." in name:
+            component = component_spec(self, name)
+            if component is not None:
+                return component
         raise UnknownParameter(
             f"node type {self.type!r} has no parameter {name!r}; "
             f"known: {', '.join(p.name for p in self.params) or 'none'}",
@@ -429,9 +539,10 @@ def register_builtin_types(target: NodeTypeRegistry) -> None:
                     "family",
                     "enum",
                     label="Family",
-                    choices=("brep", "mesh"),
+                    choices=("brep", "mesh", "implicit"),
                     default="brep",
-                    doc="B-rep or mesh-only part: what the import read the source as ",
+                    doc="B-rep or mesh-only part: what the import read the source as; implicit "
+                    "for a part made with Create (an implicit operation)",
                 ),
                 ParamSpec(
                     "triangles",

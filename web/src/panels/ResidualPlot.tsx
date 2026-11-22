@@ -95,7 +95,8 @@ export default function ResidualPlot({ series, target, fill = false }: Props) {
           {model.target !== null && (
             <g>
               <line className="res-target" x1={model.x0} x2={model.x1} y1={model.target.y} y2={model.target.y} />
-              <text className="res-target-label" x={model.x0 + 4} y={model.target.y - 3} textAnchor="start">
+              {/* At the right end, clear of the y labels and of the lines' steep start. */}
+              <text className="res-target-label" x={model.x1 - 2} y={model.target.y - 3} textAnchor="end">
                 {model.target.label}
               </text>
             </g>

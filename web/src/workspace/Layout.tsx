@@ -21,7 +21,7 @@ import { detailsPlacement } from "../panels/DetailsPanel";
 import { movePanel } from "./arrange";
 import { useShortcut } from "./keymap";
 import { hideSlot, showSlot, slotHidden } from "./panelToggle";
-import { panelsForStage } from "./stageFocus";
+import { panelsForStage, visibleLayout } from "./stageFocus";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import ResizeHandle from "../components/ResizeHandle";
 import { SplitHandle } from "../components/SplitHandle";
@@ -70,7 +70,9 @@ export interface WorkspaceLayout {
 /** The side slots and the outputs, for App (which passes them to the islands and the context toolbar). */
 export function useWorkspaceLayout(): WorkspaceLayout {
   const windowWidth = useWindowWidth();
-  const layout = useWorkspace((s) => s.document.layout);
+  const savedLayout = useWorkspace((s) => s.document.layout);
+  const opened = useWorkspace((s) => s.opened);
+  const layout = useMemo(() => visibleLayout(savedLayout, opened), [savedLayout, opened]);
   const background = useWorkspace((s) => s.document.viewport.background);
   const open = useWorkspace((s) => s.sideOpen);
   const ready = useWorkspaceReady();
@@ -540,7 +542,13 @@ function HideCard({ panel }: { panel: ResolvedPanel }) {
         aria-label={`Hide the ${panel.def.title}`}
         aria-keyshortcuts={keys.keys}
         data-cell-hide={panel.def.id}
-        onClick={() => hidePanel(panel.def.id === "details" ? "details" : "tree")}
+        onClick={() => {
+          if (panel.def.id === "tree" || panel.def.id === "details") hidePanel(panel.def.id);
+          else {
+            const workspace = useWorkspace.getState();
+            void workspace.setValue(["layout"], movePanel(workspace.document.layout, panel.def.id, { kind: "hidden" }));
+          }
+        }}
       >
         <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
           <path d="M18 6 6 18M6 6l12 12" />
@@ -624,7 +632,9 @@ function useMainSize(): { width: number; height: number } {
 
 /** The float slot: cards over the viewport, each kept inside it. */
 export function FloatLayer() {
-  const slot = useWorkspace((s) => s.document.layout.float);
+  const layout = useWorkspace((s) => s.document.layout);
+  const opened = useWorkspace((s) => s.opened);
+  const slot = visibleLayout(layout, opened).float;
   const ready = useWorkspaceReady();
   const viewport = useMainSize();
   if (!ready) return null;
@@ -691,7 +701,9 @@ let seeding = false;
  * document loads or that value changes, and a fold or unfold by the user is written back quietly.
  */
 export function BottomSlot() {
-  const slot = useWorkspace((s) => s.document.layout.bottom);
+  const layout = useWorkspace((s) => s.document.layout);
+  const opened = useWorkspace((s) => s.opened);
+  const slot = useMemo(() => visibleLayout(layout, opened).bottom, [layout, opened]);
   const ready = useWorkspaceReady();
   const docCollapsed = slot.collapsed;
   const seen = useRef<boolean | null>(null);

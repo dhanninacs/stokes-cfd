@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { currentGhost, subscribeGhost } from "../direct/ghostState";
 import { latestOperation, operationFraction, operationText } from "../state/operations";
 import { latestProgress, progressFraction, progressLabel, progressText } from "../state/parts";
 import { useStore } from "../state/store";
@@ -17,7 +18,8 @@ interface View {
  * "Enclosure: cutting 1 body out of the enclosure 60 %" while a geometry operation runs (T-029).
  * It shows the newest of the imports and the operations under way, and is gone when the last one
  * has finished. It keeps its last text while it fades out, so the words do not change under the
- * eye. It never takes the pointer.
+ * eye. It never takes the pointer. While a body is built after Finish or a pull, the build status line
+ * (`direct/DirectLayer.tsx`) says the same words with the time and Cancel, so this line keeps its bar only.
  */
 export default function ImportProgressLine() {
   const progress = useStore((s) => s.importProgress);
@@ -39,6 +41,8 @@ export default function ImportProgressLine() {
     if (text !== null) setKept({ text, fraction: now });
   }, [text, now]);
   const shown = view !== null ? { text: view.text, fraction: view.fraction } : kept;
+  const ghost = useSyncExternalStore(subscribeGhost, currentGhost);
+  const quiet = ghost !== null && ghost.phase === "build" && (view === null || view === running);
   const fraction = shown?.fraction ?? null;
 
   return (
@@ -56,7 +60,7 @@ export default function ImportProgressLine() {
       <div className="import-progress-track">
         <div className="import-progress-bar" data-indeterminate={fraction === null} style={fraction === null ? undefined : { width: `${(fraction * 100).toFixed(1)}%` }} />
       </div>
-      <div className="import-progress-label">{shown?.text}</div>
+      {!quiet && <div className="import-progress-label">{shown?.text}</div>}
     </div>
   );
 }

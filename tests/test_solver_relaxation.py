@@ -1,4 +1,4 @@
-"""The user's under-relaxation factors (ADR-0036): settings, snapshot, basis and every writer.
+"""The user's under-relaxation factors (ADR-0045): settings, snapshot, basis and every writer.
 
 Each factor is optional: unset, the engine writes its own value and the case is byte for byte the
 one written before the settings existed (the golden tests hold that); set, it replaces the

@@ -177,6 +177,31 @@ def test_points_alone_ask_the_host_what_an_older_agent_understands(
     assert "seed_patches" not in fake.traces[0] and "seed_count" not in fake.traces[0]
 
 
+def test_the_tracing_settings_reach_the_host_only_when_asked(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Following walls, the stopping speed and the step cap go to the host when they differ."""
+    fake, run = a_run(session, monkeypatch)
+    volume = {"run": run, "patch": "volume", "field": "U", "source": "volume"}
+    session.execute("run.streamlines", seed_patches=["inlet"], **volume)
+    assert not {"follow_walls", "terminal_fraction", "max_steps"} & set(fake.traces[0])
+    session.execute(
+        "run.streamlines",
+        seed_patches=["inlet"],
+        follow_walls=True,
+        terminal_fraction=0.001,
+        max_steps=500,
+        **volume,
+    )
+    asked = fake.traces[1]
+    assert asked["follow_walls"] is True
+    assert asked["terminal_fraction"] == 0.001 and asked["max_steps"] == 500
+    # A non-boolean follow_walls is the registry's refusal; these two are the command's own.
+    for bad in ({"terminal_fraction": 2.0}, {"max_steps": 0}):
+        with pytest.raises(StreamlinesInvalid):
+            session.execute("run.streamlines", seed_patches=["inlet"], **volume, **bad)
+
+
 def test_seed_patches_are_refused_off_the_volume_or_when_empty(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:

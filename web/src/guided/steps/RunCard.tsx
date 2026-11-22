@@ -34,6 +34,7 @@ export default function RunCard({ step }: { step: GuidedStep }) {
   const action = useAction();
   const [draft, setDraft] = useState<string | null>(null);
   const [coresDraft, setCoresDraft] = useState<string | null>(null);
+  const [targetDraft, setTargetDraft] = useState<string | null>(null);
 
   const settings = useMemo(() => findSolverSettings(tree), [tree]);
   // An imported case runs its own controlDict, so the model's Iterations would change nothing it
@@ -63,6 +64,23 @@ export default function RunCard({ step }: { step: GuidedStep }) {
     void action.run(async () => {
       if (settings === null) await configureSolve({});
       await configureSolve({ values: { iterations: n } });
+    });
+  };
+
+  // The residual target: the run stops as converged once every residual is below it.
+  const commitTarget = () => {
+    const text = targetDraft;
+    setTargetDraft(null);
+    if (text === null) return;
+    const v = Number(text.trim());
+    if (!Number.isFinite(v) || v <= 0 || v >= 1) {
+      action.fail("The residual target is a number between 0 and 1, such as 1e-3.");
+      return;
+    }
+    if (v === target) return;
+    void action.run(async () => {
+      if (settings === null) await configureSolve({});
+      await configureSolve({ values: { residual_target: v } });
     });
   };
 
@@ -101,6 +119,27 @@ export default function RunCard({ step }: { step: GuidedStep }) {
             if (e.key === "Escape") setDraft(null);
           }}
           data-ws="guided-iterations"
+        />
+      </label>
+      <label className="guided-field">
+        <span>Residual target</span>
+        <input
+          className="field"
+          inputMode="decimal"
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="Residual target"
+          title="The run stops as converged once every residual falls below this. Smaller is stricter and takes longer."
+          disabled={active || action.busy}
+          value={targetDraft ?? (target === null ? "" : target.toExponential().replace(/\.?0+e/, "e").replace("e+", "e"))}
+          placeholder="1e-3"
+          onChange={(e) => setTargetDraft(e.target.value)}
+          onBlur={commitTarget}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") setTargetDraft(null);
+          }}
+          data-ws="guided-residual-target"
         />
       </label>
       </>}

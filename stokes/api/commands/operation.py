@@ -136,12 +136,36 @@ def _named_part(project: Project, ref: str) -> Node | None:
 
 
 def _refuse_mesh_only(project: Project, op_type: str, parts: list[str]) -> None:
-    """ADR-0021 decision 1.3: a mesh-only part has no B-rep for an operation to read."""
-    from stokes.geometry.errors import MeshOnly
+    """ADR-0021 decision 1.3: a mesh-only part has no B-rep for an operation to read. ADR-0035
+    decision 7: an implicit operation reads implicit parts only, and a B-rep operation refuses
+    them."""
+    from stokes.geometry.errors import MeshOnly, OperationInvalid
+    from stokes.geometry.model import is_implicit_operation
 
     for part in parts:
         node = project.get(part)
-        if node.params.get("family") == "mesh":
+        family = node.params.get("family")
+        if is_implicit_operation(op_type):
+            if family != "implicit":
+                raise OperationInvalid(
+                    f"{node.path} is not an implicit part: {op_type} combines implicit parts only",
+                    details={"part": part},
+                )
+            continue
+        if family == "implicit":
+            raise MeshOnly(
+                f"{node.path} is an implicit part (no B-rep): {op_type} needs a B-rep part; "
+                "use the implicit operations on it",
+                details={"part": part},
+            )
+        if family == "mesh" and op_type == "transform":
+            raise MeshOnly(
+                f"{node.path} is a mesh-only part (STL or OBJ, no B-rep): transform moves B-rep "
+                "parts only; import the CAD file (STEP, IGES or BREP) to move, rotate, mirror or "
+                "scale it",
+                details={"part": part},
+            )
+        if family == "mesh":
             raise MeshOnly(
                 f"{node.path} is a mesh-only part (no B-rep): {op_type} needs a B-rep part; "
                 "import the CAD file (STEP, IGES or BREP) instead",
@@ -253,6 +277,10 @@ def operation_create(
         )
     own = _arrays_in_si(type, own)
     ids = _parts(project, list(inputs or []), "inputs")
+    if type in ("implicit_primitive", "implicit_sketch") and ids:
+        raise ValidationError(
+            f"a {type} reads no part: create it with no inputs", details={"type": type}
+        )
     if len(ids) < kind.min_inputs:
         raise OperationInvalid(
             f"a {type} needs at least {kind.min_inputs} input part(s)", details={"type": type}
@@ -261,6 +289,8 @@ def operation_create(
         if part_param in own:
             own[part_param] = _parts(project, own[part_param], part_param)
     read = list(dict.fromkeys(ids + [p for n in kind.part_params for p in own.get(n) or []]))
+    # A difference that keeps its tools hides its inputs only: the tools stay bodies of their own.
+    hide = ids if own.get("keep_tools") is True else read
     _refuse_mesh_only(project, type, read)
     if name is None:
         group = project.find(OPERATIONS_PATH)
@@ -270,7 +300,7 @@ def operation_create(
             index += 1
         name = f"{type}_{index}"
     full = {**own, "inputs": ids, "auto_run": auto_run}
-    cmd = CreateOperation(service, type, name, full, hide=read, node_id=node_id)
+    cmd = CreateOperation(service, type, name, full, hide=hide, node_id=node_id)
     result = ctx.session.undo.push(cmd, project)
     ctx.record(node_id=cmd.node_id, name=name, inputs=ids, params=own)
     if cmd.created_group:

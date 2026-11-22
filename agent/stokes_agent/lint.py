@@ -82,6 +82,8 @@ MAX_STL_FINDINGS = 32
 #: exception cannot be reached by any other staged file.
 GEOMETRY_PREFIX = "constant/geometry/"
 STL_SUFFIX = ".stl"
+#: A Gmsh script (ADR-0043), checked by `geo_lint` instead of the dictionary rules.
+GEO_SUFFIX = ".geo"
 
 #: A whole line of an ASCII STL, matched COMPLETELY.
 #:
@@ -355,6 +357,24 @@ AGENT_OWN_LOG_PREFIX = "log"
 #: comes from the job's record (`jobs.py` writes it from what a mesher step produced, or from a
 #: `copy_from` of such a job), never from the wire.
 POLYMESH_PREFIX = "constant/polyMesh/"
+
+#: A region's own mesh (ADR-0042): `constant/<region>/polyMesh/`, written by `splitMeshRegions`.
+_REGION_MESH_RE = re.compile(r"^constant/[A-Za-z][A-Za-z0-9_]{0,63}/polyMesh/")
+
+#: The region of every cell of the whole mesh, written by the same step.
+CELL_TO_REGION = "constant/cellToRegion"
+
+
+def is_mesh_path(rel: str) -> bool:
+    """Whether ``rel`` is a mesh file by its place: the whole mesh, a region's mesh, or the
+    split's cell-to-region list. The same rules hold for all three: machine-written, scanned for
+    a `#` only when a client staged one, and trusted only from the agent's own record."""
+    return (
+        rel.startswith(POLYMESH_PREFIX)
+        or rel == CELL_TO_REGION
+        or _REGION_MESH_RE.match(rel) is not None
+    )
+
 
 # A double-quoted string (a backslash escapes the next character; an unterminated one ends at the
 # newline, as OpenFOAM's reader does), a `//` comment, a `/* */` comment (unterminated: to the end
@@ -1089,7 +1109,7 @@ def lint_with_rules(
     clean = strip_comments(text)
     lowered = clean.lower()
     hits = _line_findings(path, text)
-    if polymesh or path.startswith(POLYMESH_PREFIX):
+    if polymesh or is_mesh_path(path):
         for match in _HASH_RE.finditer(clean):
             hits.append(
                 (
@@ -1215,16 +1235,9 @@ def lint_file(rel: str, path: Path) -> list[Finding]:
     """
     if path.is_symlink():
         return [Finding(rel, 0, "", "a symbolic link in a job folder")]
-    # **A Gmsh job's two inputs have their own rules** (`lint_gmsh`): its script, a program
-    # checked line by line against a closed grammar, and the STEP it reads, checked as data.
-    # Imported here: `lint_gmsh` takes `Finding` from this module.
-    from .lint_gmsh import lint_gmsh_input
-
-    special = lint_gmsh_input(rel, path)
-    if special is None and is_staged_surface(rel):
-        special = lint_large_stl(rel, path)
-    if special is not None:
-        return special
+    large_stl = is_staged_surface(rel)
+    if large_stl:
+        return lint_large_stl(rel, path)
     try:
         with path.open("rb") as handle:
             raw = handle.read(MAX_SCAN_BYTES + 1)
@@ -1241,7 +1254,20 @@ def lint_file(rel: str, path: Path) -> list[Finding]:
         ]
     if is_binary(raw):
         return [Finding(rel, 0, "", "a binary file; only text may be staged")]
-    return lint_text(rel, raw.decode("utf-8"), polymesh=rel.startswith(POLYMESH_PREFIX))
+    return _lint_decoded(rel, raw.decode("utf-8"))
+
+
+def _lint_decoded(rel: str, text: str) -> list[Finding]:
+    """Lint one staged text file by what it is: a Gmsh script or a dictionary.
+
+    **A Gmsh script is checked against its own closed grammar** (ADR-0043), not as a dictionary:
+    it is a program, and only the statements the Gmsh driver writes may run.
+    """
+    if rel.endswith(GEO_SUFFIX):
+        from .geo_lint import lint_geo
+
+        return [Finding(rel, line, token, why) for line, token, why in lint_geo(text)]
+    return lint_text(rel, text, polymesh=is_mesh_path(rel))
 
 
 def is_staged_surface(rel: str) -> bool:
@@ -1496,7 +1522,7 @@ def lint_job(
 def _is_trusted_polymesh(rel: str, path: Path, trusted: Mapping[str, int]) -> bool:
     """Whether ``rel`` is a mesher-written polyMesh file whose size is still the recorded one."""
     recorded = trusted.get(rel)
-    if not rel.startswith(POLYMESH_PREFIX) or not isinstance(recorded, int):
+    if not is_mesh_path(rel) or not isinstance(recorded, int):
         return False
     try:
         return not path.is_symlink() and path.is_file() and path.stat().st_size == recorded

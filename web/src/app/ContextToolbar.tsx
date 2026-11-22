@@ -20,8 +20,11 @@ import { emitRename } from "./events";
 import { usePrepareMenu } from "./PrepareMenu";
 import { overlapNotice, overlapShort } from "../panels/coverage";
 import { usePickOverlap } from "../panels/usePickOverlap";
+import { bodyEdit, editBody } from "./editOperation";
 
 /** Distance between the patch and the toolbar, and the toolbar's margin to whatever it clamps against. */
+/** The bottom-right corner the view buttons and the axes triad occupy, from the viewport's corner. */
+const CUBE_ZONE = { width: 176, height: 196 };
 const GAP = 12;
 const MARGIN = 8;
 /** The island row at the bottom of the viewport. */
@@ -114,6 +117,9 @@ export default function ContextToolbar({ leftInset, rightInset, topInset = 0 }: 
   // something — a body for the enclosing and repairing entries, faces for Remove faces — and its
   // entries that the pick does not fit are disabled with a reason.
   const prepare = usePrepareMenu();
+  // One body made by an operation: "Edit sketch" / "Edit <operation>" leads (review finding B3).
+  const editPart = pickMode === "body" && picked.bodies.length === 1 ? picked.bodies[0] : null;
+  const edit = useMemo(() => (editPart === null ? null : bodyEdit(tree, editPart)), [tree, editPart]);
   /** "Show boundary" only while the patch has one and the live pick holds nothing. */
   const showBoundary = assigned && pickLabel === null;
 
@@ -145,8 +151,11 @@ export default function ContextToolbar({ leftInset, rightInset, topInset = 0 }: 
     let y = anchor.y - GAP - h;
     const top = MARGIN + insets.current.topInset;
     if (y < top) y = (anchor.bottom ?? anchor.y) + GAP; // no room above the bounds: flip below them
-    const x = clamp(anchor.x - w / 2, minX, Math.max(minX, maxX));
     y = clamp(y, top, Math.max(top, height - BOTTOM_INSET - h));
+    // Low on the screen the right-hand corner is the view buttons' and the axes': the toolbar sat
+    // on "Front Back Left Right" when a tall body pushed it down there. It stops short of them.
+    if (y + h > height - CUBE_ZONE.height) maxX = Math.min(maxX, width - CUBE_ZONE.width - w);
+    const x = clamp(anchor.x - w / 2, minX, Math.max(minX, maxX));
     el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
   }, []);
 
@@ -308,6 +317,13 @@ export default function ContextToolbar({ leftInset, rightInset, topInset = 0 }: 
           {/* §15.4's pending state: which parts a mode conversion is still waiting for. Shown in the
               edge/point modes, where a conversion may legitimately have nothing to show yet. */}
           {pending !== null && <span className="ctx-pick ctx-pending">{pending}</span>}
+          {edit !== null && editPart !== null && (
+            <Tooltip label={`${edit.label} (or double-click the body)`} side="top" describe={false}>
+              <Button variant="ghost" className="lead" aria-label={edit.label} data-ws="ctx-edit" onClick={() => editBody(editPart)}>
+                <Pencil size={14} /> <span className="ctx-label">{edit.label}</span>
+              </Button>
+            </Tooltip>
+          )}
           {showName && (
             <Tooltip label="Tag selection…" side="top" describe={false}>
               <Button variant="ghost" className="lead" aria-label="Tag selection" onClick={openName}>
@@ -317,14 +333,14 @@ export default function ContextToolbar({ leftInset, rightInset, topInset = 0 }: 
           )}
           {showBoundary ? (
             <Tooltip label={`Select the boundary of ${patch}`} side="top" describe={false}>
-              <Button variant="ghost" className={showName ? undefined : "lead"} aria-label="Show boundary" onClick={() => patch !== null && void assignBoundary(patch)}>
+              <Button variant="ghost" className={showName || edit !== null ? undefined : "lead"} aria-label="Show boundary" onClick={() => patch !== null && void assignBoundary(patch)}>
                 <Tag size={14} /> <span className="ctx-label">Show boundary</span>
               </Button>
             </Tooltip>
           ) : (
             <>
               <Tooltip label={pickLabel !== null ? `Assign a condition to ${pickLabel}` : `Assign a condition to ${patch ?? "the selection"}`} side="top" describe={false}>
-                <Button variant="ghost" className={showName || assigned ? undefined : "lead"} aria-label="Assign a condition" onClick={(e) => assign.open(e.currentTarget)}>
+                <Button variant="ghost" className={showName || assigned || edit !== null ? undefined : "lead"} aria-label="Assign a condition" onClick={(e) => assign.open(e.currentTarget)}>
                   <Tag size={14} /> <span className="ctx-label">Assign</span> <ChevronDown size={13} />
                 </Button>
               </Tooltip>

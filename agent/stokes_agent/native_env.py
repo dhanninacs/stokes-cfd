@@ -44,13 +44,49 @@ def candidates() -> list[Path]:
     )
 
 
+#: Where FoamWin keeps the Gmsh it bundles, relative to the folder holding `of14-env.ps1`.
+GMSH_FOLDER = "gmsh"
+
+
+def gmsh_tool(root: Path, listed: object) -> str | None:
+    """FoamWin's bundled `gmsh.exe`, or None (ADR-0043).
+
+    **Gmsh is not an OpenFOAM application**, so it is not in `FOAM_APPBIN` where every other tool
+    is looked up: FoamWin ships it in `<install>/gmsh/` and its handshake lists it under `tools`.
+    The handshake's path is taken only when it names a regular file called `gmsh.exe` inside the
+    install's own folder (the one holding the env script), and the standard folder is the
+    fallback - so neither a handshake nor a link can point the agent at another program.
+    """
+    candidates: list[Path] = []
+    if isinstance(listed, dict) and isinstance(listed.get("gmsh"), str):
+        candidates.append(Path(listed["gmsh"]))
+    candidates.append(root / GMSH_FOLDER / "gmsh.exe")
+    try:
+        top = root.resolve(strict=True)
+    except OSError:
+        return None
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+        except OSError:
+            continue
+        if (
+            candidate.is_absolute()
+            and resolved.is_file()
+            and resolved.name.lower() == "gmsh.exe"
+            and resolved.is_relative_to(top)
+        ):
+            return str(resolved)
+    return None
+
+
 def _mpi_builds(appbin: Path) -> dict[str, str]:
     """The tools built against Microsoft MPI, which replace the serial ones while MPI is present.
 
     **coupledSimpleFoam's PETSc build** (FoamWin's `scripts/build-coupled.sh`) lives in
     `bin/msmpi` because it imports msmpi.dll; the serial build in `bin` needs no MPI. With
     Microsoft MPI present the PETSc build is the one used, as FoamWin's own shell does, and its
-    folder is what `engine_env.coupled_has_petsc` reads (ADR-0035 decision 10). Only a file
+    folder is what `engine_env.coupled_has_petsc` reads (ADR-0044 decision 10). Only a file
     directly in that folder counts.
     """
     folder = appbin / "msmpi"
@@ -115,16 +151,11 @@ def capture(path: Path, timeout: float) -> EngineEnv:
             tool = appbin / f"{name}.exe"
             if tool.is_file() and tool.resolve().parent == appbin:
                 tools[name] = str(tool)
-        # **Gmsh is not an OpenFOAM program**, so it is not in `FOAM_APPBIN`: FoamWin ships it in
-        # a `gmsh` folder beside its handshake script (its `of14-shell.ps1` puts that folder on
-        # PATH). Only that one fixed place counts, beside the install the host chose; the tool
-        # paths the handshake itself reports are not trusted for this, nor is PATH.
-        gmsh_dir = path.parent / "gmsh"
-        gmsh_exe = gmsh_dir / "gmsh.exe"
-        if gmsh_exe.is_file() and gmsh_exe.resolve().parent == gmsh_dir.resolve():
-            tools["gmsh"] = str(gmsh_exe.resolve())
         if not all(name in tools for name in ("blockMesh", "checkMesh", "foamRun")):
             raise ValueError("required native tools are absent")
+        found_gmsh = gmsh_tool(path.parent, data.get("tools"))
+        if found_gmsh is not None:
+            tools["gmsh"] = found_gmsh
         env = {
             key: value
             for key, value in raw.items()

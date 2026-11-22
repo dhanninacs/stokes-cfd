@@ -93,6 +93,9 @@ _NEGATIVE_CELLS = re.compile(r"Number of negative volume cells:\s*(\d+)")
 _SEVERE_NON_ORTHO = re.compile(r"^\s*\*{0,3}Number of severely non-orthogonal[^:]*:\s*(\d+)")
 # `Mesh OK.` — the verdict, and the only thing that means the checks passed.
 _MESH_OK = re.compile(r"^Mesh OK\.\s*$")
+#: `Number of regions: 2` (the mesh falls apart into pieces no face joins) and the unused points.
+_REGIONS = re.compile(r"^\s*\*?Number of regions:\s*(\d+)")
+_UNUSED = re.compile(r"^\s*\*+Unused points found in the mesh, number unused by faces:\s*(\d+)")
 # `Failed 2 mesh checks.`
 _FAILED = re.compile(r"^Failed\s+(\d+)\s+mesh checks?\.\s*$")
 # The patch table: a header, then `    inlet               30       62       ok (…)`
@@ -140,6 +143,10 @@ def parse_checkmesh(text: str) -> dict[str, Any]:  # noqa: PLR0912, PLR0915
         "min_volume": None,
         "max_volume": None,
         "negative_volume_cells": None,
+        # Pieces of the mesh no face joins (1 is whole), and points no face uses; None when the
+        # log does not say.
+        "regions": None,
+        "unused_points": None,
         # **`0` here is a reading, not a default.** checkMesh prints `Failed n mesh checks.`
         # only when something failed, so a log without that line reports zero failures — unlike
         # the figures above, where an absent line means the log did not say. An adversarial
@@ -221,6 +228,14 @@ def parse_checkmesh(text: str) -> dict[str, Any]:  # noqa: PLR0912, PLR0915
             continue
         if _MESH_OK.match(line):
             found["mesh_ok"] = True
+            continue
+        match = _REGIONS.match(line)
+        if match is not None:
+            found["regions"] = int(match.group(1))
+            continue
+        match = _UNUSED.match(line)
+        if match is not None:
+            found["unused_points"] = int(match.group(1))
             continue
         match = _FAILED.match(line)
         if match is not None:

@@ -268,6 +268,11 @@ def histogram(
         raise ReportInvalid("the surfaces have no triangles")
     facet = np.concatenate(facets)
     weight = np.concatenate(weights)
+    # A triangle with no value (a wall-only field on an inlet) is left out, as it is from a report.
+    keep = np.isfinite(facet)
+    facet, weight = facet[keep], weight[keep]
+    if facet.size == 0:
+        raise ReportInvalid("the field has no value on these surfaces")
     lo = float(facet.min()) if low is None else float(low)
     hi = float(facet.max()) if high is None else float(high)
     if not (math.isfinite(lo) and math.isfinite(hi)) or hi < lo:

@@ -23,7 +23,7 @@ import { fitSourcesFor, missingPatchSources } from "../viewport/fitTargets";
 import { SLICE_SOURCE } from "../panels/fieldsModel";
 import { sliceSourceOf, visibleSlices } from "../panels/sliceModel";
 import { ISO_CODES, ISO_COMMAND, ISO_POLL_MAX_MS, ISO_POLL_MS, isoRefusalText, isoStateText, readIsoEvent, readIsoReply, sameSurface, showIso, type IsoSummary } from "../panels/isoModel";
-import { FIT_POLL_MS, NEW_FIT_WATCH, applyLookActions, controlActions, lookSliceOf, faceOnDirection, streamlinesStalled, inletPatchOf, inletPatchesOf, isoRefusalWord, noLinesNote, stepFitWatch, streamField, streamSeeds, unionBox, viewFromFor, type Box, type LookAction, type LookContext, type LookRequest, type LookState, type SeedKind } from "../panels/lookModel";
+import { DEFAULT_PREFS, FIT_POLL_MS, NEW_FIT_WATCH, applyLookActions, controlActions, lookSliceOf, faceOnDirection, streamlinesStalled, inletPatchOf, inletPatchesOf, isoRefusalWord, noLinesNote, stepFitWatch, stopSummary, streamField, streamSeeds, streamTraceOf, unionBox, viewFromFor, type Box, type LookAction, type LookContext, type LookRequest, type LookState, type SeedKind, type StreamTrace } from "../panels/lookModel";
 import { findSolverSettings } from "../panels/runPanelModel";
 import { NO_STREAMLINES, speedRangeOf } from "../panels/streamlineModel";
 import { NO_VECTOR_CLOUD, volumeArrowsShown } from "../panels/arrowModel";
@@ -31,7 +31,7 @@ import { fluidBody, readBoundaries, readBodies } from "./guidedTree";
 
 /** The part of the store the looks read and write. */
 export function lookStateOf(s: StokesState): LookState {
-  return { results: s.results, slices: s.slices, iso: s.iso, streamlines: s.streamlines, arrows: s.arrows, section: s.section, orthographic: s.orthographic, hiddenNodes: s.hiddenNodes };
+  return { results: s.results, slices: s.slices, iso: s.iso, contours: s.contours, streamlines: s.streamlines, arrows: s.arrows, section: s.section, orthographic: s.orthographic, hiddenNodes: s.hiddenNodes };
 }
 
 /** The box of the inlet patch in the scene, or null when the case has no inlet or its patch is not drawn. */
@@ -96,7 +96,7 @@ function ask(request: LookRequest, report: Report): void {
     else fitNow(how);
   } else if (request.kind === "askIso") void askIso(request.field, request.value, report);
   else if (request.kind === "askVectors") void askVectors(request.count, report);
-  else void askStreamlines(request.seeds, request.count, request.tubes, report);
+  else void askStreamlines(request.seeds, request.count, request.tubes, report, request.trace);
 }
 
 // ---------------------------------------------------------------------------------------------- volume vectors
@@ -339,7 +339,7 @@ function reportNoLines(report: Report, kind: SeedKind, seeds: number): void {
  * **The slice trace is only the fallback** for a host that cannot trace through the volume (no VTK, an older agent):
  * the points are traced on the run's cached slice, and the inlet kind uses the row where the inlet meets the plane.
  */
-async function askStreamlines(kind: SeedKind, count: number, tubes: boolean, report: Report): Promise<void> {
+async function askStreamlines(kind: SeedKind, count: number, tubes: boolean, report: Report, trace: StreamTrace = streamTraceOf(DEFAULT_PREFS)): Promise<void> {
   const s = useStore.getState();
   const field = streamField(s.results.data);
   const box = currentScene()?.modelBounds() ?? null;
@@ -359,9 +359,9 @@ async function askStreamlines(kind: SeedKind, count: number, tubes: boolean, rep
   s.setStreamlines({ ...NO_STREAMLINES, phase: "computing" });
   report("Tracing…", true);
   try {
-    const maxLength = 2 * Math.max(box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2]);
-    type Reply = { lines?: { points: [number, number, number][]; speeds: number[] }[] };
-    const volume = { patch: "volume", source: "volume", field, direction: "forward", max_length: maxLength, step: 0.2 };
+    const maxLength = trace.reach * Math.max(box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2]);
+    type Reply = { lines?: { points: [number, number, number][]; speeds: number[]; reason?: string }[] };
+    const volume = { patch: "volume", source: "volume", field, direction: trace.direction, max_length: maxLength, step: 0.2, ...(trace.follow ? { follow_walls: true } : {}) };
     let reply: Reply;
     let onSlice = false;
     try {
@@ -369,14 +369,17 @@ async function askStreamlines(kind: SeedKind, count: number, tubes: boolean, rep
     } catch {
       if (seeds.length === 0) throw new Error("The host cannot trace through the volume, and the slice does not cross the inlet");
       onSlice = true;
-      reply = (await s.execute("run.streamlines", { patch: "slice", field, seeds, direction: "forward", max_length: maxLength })) as Reply;
+      reply = (await s.execute("run.streamlines", { patch: "slice", field, seeds, direction: trace.direction, max_length: maxLength })) as Reply;
     }
     if (mine !== streamSeq) return;
     const lines = reply.lines ?? [];
-    useStore.getState().setStreamlines({ phase: lines.length === 0 ? "failed" : "ready", lines, range: speedRangeOf(lines), message: "", tubes });
+    useStore.getState().setStreamlines({ phase: lines.length === 0 ? "failed" : "ready", lines, traced: lines, range: speedRangeOf(lines), message: "", tubes });
     if (lines.length === 0) reportNoLines(report, kind, Math.max(seeds.length, inlets.length));
     else if (onSlice && streamlinesStalled(lines, box)) report("Flow crosses slice", false, "The flow goes through this slice, not along it, so lines traced in it stay put. Use a slice along the flow.");
-    else report("", false);
+    else {
+      const ends = stopSummary(lines.map((l) => l.reason ?? ""), trace.follow);
+      report(ends.text, false, ends.tip);
+    }
   } catch (err) {
     if (mine !== streamSeq) return;
     useStore.getState().setStreamlines({ ...NO_STREAMLINES, phase: "failed", message: String((err as Error).message ?? err) });

@@ -1,3 +1,4 @@
+import type { Entity as SketchEntity, Tool as SketchTool } from "../sketch/model";
 import { create } from "zustand";
 import { StokesClient, StokesApiError, type ClientConfig } from "../api/client";
 import type {
@@ -57,7 +58,8 @@ import { NO_STREAMLINES, type StreamlineState } from "../panels/streamlineModel"
 import { NO_VECTOR_CLOUD, type ArrowView, type VectorCloud } from "../panels/arrowModel";
 import { NO_LOADING, type LoadingCounts } from "./loadingState";
 import { NO_SLICES, type SliceList } from "../panels/sliceModel";
-import { NO_ISO, NO_ISO_DRAWN, type IsoDrawn, type IsoView } from "../panels/isoModel";
+import { NO_ISO, NO_ISO_DRAWN, type ContourSet, type IsoDrawn, type IsoView } from "../panels/isoModel";
+import { NO_CONTOURS_DRAWN, type ContoursDrawn } from "../viewport/contourLayerModel";
 import { NO_SELECTION, extend, selectOne, selectSiblings as selectSiblingsOf, toggle, type Selection, type VisibleRow } from "./multiSelect";
 import { indexFor, nodeAtIndexedPath } from "./treePatch";
 import { selectKeepsStage, type MeshDisplay } from "./meshPatches";
@@ -230,6 +232,30 @@ export function redactParams(params: Record<string, unknown>): Record<string, un
     else out[k] = v;
   }
   return out;
+}
+
+/** The sketcher's session (ADR-0036): what it edits and what it started from. */
+export interface SketchSession {
+  /** The `implicit_sketch` operation it edits; null for a new sketch, made on Finish. */
+  opId: string | null;
+  plane: "xy" | "yz" | "zx";
+  /** Millimetres in the plane (`sketch/model.ts`'s entities). */
+  entities: SketchEntity[];
+  /** Expression texts on coordinates (`sketch/bindings.ts`, ADR-0037). */
+  bindings?: Record<string, string>;
+  /** The sketch's dimensions: name to quantity text or expression ("20 [mm]", "R * 2"). */
+  dimensions?: Record<string, string>;
+  /**
+   * The tool the sketcher starts with: the ribbon's Line, Rectangle, Circle… open a new sketch with
+   * that tool chosen (review finding B7), and editing a sketch starts in Select. Absent: the
+   * sketcher's own default.
+   */
+  tool?: SketchTool;
+  /**
+   * Where the sketch plane's origin is (world metres; the operation's `origin`), so the sketch is drawn
+   * over its place in the 3D view (ADR-0039). Absent: the world origin.
+   */
+  origin?: [number, number, number];
 }
 
 export interface StokesState {
@@ -418,6 +444,13 @@ export interface StokesState {
    * on a face answers it, and Escape leaves the mode (`selection.clear`, the same key as the pick).
    */
   seedPick: boolean;
+  /** Whether the build ribbon (ADR-0035's modeller: Sketch, Solid, Edit, Intersect) is open. */
+  buildRibbon: boolean;
+  /**
+   * The sketcher (ADR-0036), while it is open: the sketch operation it edits (null for a new
+   * sketch), the plane and the entities it started from (sketch mm, `sketch/model.ts`).
+   */
+  sketch: SketchSession | null;
   /**
    * The output `geometry.op_done` asked for, until the tree holds it: the node event that adds an
    * output is still queued behind the operation event when it arrives, so the selection waits.
@@ -521,6 +554,10 @@ export interface StokesState {
   /** The iso-surface the viewport draws (ADR-0026 amendment 1); view state, `panels/isoModel.ts` decides. */
   iso: IsoView;
   setIso: (iso: IsoView) => void;
+  /** Several iso-surfaces of one field at once (the Iso look's Count above one), or null. */
+  contours: ContourSet | null;
+  /** What the viewport drew of `contours` (`viewport/contourLayer.ts`). */
+  contoursDrawn: ContoursDrawn;
   /** What the viewport made of `iso`, written by `viewport/isoLayer.ts` only. */
   isoDrawn: IsoDrawn;
   setStreamlines: (streamlines: StreamlineState) => void;
@@ -689,6 +726,9 @@ export interface StokesState {
   closeOperationCard(): void;
   /** Turn the seed-pick mode on or off; the card drives it, Escape leaves it. */
   setSeedPick(on: boolean): void;
+  setBuildRibbon(open: boolean): void;
+  openSketch(session: SketchSession): void;
+  closeSketch(): void;
   /** The node the card's run made: set when Run answers, cleared by a new card. */
   /**
    * The node the open card's Run made. `cardId` is the card that asked: a reply that arrives after
@@ -981,6 +1021,8 @@ export const useStore = create<StokesState>((set, get) => ({
   conversionTopology: null,
   topologyLoaded: new Set<string>(),
   seedPick: false,
+  buildRibbon: false,
+  sketch: null,
   pendingSelect: null,
   hiddenPatches: [],
   hiddenNodes: [],
@@ -997,6 +1039,8 @@ export const useStore = create<StokesState>((set, get) => ({
   setVectorCloud: (vectorCloud) => set({ vectorCloud }),
   iso: NO_ISO,
   setIso: (iso) => set({ iso }),
+  contours: null,
+  contoursDrawn: NO_CONTOURS_DRAWN,
   isoDrawn: NO_ISO_DRAWN,
   setStreamlines: (streamlines) => set({ streamlines }),
   loading: NO_LOADING,
@@ -1285,7 +1329,10 @@ export const useStore = create<StokesState>((set, get) => ({
     // A part node is a body pick; a tag node picks its members (they arrive from tag.members);
     // anything else, and null, empties the pick (ADR-0021 3.1, 3.5).
     const picked: Picked = node?.type === "part" ? { bodies: [id as string], faces: {}, edges: {}, vertices: {} } : NO_PICK;
-    const next = { selectedId: id, selectedPatch, ...changedPick(state, picked, false), revealRequest, meshTask: null };
+    // The one row replaces a set too: a finished Combine selects its output, and with the two bodies it
+    // consumed still held in `selection` Details read "Several selected" over rows the tree no longer shows.
+    const selection = id === null ? NO_SELECTION : selectOne(id);
+    const next = { selectedId: id, selection, selectedPatch, ...changedPick(state, picked, false), revealRequest, meshTask: null };
     set(stage && stage !== state.stage ? { ...next, stage } : next);
     if (node?.type === "tag" && id !== null) void pickTag(id);
   },
@@ -1587,7 +1634,9 @@ export const useStore = create<StokesState>((set, get) => ({
 
   pushToast(kind, text, action, code) {
     const id = toastId++;
-    set((s) => ({ toasts: [...s.toasts.slice(-3), { id, kind, text, action, code }] }));
+    // The same message again replaces the one on screen (a double click on a tree row stacked
+    // "Opened Optimise." twice): one line, with a fresh timer.
+    set((s) => ({ toasts: [...s.toasts.filter((t) => !(t.kind === kind && t.text === text)).slice(-3), { id, kind, text, action, code }] }));
     window.setTimeout(() => get().dismissToast(id), kind === "error" || action ? 6000 : 3000);
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
@@ -1637,6 +1686,9 @@ export const useStore = create<StokesState>((set, get) => ({
   },
   closeOperationCard: () => set({ operationCard: null, seedPick: false }),
   setSeedPick: (on) => set({ seedPick: on }),
+  setBuildRibbon: (open) => set({ buildRibbon: open }),
+  openSketch: (session) => set({ sketch: session, operationCard: null }),
+  closeSketch: () => set({ sketch: null }),
   setOperationNode(cardId, id) {
     const card = get().operationCard;
     if (card === null || card.id !== cardId || card.nodeId === id) return;
@@ -1756,7 +1808,15 @@ function applyOperationEvent(op: OperationEvent): void {
         },
       });
       if (card === null || card.nodeId !== op.nodeId) return;
-      useStore.setState({ operationCard: null, seedPick: false, pendingSelect: op.outputs[0] ?? null });
+      const output = op.outputs[0] ?? null;
+      // The output is usually still queued behind this event; when the tree already holds it (the coarse
+      // pass added it), no tree change follows to apply `pendingSelect`, so it is selected here.
+      if (output !== null && findNode(state.tree, output) !== null) {
+        useStore.setState({ operationCard: null, seedPick: false, pendingSelect: null });
+        useStore.getState().select(output);
+        return;
+      }
+      useStore.setState({ operationCard: null, seedPick: false, pendingSelect: output });
       return;
     }
     case "failed": {
@@ -1764,6 +1824,9 @@ function applyOperationEvent(op: OperationEvent): void {
       const card = state.operationCard;
       // A cancel arrives as an `op_failed` too (`geometry.cancelled`): the card says it quietly.
       if (card !== null && card.nodeId === op.nodeId) useStore.getState().setOperationError(op.message, op.code === "geometry.cancelled");
+      // With no card open for it (a pull straight from Finish, a rebuild after an edit) the failure
+      // had nowhere to show: the body simply never appeared. A toast says why.
+      else if (op.code !== "geometry.cancelled") useStore.getState().pushToast("error", `The build failed: ${op.message}`, undefined, op.code);
       return;
     }
   }

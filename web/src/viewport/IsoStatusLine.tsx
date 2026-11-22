@@ -1,4 +1,5 @@
 import { isoKey, isoViewportText } from "../panels/isoModel";
+import { contoursLine } from "./contourLayerModel";
 import { useStore } from "../state/store";
 
 /**
@@ -9,7 +10,16 @@ import { useStore } from "../state/store";
 export function IsoStatusLine() {
   const iso = useStore((s) => s.iso);
   const drawn = useStore((s) => s.isoDrawn);
+  const contours = useStore((s) => s.contours);
+  const contoursDrawn = useStore((s) => s.contoursDrawn);
   const surface = iso.surface;
+  if (contours !== null && contoursDrawn.total > 0) {
+    return (
+      <div className="iso-status" data-testid="viewport-iso-status" aria-live="polite">
+        {contoursLine(contours, contoursDrawn)}
+      </div>
+    );
+  }
   if (surface === null || drawn.state !== "shown" || drawn.key !== isoKey(surface) || !iso.visible) return null;
   return (
     <div className="iso-status" data-testid="viewport-iso-status" aria-live="polite">

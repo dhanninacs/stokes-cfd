@@ -60,6 +60,7 @@ describe("legendOf", () => {
       digits: 3,
       placement: "right",
       printSize: false,
+      clip: false,
       bands: 0,
     });
     expect(legendOf(null).map).toBe("viridis");

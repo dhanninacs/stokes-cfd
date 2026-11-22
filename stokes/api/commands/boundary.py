@@ -384,7 +384,7 @@ def _onto_new(
     """A new boundary on an unused tag, or on a new tag made from members."""
     node_id, tag_node_id, region_node_id = ids
     uses = uses_of(spec, {}, given)
-    holder = default_region(plan, region, region_node_id)
+    holder = default_region(plan, region, region_node_id, _parts_of(tag, raw))
     recoloured = False
     if tag is None:
         text = picked(plan.ctx, raw)
@@ -409,6 +409,22 @@ def _onto_new(
     for pname, value in given.items():
         plan.set(boundary_id, pname, value)
     return Assigned(boundary_id, bname, tag_id, holder, uses, recoloured)
+
+
+def _parts_of(tag: Node | None, raw: Any) -> list[str]:  # Any: JSON members when tag is None
+    """The bodies the faces of a new boundary are on, for choosing its region; empty when the
+    members cannot be read (the assign then refuses them with its own message)."""
+    if tag is not None:
+        try:
+            return list(dict.fromkeys(str(m.part) for m in stored_members(tag)))
+        except StokesError:  # a malformed tag is reported where it is assigned
+            return []
+    found: list[str] = []
+    for member in raw if isinstance(raw, list) else []:
+        part = member.get("part") if isinstance(member, dict) else None
+        if isinstance(part, str) and part not in found:
+            found.append(part)
+    return found
 
 
 def _legacy_tag(plan: Plan, node: Node, color: str, tag_node_id: str | None) -> tuple[str, bool]:

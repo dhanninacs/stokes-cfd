@@ -73,7 +73,7 @@
  * of meshes in parts.ts, the parser in geometry.ts.
  */
 
-import { fitTargetIds, isCutSource, namesOfSources } from "./fitTargets";
+import { fitTargetIds, isCutSource, isOverlaySource, namesOfSources } from "./fitTargets";
 import * as THREE from "three";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
@@ -82,8 +82,11 @@ import type { HoverInfo, NavMode, PickMode } from "../state/store";
 import { leftPressOrbits } from "./leftDrag";
 import { BatchedMeshPool, type BatchedPart } from "./batch";
 import { CameraRig, type FitFrame, type ProjectionCamera } from "./camera";
+import { disposeGhost } from "../direct/ghost";
 import { edgeLines, featureEdges, MergedEdges } from "./edges";
 import { LineLayer } from "./lineLayer";
+import { MeshCutLayer, type MeshCut } from "./meshCut";
+import { SolidCutLayer, type SolidCut } from "./solidCut";
 import { streamlineLines } from "./streamlineLayer";
 import { DEFAULT_COLORMAP, type ColormapId } from "../state/colormap";
 import { createStudio, disposeStudio } from "./environment";
@@ -433,6 +436,20 @@ export interface PointHit {
   ray?: { origin: THREE.Vector3; direction: THREE.Vector3 };
 }
 
+/**
+ * Where the pointer meets a coloured surface, for the results' hover readout: the source the triangle
+ * belongs to, the triangle's three vertices (indices into the source's vertex list, the list the field
+ * values follow) and the barycentric weights of the point on it. The values themselves stay with the
+ * fields controller.
+ */
+export interface SurfaceSample {
+  source: string;
+  vertices: [number, number, number];
+  weights: [number, number, number];
+  /** The pointer, in client pixels. */
+  client: { x: number; y: number };
+}
+
 /** What the viewport answers a point pick with (the callback `requestPoint` was given). */
 export type PointPick = (hit: PointHit) => void;
 
@@ -610,6 +627,8 @@ const EDGE_SLICE = 6;
 const EDGE_MERGE_INTERVAL = 250;
 /** How long after the content last changed the translucent programs are compiled ahead, in ms (see `warmGlass`). */
 const GLASS_WARM_DELAY = 1500;
+/** How much of its radius the content's bounds must change by for an untouched view to frame again. */
+const REFRAME_SHARE = 0.08;
 /**
  * How long after the content last changed the box-select programs are compiled ahead, in ms (see
  * `warmPickSelect`). Shorter than the glass delay: a box select is an ordinary first action on a
@@ -868,6 +887,12 @@ export class SceneManager {
   private measureDots: THREE.Points | null = null;
   /** The plot-over-line's segment and end markers (`lineLayer.ts`), set from the store's `line`. */
   private readonly lineLayer: LineLayer;
+  /** The volume mesh where the section cuts it (`meshCut.ts`), on the Mesh stage. */
+  private readonly meshCut = new MeshCutLayer();
+  /** The modeller bodies' own filled sections (`solidCut.ts`), in place of their stencil caps. */
+  private readonly solidCut = new SolidCutLayer();
+  /** The parts whose section `solidCut` fills; the stencil caps leave them out. */
+  private solidCutParts: ReadonlySet<string> = new Set();
   /** Scratch for projecting the midpoint; the readout's x and y come from it. */
   private readonly measureMid = new THREE.Vector3();
   /** What was last published, so an unchanged readout is not sent again. */
@@ -953,6 +978,11 @@ export class SceneManager {
   onCameraMove: (() => void) | undefined = undefined;
   /** What the pointer is over, for the status strip (ADR-0022 6.1); null when it is over nothing. */
   onHoverInfo: (info: HoverInfo | null) => void = () => undefined;
+  /**
+   * The point under the pointer on a surface, for the results' hover readout; null when it leaves the
+   * model. Rides the throttled hover pick, so it costs no raycast of its own. Null while unset.
+   */
+  onSurfaceHover: ((sample: SurfaceSample | null) => void) | null = null;
   /**
    * The edge or vertex under the pointer in a topology mode, or null (A5). Reported so the overlay
    * can draw a hover highlight: without it the hover set was always empty and only the *picked*
@@ -1064,6 +1094,7 @@ export class SceneManager {
       // camera happens to move for another reason. That is why the fix-4 tests passed and the defect
       // survived them — they exercise `glyphShrink`, which is pure and correct, not this path.
       this.onCameraMove?.();
+      for (const listener of this.viewListeners) listener();
     };
     this.gizmo = new ViewGizmo(canvas, this.rig.target, this.rig.camera, theme);
     this.rig.onProjectionChange = (camera) => {
@@ -1139,6 +1170,8 @@ export class SceneManager {
     this.glyphs = new GlyphLayer(this.scene, GLYPH_LAYER, this.rig.camera);
     this.topologyOverlay.setResolution(Math.max(1, this.width), Math.max(1, this.height));
     this.lineLayer = new LineLayer(this.scene, theme.accent, this.width, this.height);
+    this.scene.add(this.meshCut.object);
+    this.scene.add(this.solidCut.object);
     this.scene.add(this.selection.mesh);
     // The section's cut faces (T-065b): one object, invisible until a section is on, so the scene
     // carries it always and the frame needs no conditional to add or remove it.
@@ -1417,6 +1450,8 @@ export class SceneManager {
     this.measureLineMaterial.dispose();
     this.measureDotMaterial.dispose();
     this.lineLayer.dispose();
+    this.meshCut.dispose();
+    this.solidCut.clear();
     this.gizmo.dispose();
     // **The section's own resources go with it** (Claude's defect 5). `SectionCaps.dispose` removes
     // every mark mesh from the parts and disposes the quad, the mark materials and the sphere; the
@@ -1505,6 +1540,7 @@ export class SceneManager {
     // A cut (slice, cap, iso) coming or going is not a reason to re-frame: the first show fits the body once (R4c).
     if (!this.sources.has(source) && !isCutSource(source)) this.sourcesChanged = true;
     this.sources.set(source, next);
+    for (const listener of this.sourceListeners) listener(source);
     this.touch();
   }
 
@@ -1650,6 +1686,81 @@ export class SceneManager {
     if (view === null) return;
     this.rig.setOrthographic(true);
     this.rig.fit(new THREE.Vector3(view.from[0], view.from[1], view.from[2]), new THREE.Vector3(view.up[0], view.up[1], view.up[2]));
+  }
+
+  // ------------------------------------------------------------------ the direct flow (ADR-0039)
+  private readonly viewListeners = new Set<() => void>();
+  private readonly sourceListeners = new Set<(source: string) => void>();
+  private ghost: THREE.Object3D | null = null;
+
+  /** Calls `listener` whenever the camera moved (after `onCameraMove`); returns the unsubscribe. */
+  addViewListener(listener: () => void): () => void {
+    this.viewListeners.add(listener);
+    return () => this.viewListeners.delete(listener);
+  }
+
+  /** Calls `listener` with a source's id whenever the source gets a mesh (a coarse or a final one). */
+  addSourceListener(listener: (source: string) => void): () => void {
+    this.sourceListeners.add(listener);
+    return () => this.sourceListeners.delete(listener);
+  }
+
+  /**
+   * Holds the camera face-on to a sketch plane, exactly (ADR-0039), or with null gives it back as it
+   * was. While held nothing else moves the camera: the sketcher's drawing owns pan and zoom.
+   */
+  pinView(view: { target: readonly number[]; dir: readonly number[]; up: readonly number[]; span: number } | null): void {
+    if (view === null) {
+      this.rig.unpin();
+      // Content that arrived while the sketch held the camera had its frame skipped (a first body made
+      // by Finish): frame it now, unless the user has taken the camera.
+      if (this.hadContent && !this.rig.touched) this.rig.fit();
+    } else {
+      this.rig.pin({
+        target: new THREE.Vector3(view.target[0], view.target[1], view.target[2]),
+        dir: new THREE.Vector3(view.dir[0], view.dir[1], view.dir[2]).normalize(),
+        up: new THREE.Vector3(view.up[0], view.up[1], view.up[2]).normalize(),
+        span: view.span,
+      });
+    }
+    this.needsRender = true;
+  }
+
+  /** The canvas in client pixels. */
+  canvasRect(): { left: number; top: number; width: number; height: number } {
+    const r = this.canvas.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  }
+
+  /** Where a world point (metres) is drawn, in client pixels; null when it is behind the camera. */
+  worldToClient(p: readonly number[]): { x: number; y: number } | null {
+    const camera = this.rig.camera;
+    camera.updateMatrixWorld();
+    const at = new THREE.Vector3(p[0], p[1], p[2]).project(camera);
+    if (!(at.z >= -1 && at.z <= 1)) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: rect.left + ((at.x + 1) / 2) * rect.width, y: rect.top + ((1 - at.y) / 2) * rect.height };
+  }
+
+  /** The client-side ghost of a body being pulled or rebuilt (ADR-0039), or null to remove it. The scene owns it from here. */
+  setGhost(object: THREE.Object3D | null): void {
+    if (this.ghost !== null) {
+      this.scene.remove(this.ghost);
+      disposeGhost(this.ghost);
+    }
+    this.ghost = object;
+    if (object !== null) this.scene.add(object);
+    this.needsRender = true;
+  }
+
+  /** Whether a sketch holds the camera (ADR-0039), for the review harness. */
+  get isPinned(): boolean {
+    return this.rig.isPinned;
+  }
+
+  /** Whether a ghost is drawn, for the review harness. */
+  get hasGhost(): boolean {
+    return this.ghost !== null;
   }
 
   /** Where the view cube is drawn (a corner of the canvas and the distances from its edges), or null to hide it. */
@@ -1882,6 +1993,10 @@ export class SceneManager {
       this.renderer.clippingPlanes = [];
       if (wasClipping) this.idPass.material.needsUpdate = true;
       this.sectionCaps.setSection(null);
+      this.meshCut.clear();
+      this.solidCut.clear();
+      this.solidCutParts = new Set();
+      this.solidCutsWanted = null;
       this.activeSection = false;
       this.sectionPlane = new THREE.Plane();
       if (this.sectionHandle !== null) this.sectionHandle.visible = false;
@@ -3391,8 +3506,9 @@ export class SceneManager {
     // once per context and batch mode: the programs stay compiled, and the pass is a full render.
     if (this.pickSelectWarmed !== this.batched) this.pickSelectDue = performance.now() + PICK_WARM_DELAY;
     const has = !bounds.isEmpty();
-    if (has) {
-      this.rig.setContent(this.fitCorners(false), bounds.getBoundingSphere(new THREE.Sphere()));
+    const sphere = has ? bounds.getBoundingSphere(new THREE.Sphere()) : null;
+    if (sphere !== null) {
+      this.rig.setContent(this.fitCorners(false), sphere);
       this.shadow.place(bounds, this.grid.place(bounds).y);
     } else {
       this.grid.hide();
@@ -3406,7 +3522,7 @@ export class SceneManager {
     this.applyHighlights();
     const sample = has ? this.parts.values().next().value : undefined;
     if (sample) this.outline.warmUp(this.renderer, this.scene, this.rig.camera, sample.mesh, this.batched ? "batched" : "meshes");
-    this.frameContent(has);
+    this.frameContent(sphere);
     this.publishContent();
     this.idIndicesDirty = true;
     this.idDirty = true;
@@ -3419,21 +3535,35 @@ export class SceneManager {
    * comes or goes frames the view again, but only while the user has not taken the camera: the next
    * solid of an import must not pull the view away from where they put it. A mesh replacing its own
    * coarse version changes nothing about the frame.
+   *
+   * **A body that GREW or MOVED frames again too** (a pull typed from 10 to 25 mm, a dimension edited):
+   * the same source, so `sourcesChanged` stays false, and the body ran off the window with the arrow
+   * that pulls it. The test is the size of the change, not its existence: a fine pass replacing a
+   * coarse one moves the bounds by a fraction of a percent and frames nothing.
    */
-  private frameContent(has: boolean): void {
+  private frameContent(sphere: THREE.Sphere | null): void {
     const changed = this.sourcesChanged;
     this.sourcesChanged = false;
-    if (!has) {
+    if (sphere === null) {
       this.hadContent = false;
+      this.framed = null;
       return;
     }
+    const was = this.framed;
+    const resized = was !== null && (Math.abs(sphere.radius - was.radius) > REFRAME_SHARE * was.radius || sphere.center.distanceTo(was.center) > REFRAME_SHARE * was.radius);
     if (!this.hadContent) {
       this.hadContent = true;
       this.rig.intro();
-    } else if (changed && !this.rig.touched) {
+      this.framed = sphere.clone();
+    } else if ((changed || resized) && !this.rig.touched) {
       this.rig.fit();
+      this.framed = sphere.clone();
+    } else if (was === null) {
+      this.framed = sphere.clone();
     }
   }
+  /** The bounds the view was last framed for, to tell a body that grew from one that was only refined. */
+  private framed: THREE.Sphere | null = null;
 
   /**
    * The world extent along one axis, in metres, or null while nothing is shown.
@@ -3608,6 +3738,85 @@ export class SceneManager {
    * nothing and the check failed while the feature worked. The harness must ask the model where its
    * middle is. `partBounds` is screen space and cannot answer that.
    */
+  /**
+   * The volume mesh at the section plane (`mesh.section`), or null to take it away. Drawn only while a section
+   * is on and only for the plane on screen: a cut for another axis or offset is the answer to an earlier
+   * question, and is dropped. It is lifted a hair to the clip's kept side so the clip keeps it.
+   */
+  setMeshCut(cut: MeshCut | null): void {
+    const section = this.activeSection ? this.sectionPlane : null;
+    if (cut === null || section === null) {
+      if (this.meshCut.cut !== null) {
+        this.meshCut.clear();
+        this.needsRender = true;
+      }
+      return;
+    }
+    const axis = this.sectionAxis;
+    const offset = -section.constant * (axis === "x" ? section.normal.x : axis === "y" ? section.normal.y : section.normal.z);
+    const box = this.modelBounds();
+    const size = box === null ? 1 : Math.hypot(box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2]);
+    if (cut.axis !== axis || Math.abs(cut.offset - offset) > 1e-9 * Math.max(size, 1e-9) + 1e-12) return;
+    this.meshCut.set(cut, section.normal, Math.max(size, 1e-9) * 2e-4);
+    this.needsRender = true;
+  }
+
+  /**
+   * The modeller bodies' filled sections at the plane on screen (`geometry.section`), or null to take them away.
+   * Each is drawn in its body's colour, lifted a hair to the clip's kept side, and its body leaves the stencil caps.
+   */
+  setSolidCuts(cuts: SolidCut[] | null): void {
+    this.solidCutsWanted = cuts;
+    this.applySolidCuts();
+    if (this.sectionCaps.showing) this.syncSectionCaps();
+    this.needsRender = true;
+  }
+
+  /** The fills last asked for, re-applied when the parts change (a body drawn after its fill arrived). */
+  private solidCutsWanted: SolidCut[] | null = null;
+
+  private applySolidCuts(): void {
+    const section = this.activeSection ? this.sectionPlane : null;
+    const cuts = this.solidCutsWanted;
+    const wanted = cuts === null || section === null ? [] : cuts;
+    const colourOf = (id: string): THREE.Color | null => {
+      for (const part of this.parts.values()) {
+        if (part.source === id && part.shown && !part.batched) return new THREE.Color().setRGB(part.color[0], part.color[1], part.color[2], THREE.SRGBColorSpace);
+      }
+      return null;
+    };
+    const box = this.modelBounds();
+    const size = box === null ? 1 : Math.hypot(box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2]);
+    if (section !== null) this.solidCut.set(wanted, colourOf, section.normal, Math.max(size, 1e-9) * 1e-4);
+    else this.solidCut.clear();
+    this.solidCutParts = new Set(wanted.filter((c) => colourOf(c.part) !== null).map((c) => c.part));
+  }
+
+  /** What the bodies' filled sections hold, for the review harness. */
+  solidCutInfo(): { parts: number; triangles: number } {
+    let triangles = 0;
+    let parts = 0;
+    for (const child of this.solidCut.object.children) {
+      if (!(child instanceof THREE.Mesh)) continue;
+      parts += 1;
+      triangles += (child.geometry.getIndex()?.count ?? 0) / 3;
+    }
+    return { parts, triangles };
+  }
+
+  /** The mesh section's regions and their fills, for the legend; empty without a cut of several regions. */
+  meshCutLegend(): { name: string; fill: string }[] {
+    return this.meshCut.legend();
+  }
+
+  /** What the mesh section holds, for the review harness. */
+  meshCutInfo(): { cells: number; triangles: number; edges: number; drawn: number; plane: number[] } | null {
+    const cut = this.meshCut.cut;
+    const drawn = this.meshCut.object.parent === this.scene ? this.meshCut.object.children.length : -1;
+    const plane = [...this.sectionPlane.normal.toArray(), this.sectionPlane.constant];
+    return cut === null ? null : { cells: cut.cells, triangles: cut.triangles.length / 3, edges: cut.edges.length / 2, drawn, plane };
+  }
+
   modelBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
     const bounds = this.sceneBounds();
     if (bounds.isEmpty()) return null;
@@ -3707,6 +3916,8 @@ export class SceneManager {
     const key = this.sectionCapsSignature();
     if (key === this.sectionCapsKey) return;
     this.sectionCapsKey = key;
+    // The parts changed: a body's fill takes its colour now that it is drawn (or goes with it).
+    this.applySolidCuts();
     this.syncSectionCaps();
   }
 
@@ -3720,6 +3931,8 @@ export class SceneManager {
     for (const part of this.parts.values()) {
       // A mesh patch is one piece of a closed surface, not a closed body: a cap of it would be wrong.
       if (!part.shown || part.batched !== null || this.isMeshPart(part)) continue;
+      // A modeller body filled from its own field (`setSolidCuts`) needs no stencil cap.
+      if (this.solidCutParts.has(part.source)) continue;
       // The part's own drawn colour and opacity, so its cap matches its body. A translucent body
       // keeps its opacity rather than capping opaque.
       shown.push({
@@ -3803,6 +4016,7 @@ export class SceneManager {
   }
 
   private layerOn(part: Part | undefined): boolean {
+    if (part !== undefined && isOverlaySource(part.source)) return true;
     return part === undefined || (this.isMeshPart(part) ? this.layers.mesh : this.layers.geometry);
   }
 
@@ -5365,8 +5579,32 @@ export class SceneManager {
     this.setHover(hit ? hit.part.name : null);
     this.setFaceHover(hit);
     this.reportHover(hit, 0, hits.length);
+    if (this.onSurfaceHover !== null) this.onSurfaceHover(hit === null || this.topologyMode !== null ? null : this.surfaceSample(hit, clientX, clientY));
     // A paint stroke takes every new face (or body) this hover pick lands on (T-043).
     if (hit && this.stroke) this.paintAt(hit);
+  }
+
+  /**
+   * The vertices and barycentric weights of the point the hover ray meets on `hit`'s triangle (the ray is
+   * the one `pickAll` just cast). Null for a source drawn as more than one part, whose vertex numbering is
+   * not one list, and for a ray that misses the triangle's plane.
+   */
+  private surfaceSample(hit: Hit, clientX: number, clientY: number): SurfaceSample | null {
+    let parts = 0;
+    for (const part of this.parts.values()) if (part.source === hit.part.source) parts += 1;
+    if (parts !== 1 || hit.triangle < 0) return null;
+    const geometry = hit.part.mesh.geometry;
+    const position = geometry.getAttribute("position");
+    const index = geometry.getIndex();
+    if (position === undefined) return null;
+    const ids = [0, 1, 2].map((k) => (index !== null ? index.getX(hit.triangle * 3 + k) : hit.triangle * 3 + k)) as [number, number, number];
+    const world = hit.part.mesh.matrixWorld;
+    const [a, b, c] = ids.map((id) => new THREE.Vector3().fromBufferAttribute(position, id).applyMatrix4(world));
+    const point = this.raycaster.ray.intersectTriangle(a!, b!, c!, false, new THREE.Vector3());
+    if (point === null) return null;
+    const weights = THREE.Triangle.getBarycoord(point, a!, b!, c!, new THREE.Vector3());
+    if (weights === null) return null;
+    return { source: hit.part.source, vertices: ids, weights: [weights.x, weights.y, weights.z], client: { x: clientX, y: clientY } };
   }
 
   /** Picks at the last pointer position. A move that fell inside the interval is picked when it runs out. */
@@ -5507,6 +5745,7 @@ export class SceneManager {
     this.setHover(null);
     this.clearFaceHover();
     this.reportHover(null, 0, 0);
+    this.onSurfaceHover?.(null);
     // A5: the topology hover too. Leaving the canvas used to leave the last edge or vertex
     // highlighted, so in Edge mode a marker stayed lit under a pointer that was no longer there.
     this.onTopologyHover(null);
@@ -6002,7 +6241,9 @@ export class SceneManager {
     if (this.sectionCaps.showing) {
       const bounds = this.sceneBounds();
       this.sectionCaps.place(bounds);
-      this.sectionCaps.render(renderer, this.scene, camera);
+      // **The mesh's own cut replaces the flat cap** on the Mesh stage: it is the same outline, filled by region
+      // and with the cells drawn, and a cap drawn after it would cover it.
+      if (this.meshCut.cut === null) this.sectionCaps.render(renderer, this.scene, camera);
       // The drag handle rides the same plane, so it is placed in the same frame the cut is drawn.
       this.placeSectionHandle(bounds);
     }

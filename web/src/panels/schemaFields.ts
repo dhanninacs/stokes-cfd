@@ -17,7 +17,9 @@ export type FieldKind =
   | "ref"
   | "array3"
   | "array"
-  | "json";
+  | "json"
+  | "vector"
+  | "map";
 
 /** Normalises a JSON-schema `type` (a name or a list of names) to a list. */
 function typeNames(schema: PropertySchema): string[] {
@@ -37,7 +39,8 @@ export function isOptionalNumber(schema: PropertySchema): boolean {
  */
 export function fieldKindOf(schema: PropertySchema): FieldKind {
   const kind = schema["x-kind"];
-  if (kind === "quantity" || kind === "ref") return kind;
+  if (kind === "quantity" || kind === "ref" || kind === "vector") return kind;
+  if (kind === "quantity_map") return "map";
   if (kind === "json") return "json";
   if (schema.enum && schema.enum.length > 0) return "enum";
   const types = typeNames(schema);

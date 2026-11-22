@@ -1,5 +1,5 @@
 /**
- * The FoamWin card's rules (ADR-0037), kept apart from the component so they are tested without a DOM.
+ * The FoamWin card's rules (ADR-0046), kept apart from the component so they are tested without a DOM.
  *
  * The card appears only where it can help: the host is this computer, the computer is Windows, and the
  * probe found no supported OpenFOAM install. Everywhere else the Compute section is unchanged.

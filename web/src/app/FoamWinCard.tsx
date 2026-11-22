@@ -22,7 +22,7 @@ const ABOUT =
 
 /**
  * "This computer has no OpenFOAM": offer to download and install FoamWin, the native Windows OpenFOAM 14
- * (ADR-0037). Shown only on a Windows computer whose probe found no supported install.
+ * (ADR-0046). Shown only on a Windows computer whose probe found no supported install.
  *
  * **Nothing downloads without a confirmation that names it**: the release, the archive, its size and where
  * it comes from. The download runs on the server (`host.foamwin_install`), which checks the archive's

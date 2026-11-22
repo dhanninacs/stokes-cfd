@@ -195,6 +195,13 @@ function holds(root: NodeLike | null, type: string): boolean {
   return (root.children ?? []).some((child) => holds(child, type));
 }
 
+/** True when the tree holds an implicit operation (ADR-0035): a body is on its way from Create or a sketch. */
+function holdsImplicitOperation(root: NodeLike | null): boolean {
+  if (root === null) return false;
+  if (root.type.startsWith("implicit_")) return true;
+  return (root.children ?? []).some((child) => holdsImplicitOperation(child));
+}
+
 /** True when the tree holds at least one `part` node, at any depth. */
 export function hasParts(root: NodeLike | null): boolean {
   return holds(root, "part");
@@ -204,8 +211,25 @@ export function hasParts(root: NodeLike | null): boolean {
  * The hint in the middle of an empty project: shown with a project open, no part in it and nothing
  * coming (an upload or an import under way), so it goes the moment the first part appears. **An
  * imported OpenFOAM case is not an empty project** (its mesh is its own, there is no CAD to drop):
- * the hint sat over a tutorial's results until this check (2026-11-01).
+ * the hint sat over a tutorial's results until this check (2026-11-01). **Nor is a project whose first body is
+ * being built** (`building`: an operation runs, or a sketch's ghost stands in for its body), or one that holds
+ * a Create or sketch operation: after Finish the hint stayed over the ghost until the body's mesh arrived
+ * (Windows walkthrough, 2026-11-13).
  */
-export function showImportHint(input: { hasProject: boolean; tree: NodeLike | null; uploading: boolean; importing: boolean }): boolean {
-  return input.hasProject && input.tree !== null && !input.uploading && !input.importing && !hasParts(input.tree) && !holds(input.tree, "foam_case");
+export function showImportHint(input: { hasProject: boolean; tree: NodeLike | null; uploading: boolean; importing: boolean; building?: boolean; modelling?: boolean; guided?: boolean }): boolean {
+  return (
+    // **Not while the user is modelling, nor beside the Geometry card** (walkthrough 2026-11-18): the
+    // build ribbon open means they chose to draw, and the box sat in the middle of the view they were
+    // about to sketch in; the guided Geometry card already offers the same two buttons.
+    input.modelling !== true &&
+    input.guided !== true &&
+    input.hasProject &&
+    input.tree !== null &&
+    !input.uploading &&
+    !input.importing &&
+    input.building !== true &&
+    !hasParts(input.tree) &&
+    !holds(input.tree, "foam_case") &&
+    !holdsImplicitOperation(input.tree)
+  );
 }

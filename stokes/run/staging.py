@@ -29,12 +29,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from stokes.errors import StokesError
 from stokes.log import fields, get_logger
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from collections.abc import Callable
 
 log = get_logger(__name__)
+
+
+class StagingCancelled(StokesError):
+    """The caller asked to stop while the case was being staged; the half-staged job is deleted."""
+
+    code = "run.staging_cancelled"
+
 
 #: Files totalling no more than this go in the `job.create` payload.
 #:
@@ -55,6 +63,8 @@ def stage(
     files: dict[str, Any],
     *,
     timeout: float = 60.0,
+    on_bytes: Callable[[int, int], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
     **params: Any,
 ) -> Any:
     """Create a job, sending large files through `job.put`.
@@ -63,13 +73,30 @@ def stage(
     runner itself so this stays a plain function both runners can share: a second implementation in
     `SshRunner` is a second place the chunking rule can drift.
 
-    Every parameter other than ``files`` goes to `job.create` unchanged, so a caller does not have
-    to know whether its case was chunked.
+    Every parameter other than ``files``, ``on_bytes`` and ``cancelled`` goes to `job.create`
+    unchanged, so a caller does not have to know whether its case was chunked.
+
+    ``on_bytes(sent, total)`` is told after the create and after every chunk, for a progress line.
+    ``cancelled()`` is asked before the create and between chunks; when it says yes the job is
+    deleted and `StagingCancelled` raised, so a Cancel pressed during a long upload is honoured at
+    the next 8 MiB rather than after the whole case (ADR-0024 addendum 2026-11-14).
     """
     sized = _sizes(files)
     total = sum(sized.values())
+
+    def stop_if_asked() -> None:
+        if cancelled is not None and cancelled():
+            raise StagingCancelled("staging was cancelled")
+
+    def report(sent: int) -> None:
+        if on_bytes is not None:
+            on_bytes(sent, total)
+
+    stop_if_asked()
     if total <= INLINE_LIMIT_BYTES:
-        return call("job.create", files=files, timeout=timeout, **params)
+        created = call("job.create", files=files, timeout=timeout, **params)
+        report(total)
+        return created
 
     # **The inline set is capped by its TOTAL, not by each file's size** (Opus F5). Picking every
     # file under `CHUNK_BYTES` let many small files sum past the agent's 32 MiB `MAX_CREATE_BYTES`:
@@ -94,6 +121,8 @@ def stage(
     )
     created = call("job.create", files=inline, timeout=timeout, **params)
     job = str(created["job"])
+    sent = inline_total
+    report(sent)
 
     # **The chunks go up in order, and the last is marked `final`.** The agent appends at `offset`,
     # so an out-of-order or duplicated chunk is caught by the offset it is given rather than
@@ -103,6 +132,7 @@ def stage(
             text = files[name]
             payload = text.encode("utf-8") if isinstance(text, str) else bytes(text)
             for start in range(0, len(payload), CHUNK_BYTES):
+                stop_if_asked()
                 piece = payload[start : start + CHUNK_BYTES]
                 last = start + CHUNK_BYTES >= len(payload)
                 call(
@@ -114,6 +144,8 @@ def stage(
                     final=last,
                     timeout=timeout,
                 )
+                sent += len(piece)
+                report(sent)
     except Exception:
         # **The job is deleted, not left half-staged.** A job folder holding a truncated surface is
         # one a later `job.list` shows and a user could start, and snappy would fail on the fragment

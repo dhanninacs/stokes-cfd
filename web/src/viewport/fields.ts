@@ -39,7 +39,9 @@ import { patchLoading } from "../state/loadingState";
 import { findSolverSettings } from "../panels/runPanelModel";
 import { parseGeometry, type LoadedGroup, type PatchMeta } from "./geometry";
 import { parseMeshEdges } from "./meshEdges";
-import type { PartStyle, SceneManager } from "./scene";
+import type { PartStyle, SceneManager, SurfaceSample } from "./scene";
+import { valueAt } from "./readoutModel";
+import { USER_SLICE_PREFIX } from "../panels/sliceModel";
 import { SliceLayer } from "./sliceLayer";
 
 /** Field requests in flight at once. */
@@ -123,6 +125,8 @@ export class FieldsController {
         // The iso-surface fades the walls as a slice does.
         state.isoDrawn !== previous.isoDrawn ||
         state.iso !== previous.iso ||
+        // So do the 3-D contours.
+        state.contoursDrawn !== previous.contoursDrawn ||
         // Streamlines and volume arrows fade the walls too (`wallsFaded`'s `inside`).
         state.streamlines !== previous.streamlines ||
         state.vectorCloud !== previous.vectorCloud ||
@@ -133,6 +137,29 @@ export class FieldsController {
     });
     live = this;
     this.sync(useStore.getState());
+  }
+
+  /**
+   * The shown field's value at a point of a coloured surface (the hover readout), from the values that
+   * surface is coloured with: a patch, the mid-plane slice or a user's slice. Null when the point is on
+   * something not coloured by the field, or its values are not here yet.
+   */
+  valueAt(sample: SurfaceSample): number | null {
+    const state = useStore.getState();
+    const results = state.results;
+    const field = results.view.field;
+    if (!resultsShown(state.stage, results.view, results.data !== null)) return null;
+    let values: FieldValues | null = null;
+    if (sample.source.startsWith(USER_SLICE_PREFIX)) {
+      values = this.slices.valuesOf(sample.source);
+    } else {
+      const target = sample.source === SLICE_SOURCE ? SLICE_TARGET : sample.source.startsWith(MESH_SOURCE_PREFIX) ? sample.source.slice(MESH_SOURCE_PREFIX.length) : null;
+      if (target === null) return null;
+      const cached = this.cache.get(requestKeyOf(results.seq, target, field));
+      values = cached === undefined || cached === null || cached === "loading" ? null : reducedForTint(cached, field);
+    }
+    if (values === null || values.components !== 1) return null;
+    return valueAt(values.values, sample.vertices, sample.weights);
   }
 
   dispose(): void {
@@ -191,7 +218,7 @@ export class FieldsController {
     // **The look is part of the stamp**: a patch already coloured is left alone, so a stamp without the band
     // count, the map and its direction would skip the repaint when the user changes one of them.
     const look = legendOf(results.view);
-    const key = `${results.seq}|${field}|${range.min}|${range.max}|${look.bands}|${look.map}|${look.reverse}`;
+    const key = `${results.seq}|${field}|${range.min}|${range.max}|${look.bands}|${look.map}|${look.reverse}|${look.clip}`;
     const surfaces: Surface[] = this.patchList(state).map((e) => ({ target: e.id, source: meshSourceOf(e.id), faces: e.faces, name: e.name }));
     this.syncSliceSource(state, surfaces);
     const metas = new Map<string, PatchMeta>();
@@ -219,7 +246,7 @@ export class FieldsController {
     // **The band count comes from the live view**, so changing it repaints without a refetch.
     // **Reduced through the shared helper**, which sets `components: 1` - what a tint needs.
     const look = legendOf(useStore.getState().results.view);
-    const tint = patchTint(reducedForTint(values, field), range, meta.vertices, look.bands, look.map, look.reverse);
+    const tint = patchTint(reducedForTint(values, field), range, meta.vertices, look.bands, look.map, look.reverse, look.clip);
     if (tint === null && values !== null && !this.warned.has(surface.source)) {
       this.warned.add(surface.source);
       useStore.getState().log("error", `results: ${field} on ${surface.name} has ${values.count} values for ${meta.vertices} vertices; it keeps its own colour`);

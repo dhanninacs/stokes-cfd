@@ -57,6 +57,10 @@ def test_the_shipped_default_is_AUTO(session: Session) -> None:
     # And it resolves: the local host answers, and it has an install.
     assert reply["effective_host"] == "local"
     install = reply["effective_install"]
+    if not install:
+        # The defaults above hold everywhere; the install needs one on the machine (FoamWin via
+        # STOKES_FOAMWIN_ENV on Windows, OpenFOAM on Linux), which a bare CI host does not have.
+        pytest.skip("no OpenFOAM install on this host (set STOKES_FOAMWIN_ENV on Windows)")
     # A sourceable environment script: bashrc or a .sh on Linux, the FoamWin .ps1 on Windows.
     assert "/etc/bashrc" in install or install.endswith((".sh", ".ps1"))
 
@@ -283,7 +287,8 @@ def test_an_install_the_user_chose_is_marked_USER_ADDED(session: Session) -> Non
     their choice even though a glob would have found it anyway.
     """
     found = session.execute("compute.get")["effective_install"]
-    assert found, "this host has no install to choose; the test cannot run"
+    if not found:
+        pytest.skip("no OpenFOAM install on this host to choose (STOKES_FOAMWIN_ENV on Windows)")
 
     before = {
         row["bashrc"]: row.get("found_by") for row in session.execute("compute.get")["installs"]

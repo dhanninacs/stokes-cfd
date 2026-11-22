@@ -568,6 +568,20 @@ def _is_default_temperature(node: Node) -> bool:
     return value is None or getattr(value, "value", value) == DEFAULT_TEMPERATURE
 
 
+def _temperatures_chosen(project: Any) -> bool:
+    """Whether any boundary holds a temperature (an inflow or a backflow one) other than the
+    catalogue default."""
+    for node in project.root.walk():
+        if node.type != "boundary":
+            continue
+        for name in ("temperature", "backflow_temperature"):
+            value = node.params.get(name)
+            found = getattr(value, "value", value)
+            if isinstance(found, (int, float)) and found != DEFAULT_TEMPERATURE:
+                return True
+    return False
+
+
 def _physics(report: _Report, node: Node, spec: ConditionSpec) -> None:
     """``setup.needs_physics`` (decision 2.7): a parameter in use that needs energy or
     turbulence, information until ``/physics/models`` exists. One finding per boundary."""
@@ -589,7 +603,11 @@ def _physics(report: _Report, node: Node, spec: ConditionSpec) -> None:
     # **The default 300 K is not a chosen inflow temperature**: with energy on, a boundary that
     # reads the temperature and still holds the default is named, because the solve would run at a
     # temperature nobody set (ADR-0027 decision 4). Equal to the default is the best signal.
-    if energy and "temperature" in used and _is_default_temperature(node):
+    # **Not when another boundary's temperature was chosen** (a heat exchanger's cold stream at
+    # 300 K): the stored value cannot tell a typed 300 K from the default, and a project whose
+    # temperatures were set elsewhere chose this one too.
+    chosen = _temperatures_chosen(report.project)
+    if energy and "temperature" in used and _is_default_temperature(node) and not chosen:
         report.add(
             "setup.no_inlet_temperature",
             "warning",

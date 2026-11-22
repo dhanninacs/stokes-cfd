@@ -214,7 +214,14 @@ export const OUTLINE: Readonly<Record<OutlineStage, readonly OutlineRow[]>> = {
       children: [{ key: "report", label: "HTML report", kind: "page", open: "results-report" }],
     },
   ],
-  Explore: [{ key: "studies", label: "Studies", kind: "folder", source: "/studies" }],
+  // **The tree's door to Optimise.** The flow strip's seventh step opens these in Guided mode; in Full
+  // mode the stage held one folder, Studies, and the Optimise panel was reachable from the palette only.
+  Explore: [
+    { key: "optimise", label: "Shape optimisation", kind: "page", open: "explore-optimise" },
+    { key: "studies", label: "Studies", kind: "folder", source: "/studies" },
+    { key: "design-table", label: "Design table", kind: "page", open: "explore-table" },
+    { key: "explore-plots", label: "Plots", kind: "page", open: "explore-plots" },
+  ],
 };
 
 /** The rows that can be built from what this project has, and the ones that cannot, with the reason. */
@@ -801,6 +808,9 @@ export const PAGE_ROW: Readonly<Record<string, string>> = {
   "results-probe": "result-probe",
   "results-report": "result-report",
   "results-lod": "result-lod",
+  "explore-optimise": "explore-optimise",
+  "explore-table": "explore-table",
+  "explore-plots": "explore-plots",
   mesh: "mesh-settings",
 };
 

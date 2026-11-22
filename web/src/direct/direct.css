@@ -1,0 +1,119 @@
+/* The direct flow over the viewport (ADR-0039): the Pull handle and its depth field. */
+.direct-layer {
+  position: absolute;
+  inset: 0;
+  /* Under the side docks, cards and toolbars (10 and up), over the canvas. */
+  z-index: 4;
+  pointer-events: none;
+}
+.direct-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.pull-arrow {
+  cursor: grab;
+  pointer-events: auto;
+  outline: none;
+}
+.pull-arrow.dragging {
+  cursor: grabbing;
+}
+.pull-arrow.locked {
+  cursor: pointer;
+}
+.pull-hit {
+  stroke: transparent;
+  stroke-width: 18px;
+  stroke-linecap: round;
+}
+.pull-shaft {
+  stroke: var(--accent);
+  stroke-width: 3px;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 2px rgb(0 0 0 / 0.45));
+}
+.pull-head {
+  fill: var(--accent);
+  filter: drop-shadow(0 0 2px rgb(0 0 0 / 0.45));
+}
+.pull-base {
+  fill: var(--panel-solid);
+  stroke: var(--accent);
+  stroke-width: 2px;
+}
+.pull-arrow:hover .pull-shaft,
+.pull-arrow.dragging .pull-shaft {
+  stroke-width: 4px;
+}
+.pull-chip,
+.pull-field {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--panel-solid);
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pull-chip {
+  cursor: text;
+}
+.pull-chip.dragging {
+  border-color: var(--accent);
+}
+.pull-field {
+  width: 96px;
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* The body being built (after Finish or a pull): one line at the top of the view, with Cancel. */
+.build-status {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(520px, calc(100% - 32px));
+  padding: 5px 6px 5px 10px;
+  border-radius: 8px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.build-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.build-status-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.build-status-cancel:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.build-status-cancel:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

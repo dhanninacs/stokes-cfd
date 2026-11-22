@@ -34,7 +34,9 @@ def json_param_names() -> list[tuple[str, str]]:
         spec = registry.get(name)
         schema = spec.json_schema().get("properties", {})
         for param, declared in schema.items():
-            if declared.get("type") == "object" and "x-hidden" not in declared:
+            # A vector or a quantity map (ADR-0037) is an object too, with fields of its own.
+            compound = declared.get("x-kind") in ("vector", "quantity_map")
+            if declared.get("type") == "object" and "x-hidden" not in declared and not compound:
                 # A `json` parameter's schema is `object` or `array` unless it declares one; either
                 # way an unhidden one is what the renderer prints verbatim.
                 found.append((name, param))
@@ -56,6 +58,7 @@ def test_no_visible_json_parameter_on_a_node_type(name: str) -> None:
         for param, declared in schema.items()
         if declared.get("type") in ("object", "array")
         and "x-hidden" not in declared
+        and declared.get("x-kind") not in ("vector", "quantity_map")
         and _is_a_dump(declared)
     ]
     assert offenders == [], f"{name} shows a raw JSON field: {offenders}"

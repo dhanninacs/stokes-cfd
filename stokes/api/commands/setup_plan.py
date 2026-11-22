@@ -520,12 +520,25 @@ def use_region(plan: Plan, node: Node, kind: str = FLUID) -> RegionRef:
     return plan_convert_region(plan, node, kind)
 
 
-def default_region(plan: Plan, ref: str | None, node_id: str | None) -> RegionRef:
+def default_region(
+    plan: Plan, ref: str | None, node_id: str | None, parts: Sequence[str] = ()
+) -> RegionRef:
     """The region a new boundary goes to (ADR-0022 decision 2.9): ``ref`` (created, kind fluid,
-    when no region has that name); else the project's only fluid region; else a plain group
-    ``/regions/fluid`` converted; else a new region ``fluid``. Several fluid regions and no
-    ``ref`` is refused: the command cannot choose."""
+    when no region has that name); else the one region that holds the bodies the faces are on
+    (``parts``; ADR-0042: an inlet picked on the cold stream belongs to the cold stream); else
+    the project's only fluid region; else a plain group ``/regions/fluid`` converted; else a new
+    region ``fluid``. Several fluid regions, faces on none or on several of them, and no ``ref``
+    is refused: the command cannot choose."""
     project = plan.project
+    if ref is None and parts:
+        wanted = set(parts)
+        holders = [
+            r
+            for r in region_nodes(project)
+            if wanted & set(bodies_of(ref_node(project, r, "tag", TAG_TYPE)))
+        ]
+        if len(holders) == 1:
+            return existing_region(plan, holders[0])
     if ref is not None:
         node = find_region(project, ref)
         if node is not None:

@@ -20,7 +20,9 @@ from collections.abc import Callable
 from .base import LogParser
 from .checkmesh import CheckMeshParser
 from .foamrun import FoamRunParser
+from .gmsh import GmshParser
 from .snappy import SnappyParser
+from .splitregions import SplitRegionsParser
 
 #: Parser name (a step's ``parse`` field) → a callable that builds one from ``parse_params``.
 #:
@@ -31,6 +33,17 @@ PARSERS: dict[str, Callable[..., LogParser]] = {
     "checkMesh": CheckMeshParser,
     "foamRun": FoamRunParser,
     "snappy": SnappyParser,
+    "splitMeshRegions": SplitRegionsParser,
+    # ADR-0043: Gmsh's errors, so a failed mesh says why in Gmsh's own words.
+    "gmsh": GmshParser,
 }
 
-__all__ = ["PARSERS", "CheckMeshParser", "FoamRunParser", "LogParser", "SnappyParser"]
+__all__ = [
+    "PARSERS",
+    "CheckMeshParser",
+    "FoamRunParser",
+    "GmshParser",
+    "LogParser",
+    "SnappyParser",
+    "SplitRegionsParser",
+]

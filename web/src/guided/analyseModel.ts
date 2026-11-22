@@ -20,6 +20,7 @@ import { niceTicks } from "../state/residualChart";
 import { tickText } from "../panels/lineModel";
 import { addAxisSlice, updateSlice, visibleSlices, type SliceList } from "../panels/sliceModel";
 import type { SectionAxis } from "../state/sectionState";
+import { axisOfPlane } from "../state/slicePlane";
 
 export type AnalyseTab = "report" | "xy" | "histogram" | "history" | "functions";
 
@@ -445,7 +446,12 @@ export function linesFor(
   bands: number,
 ): { slices: SliceList; midOff: boolean } {
   if (on && visibleSlices(slices).length === 0 && midShown && midPlane !== null) {
-    const added = addAxisSlice(slices, midPlane.axis, midPlane.offset);
+    // A hidden slice already at the mid-plane is shown again rather than a second one added beside it.
+    const same = slices.list.find((s) => {
+      const at = axisOfPlane(s.plane);
+      return at !== null && at.axis === midPlane.axis && Math.abs(at.position - midPlane.offset) <= 1e-9 * Math.max(1, Math.abs(midPlane.offset));
+    });
+    const added = same !== undefined ? updateSlice(slices, same.id, { visible: true }) : addAxisSlice(slices, midPlane.axis, midPlane.offset);
     return { slices: withContourLines(added, true, bands), midOff: added !== slices };
   }
   return { slices: withContourLines(slices, on, bands), midOff: false };

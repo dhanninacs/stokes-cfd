@@ -35,7 +35,7 @@ from stokes.compile.snapshot import (
 
 from . import fluid_thermo, turbulence
 from .boundaries import validate_patch, velocity_field
-from .control import average_function, stop_function, transient_write
+from .control import average_function, purge_write, stop_function, transient_write
 
 #: Changes in thermodynamics, time controls and model fields invalidate earlier generated cases.
 WRITER_VERSION = "of14-fluid/6"  # 6: every equation under-relaxed (the turbulence fields too)
@@ -283,7 +283,7 @@ def _control_dict(snap: SolveSnapshot) -> Dict:
         Entry("deltaT", snap.delta_t if snap.transient else 1),
         # timeStep/write_interval, or physical write times and the adaptive step (`control.py`).
         *transient_write(snap),
-        Entry("purgeWrite", 2),
+        Entry("purgeWrite", purge_write(snap)),
         Entry("writeFormat", Word("ascii")),
         Entry("writePrecision", 8),
         Entry("writeCompression", Word("off")),
@@ -464,7 +464,7 @@ def _fv_solution(snap: SolveSnapshot) -> Dict:
         p_relax, eq_relax = _relaxation(snap)
 
         def chosen(user: float | None, own: float) -> float:
-            return own if user is None else user  # the user's factor, else this writer's (ADR-0036)
+            return own if user is None else user  # the user's factor, else this writer's (ADR-0045)
 
         entries.append(
             Entry(
@@ -631,6 +631,9 @@ def _temperature(snap: SolveSnapshot) -> Dict:
                     Entry("value", backflow),
                 )
             )
+        if thermal == "coupled":
+            # The wall shared with another region (ADR-0042): temperature and flux continuous.
+            return Dict((Entry("type", Word("coupledTemperature")), Entry("value", initial)))
         if thermal == "heatFlux":
             # `q` is a Function1 of time, hence `constant`; positive heats the fluid.
             return Dict(

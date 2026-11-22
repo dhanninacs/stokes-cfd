@@ -28,13 +28,22 @@ def license_info(ctx: CommandContext) -> dict[str, Any]:
 
 @command("engine.info", mutates=False, requires_project=False)
 def engine_info(ctx: CommandContext) -> dict[str, Any]:
-    """The solver engine attached to this session. None before milestone M3.
+    """The solver engine this machine can run: OpenFOAM 14 when an install is found (the same
+    search the local agent makes: ``STOKES_FOAMWIN_ENV`` or FoamWin's standard locations on
+    Windows, ``STOKES_OPENFOAM_BASHRC`` and the usual prefixes elsewhere), else none.
 
-    M3, not M2: M2 is the agent, attachment and meshing milestone, while the solver engine
-    (`foamRun`) is M3 — which is what ``stokes/engines`` and the roadmap's M3 row say. This said M2
-    until 2026-10-06, and the Run button repeated it.
+    **A file check only**, no process: the top bar asks on every connect. This answered "none,
+    before M3" for good, so the bar read "No engine" over a window that was running solves (found
+    walking the GUI end to end, 2026-11-12).
     """
-    return {"attached": False, "name": None, "version": None}
+    try:
+        from stokes_agent.engine_env import bashrc_candidates
+
+        attached = bool(bashrc_candidates())
+    except Exception:  # an agent that cannot be imported or searched is no engine
+        log.warning("could not look for an OpenFOAM install", exc_info=True)
+        attached = False
+    return {"attached": attached, "name": "OpenFOAM 14" if attached else None, "version": None}
 
 
 #: The notices file, from the repository root. **The packaged copy is tried first**, so a shipped

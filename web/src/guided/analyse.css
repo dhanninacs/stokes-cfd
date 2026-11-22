@@ -123,3 +123,9 @@
   align-items: center;
   gap: 4px;
 }
+.shown-chips {
+  flex-wrap: wrap;
+}
+.shown-chips .guided-chip {
+  flex: 1 0 auto;
+}

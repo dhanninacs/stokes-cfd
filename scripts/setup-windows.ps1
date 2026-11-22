@@ -3,7 +3,7 @@
     Set up Stokes on Windows from a GitHub download, and link it to an OpenFOAM engine.
 
 .DESCRIPTION
-    Run from the folder you cloned or unzipped (ADR-0037):
+    Run from the folder you cloned or unzipped (ADR-0046):
 
         powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
 

@@ -745,3 +745,44 @@ the utility allow-list grows (plan T-305), `-solver` accepts any module the prob
 and an external case's own dictionaries pass through byte-identical unless an override touches them,
 with every staged file linted under the `external` profile. The desktop still never forwards a
 dictionary it generated from user text. See [ADR-0029](ADR-0029-external-openfoam-cases.md).
+
+## Addendum (2026-11-14): `mesh.generate` prepares off the session thread
+
+Decision 4's "generate builds the snapshot, writes the case and starts the job inside the command"
+is amended. On the server those steps (the snapshot's STL export and inside point, the host probe,
+the driver's case, `staging.stage` with its 300 s budget, and `job.start`) blocked the event loop
+for seconds to minutes, against non-negotiable 7, and `mesh.cancel` could not be read until they
+were over.
+
+- **On the session thread** (the server: `GeometryStore.blocks_session()`), `mesh.generate`
+  validates (settings exist, the `result_id` is an id), copies the tree with `to_json`/`from_json`,
+  chooses the result id (journaled, so a replay makes the same node) and returns
+  `{state: "preparing", result, steps}` at once. A `stokes-mesh-prepare` worker runs
+  `snapshot -> probe -> compile -> stage -> start` on the copy, emitting
+  `mesh.preparing {node_id, step, step_number, steps, elapsed}` on entering each step and, while
+  staging, `bytes_sent`/`bytes_total` after the create and after every `job.put` chunk. It ends with
+  `mesh.prepared {node_id, outcome: started|reused|skipped|failed|cancelled, elapsed, code?, message?}`.
+  `mesh.status` carries `preparing: {result, step, step_number, steps, elapsed, cancelling}` while
+  one is in flight.
+- **Tree changes go back through `GeometryStore.on_session_thread`** (`_replace`, `_reset`, the
+  `job` parameter, `_fail`, `_no_host`, the reuse check); the worker never mutates the live project.
+- **Cancel.** A preparation has its own `threading.Event`. `mesh.cancel` sets it and answers
+  `{cancelled: true}`; the worker checks it between steps and `staging.stage` checks it before the
+  create and between chunks (raising `StagingCancelled`, which deletes the half-staged job). A cancel
+  before the result node is replaced (snapshot, probe, compile) changes nothing in the tree and emits
+  `mesh.cancelled` with the planned id: the previous mesh stays. A cancel after it marks the new
+  result `cancelled`; a job created but not started is deleted (`job.delete`); one that started in
+  the same instant is cancelled through the ordinary job path (the hand-over is under the service
+  lock). A newer `mesh.generate` cancels an earlier preparation the same way.
+- **Refusals** met on the worker (`MeshInvalid` from the snapshot, a driver error) become
+  `mesh.failed` and `mesh.prepared {outcome: failed, code, message}`; nobody is waiting for an
+  exception.
+- **Off the session thread** (CLI, journal replay, `wait=true`, the shape cycle) the same steps run
+  on the caller's thread, so a replay stays deterministic and raises `MeshInvalid` as before.
+  `MeshService.wait` (and so `settle`) waits for a preparation in flight before the job's event,
+  so it never returns on the previous job's already-set event.
+
+Tests: `tests/test_mesh_preparing.py` (an emulated server loop: preparing at once, the named steps,
+cancel during the probe and between staging chunks, a worker refusal, `wait=true` and replay of a
+journal recorded through the server). Front end: `web/src/panels/MeshPreparing.tsx` names the step
+and enables Cancel; `meshRun.ts` follows the events and keeps the press busy until `mesh.prepared`.

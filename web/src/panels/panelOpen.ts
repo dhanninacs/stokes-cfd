@@ -17,6 +17,12 @@ export function openPanel(target: OpenTarget): void {
   // A row whose page is a card (Capping): select the operation node, or open the operation's card.
   if (target.select !== undefined) void useStore.getState().select(target.select);
   else if (target.operation !== undefined) useStore.getState().openOperation(target.operation);
+  // An Explore tool: put its panel on screen wherever the layout keeps it. Imported at the press, so
+  // this small module does not pull the whole panel registry into everything that opens a tab.
+  if (target.show !== undefined) {
+    const id = target.show;
+    void import("./paletteItems").then((m) => m.openPanelById(id));
+  }
   if (target.panel === null) return;
   const workspace = useWorkspace.getState();
   const place = placeOf(workspace.document.layout, target.panel);

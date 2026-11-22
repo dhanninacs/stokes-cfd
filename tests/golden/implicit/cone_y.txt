@@ -1,0 +1,18 @@
+_0 var-z
+_1 square _0
+_2 var-x
+_3 square _2
+_4 add _1 _3
+_5 sqrt _4
+_6 var-y
+_7 const -0.4
+_8 mul _6 _7
+_9 const 3.0
+_10 add _8 _9
+_11 sub _5 _10
+_12 const 0.9284766908852592
+_13 mul _11 _12
+_14 abs _6
+_15 const 5.0
+_16 sub _14 _15
+_17 max _13 _16
