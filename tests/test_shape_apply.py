@@ -24,6 +24,7 @@ from tests.test_implicit_operations import (  # noqa: F401 - the module's worker
     new_session,
     reference_workers,
 )
+from tests.test_implicit_sketch_faces import needs_mesher
 
 H = 0.02  # the box's height, metres
 
@@ -80,6 +81,7 @@ def _assert_current(session: Session, part: str) -> None:
         assert bases == {basis}, f"{name} is stale: {bases} against {basis}"
 
 
+@needs_mesher
 def test_apply_rebuilds_the_part_and_finds_its_tags_again(tmp_path: Path) -> None:
     session = new_session(tmp_path)
     part = _tagged_box(session)
@@ -103,6 +105,7 @@ def test_apply_rebuilds_the_part_and_finds_its_tags_again(tmp_path: Path) -> Non
     GeometryStore.of(again).close()
 
 
+@needs_mesher
 def test_apply_in_the_background_reports_when_the_tags_are_found(tmp_path: Path) -> None:
     session = new_session(tmp_path)
     part = _tagged_box(session)
