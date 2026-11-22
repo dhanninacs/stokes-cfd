@@ -43,6 +43,7 @@ from stokes.fast.zones import (
 )
 from stokes.implicit.features import box
 from stokes.implicit.graph import to_text
+from tests.test_implicit_sketch_faces import needs_mesher
 
 MM = 1e3
 
@@ -395,6 +396,7 @@ def _exchanger(tmp_path: Path) -> Any:  # Any: Session
     return session
 
 
+@needs_mesher  # the bodies are built and tagged by the geometry worker
 def test_a_multi_region_project_reads_as_zones_with_their_streams(tmp_path: Path) -> None:
     from stokes.api.fast_inputs import case_from_session
     from stokes.geometry.store import GeometryStore
@@ -425,6 +427,7 @@ def test_a_multi_region_project_reads_as_zones_with_their_streams(tmp_path: Path
     GeometryStore.of(session).close()
 
 
+@needs_mesher
 def test_a_fluid_with_an_inlet_and_no_outlet_is_refused_by_name(tmp_path: Path) -> None:
     from stokes.errors import StokesError
     from stokes.geometry.store import GeometryStore

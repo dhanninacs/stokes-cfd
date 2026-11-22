@@ -30,8 +30,11 @@ def _authorize() -> None:
     a missing fixture. Measured: two tests here failed for exactly that while passing when this
     file ran alone. Idempotent, so running it twice costs nothing.
     """
+    key = TEST_DIR / "id_test.pub"
+    if not key.is_file():
+        pytest.skip("needs the throwaway SSH key and a local sshd, made by the engine fixture")
     authorized = Path.home() / ".ssh" / "authorized_keys"
-    public = (TEST_DIR / "id_test.pub").read_text()
+    public = key.read_text()
     try:
         text = authorized.read_text()
     except OSError:

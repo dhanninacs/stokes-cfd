@@ -31,6 +31,7 @@ from tests.test_implicit_operations import (  # noqa: F401 - the module's worker
     new_session,
     reference_workers,
 )
+from tests.test_implicit_sketch_faces import needs_mesher
 
 R = 0.008  # the sphere's radius, metres
 
@@ -322,6 +323,7 @@ def test_shape_variables_lists_what_shapes_the_part(tmp_path: Path) -> None:
     GeometryStore.of(session).close()
 
 
+@needs_mesher  # the reference mesher rounds the edges, so the planar caps are not found again
 def test_boundary_rules_find_the_planes_and_the_rest_again(tmp_path: Path) -> None:
     from stokes.geometry.retag import apply_rules, faces_of, rules_for, untagged
 
