@@ -13,6 +13,11 @@ pip install ./native            # needs a C++17 compiler and CMake >= 3.26
 python -c "import stokes_native; print(stokes_native.__doc__)"
 ```
 
-Rules (docs/engineering/coding-standards.md): buffers in (`nb::ndarray`), no
+The directory also holds `implicit-mesh/`, the mesher for implicit parts (ADR-0035): a separate
+Rust program, `stokes-implicit-mesh`, with its own Cargo workspace and lockfile, that the
+geometry worker runs as a child process. It is not a nanobind kernel and is not part of
+`stokes_native`; its README has the build steps.
+
+Rules for the C++ kernels (docs/engineering/coding-standards.md): buffers in (`nb::ndarray`), no
 per-element allocation, release the GIL above a millisecond, no OpenFOAM
 headers, no GPL sources.

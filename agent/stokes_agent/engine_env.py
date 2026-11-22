@@ -34,7 +34,6 @@ Standard library only, and nothing is written to disk: the agent writes only und
 
 from __future__ import annotations
 
-import getpass
 import hashlib
 import os
 import platform
@@ -50,6 +49,7 @@ from typing import Any
 from stokes.errors import StokesError
 from stokes.log import get_logger
 
+from .bundled import BUNDLED, bundled_tool
 from .probe import install_inventory, openfoam_candidates, probe_host
 
 log = get_logger(__name__)
@@ -65,11 +65,19 @@ UTILITIES: tuple[str, ...] = (
     "surfaceFeatures",
     "surfaceFeatureExtract",
     "foamRun",
+    # ADR-0038: Foundation 14's adjoint, for the wall sensitivity of the pressure loss.
+    "adjointShapeOptimisationFoam",
+    # ADR-0041: the open-source adjoint (of14-adjoint), for the flow split; beside the solvers or,
+    # failing that, bundled with Stokes (`bundled.py`), so the probe reports it or null.
+    "adjointFoam",
     "foamPostProcess",
     "foamToVTK",
     "decomposePar",
     "reconstructPar",
     "topoSet",
+    # ADR-0042: a multi-region conjugate case is split by cell zone and solved region by region.
+    "splitMeshRegions",
+    "foamMultiRun",
     "cartesianMesh",
     "tetMesh",
     "pMesh",
@@ -79,7 +87,7 @@ UTILITIES: tuple[str, ...] = (
     "foamDictionary",
     "gmsh",
     "gmshToFoam",
-    # ADR-0035: built into the user's OpenFOAM tree (`FOAM_USER_APPBIN`, on the captured PATH).
+    # ADR-0044: built into the user's OpenFOAM tree (`FOAM_USER_APPBIN`, on the captured PATH).
     "coupledSimpleFoam",
 )
 
@@ -258,6 +266,48 @@ def supports(flavour: str, version: str) -> bool:
     return flavour == "org" and version == "14"
 
 
+def _sourcing_environment() -> dict[str, str]:
+    """The sourcing shell's environment: PATH, HOME, and the account's name.
+
+    **USER and LOGNAME matter.** OpenFOAM's bashrc puts the user's own builds at
+    ``$HOME/OpenFOAM/$USER-14`` (``WM_PROJECT_USER_DIR``). With no ``USER`` that directory became
+    ``~/OpenFOAM/-14``, so programs built there (the cfMesh meshers, on the WSL host) were not on
+    the captured PATH and a mesh job was refused with "cartesianMesh is not on the engine's PATH"
+    (measured 2026-11-18). The name is the account's own, never an OpenFOAM variable, so the
+    capture still reports what the bashrc set.
+    """
+    import getpass
+
+    try:
+        name = os.environ.get("USER") or os.environ.get("LOGNAME") or getpass.getuser()
+    except (KeyError, OSError):  # no passwd entry for the uid (a bare container)
+        name = ""
+    # **The caller's PATH and MPI runtime are kept** (measured on the Linux host, 2026-11-21):
+    # OpenFOAM's bashrc assumes a shell that already has the MPI runtime on its library path, and
+    # sourcing it from a bare one left `blockMesh -help` failing on `libmpi.so.40` (exit 127). So
+    # the caller's PATH, LD_LIBRARY_PATH and the OpenMPI relocation prefixes a user-space build
+    # needs pass through, and nothing else: no BASH_ENV, no WM_*/FOAM_* of another install.
+    environment = {"PATH": os.environ.get("PATH") or "/usr/bin:/bin", "HOME": str(Path.home())}
+    if name:
+        environment["USER"] = environment["LOGNAME"] = name
+    for key in _INHERITED_RUNTIME:
+        value = os.environ.get(key)
+        if value:
+            environment[key] = value
+    return environment
+
+
+#: What the sourcing shell inherits besides PATH, HOME and the account name
+#: (`_sourcing_environment`).
+_INHERITED_RUNTIME = (
+    "LD_LIBRARY_PATH",
+    "OPAL_PREFIX",
+    "PMIX_PREFIX",
+    "PRTE_PREFIX",
+    "PRTE_PKGDATADIR",
+)
+
+
 def capture_env(bashrc: Path, timeout: float = 30.0) -> EngineEnv:
     """Source ``bashrc`` once and return the filtered environment it produced.
 
@@ -296,7 +346,7 @@ def capture_env(bashrc: Path, timeout: float = 30.0) -> EngineEnv:
             capture_output=True,
             timeout=timeout,
             check=False,
-            env=_sourcing_shell_env(),
+            env=_sourcing_environment(),
             stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired as exc:
@@ -346,35 +396,6 @@ def capture_env(bashrc: Path, timeout: float = 30.0) -> EngineEnv:
     )
 
 
-def _sourcing_shell_env() -> dict[str, str]:
-    """The environment for the shell that sources the install's bashrc.
-
-    **OpenFOAM's own bashrc assumes it is sourced from a shell that already has the MPI runtime
-    on its library path.** Measured on this Linux host: sourcing only ``etc/bashrc`` leaves
-    ``blockMesh -help`` failing with ``libmpi.so.40: cannot open shared object file`` (exit 127),
-    while the same call works when the caller had sourced the install's env script first. So keep
-    the caller's ``PATH`` and ``LD_LIBRARY_PATH``, plus the OpenMPI relocation prefixes a
-    user-space build needs, and nothing else: no ``BASH_ENV``, no ``WM_*``/``FOAM_*`` from a
-    previous install, no secrets.
-    """
-    user = os.environ.get("USER") or getpass.getuser()
-    base = {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": str(Path.home()),
-        # **OpenFOAM's bashrc builds `WM_PROJECT_USER_DIR` from `$USER`.** Measured: without it
-        # the captured `FOAM_USER_APPBIN` was `~/OpenFOAM/-14/...`, so a cfMesh built into the user
-        # prefix was invisible even though the launching shell had it on PATH.
-        "USER": user,
-        "LOGNAME": os.environ.get("LOGNAME") or user,
-    }
-    inherited = ("LD_LIBRARY_PATH", "OPAL_PREFIX", "PMIX_PREFIX", "PRTE_PREFIX", "PRTE_PKGDATADIR")
-    for key in inherited:
-        value = os.environ.get(key)
-        if value:
-            base[key] = value
-    return base
-
-
 def _tail(raw: bytes | None, limit: int = 2048) -> str:
     """The last ``limit`` bytes of a captured stream, decoded for a human to read."""
     if not raw:
@@ -406,19 +427,32 @@ def utilities(env: EngineEnv) -> dict[str, str | None]:
 
     ``shutil.which`` against the **captured** PATH, not this process's: the whole point of the
     capture is that the utilities are only reachable through it.
+
+    A program Stokes bundles (`bundled.BUNDLED`, the open-source adjoint) is looked for beside the
+    install's solvers first and in the bundled folder second (ADR-0041).
     """
     if env.native_tools:
-        return {name: env.native_tools.get(name) for name in UTILITIES}
-    path = env.env.get("PATH", "")
-    return {name: shutil.which(name, path=path) for name in UTILITIES}
+        found = {name: env.native_tools.get(name) for name in UTILITIES}
+    else:
+        path = env.env.get("PATH", "")
+        found = {name: shutil.which(name, path=path) for name in UTILITIES}
+    for name in BUNDLED:
+        if name in found and found[name] is None:
+            found[name] = bundled_tool(name)
+    return found
 
 
 def resolve_utility(env: EngineEnv, name: str) -> str | None:
-    """Native tools come only from the captured install, never the job's directory."""
+    """Native tools come only from the captured install, never the job's directory; a bundled
+    program (ADR-0041) falls back to Stokes' own folder for it."""
     if env.native_tools:
         path = env.native_tools.get(name)
-        return path if path and Path(path).is_file() else None
-    return shutil.which(name, path=env.env.get("PATH", ""))
+        found = path if path and Path(path).is_file() else None
+    else:
+        found = shutil.which(name, path=env.env.get("PATH", ""))
+    if found is None and name in BUNDLED:
+        return bundled_tool(name)
+    return found
 
 
 def coupled_has_petsc(env: EngineEnv) -> bool:
@@ -446,23 +480,12 @@ def mpi_launcher(env: EngineEnv) -> str | None:
 
 
 def missing_utility_reason(env: EngineEnv, name: str) -> str:
-    """Why a program cannot run, and what to do: plain words for the ones a user installs.
+    """Why a program cannot run, and what to do: plain words for one a user installs.
 
-    **Gmsh is the one a normal install lacks**: FoamWin ships it in a `gmsh` folder beside its
-    handshake script, but its installer (v14.0.0-win.5) does not copy that folder, and a Linux
-    OpenFOAM install does not include Gmsh at all.
+    **coupledSimpleFoam is the one a normal install lacks** (ADR-0044): FoamWin releases before
+    v14.0.0-win.6 do not ship it, and a Linux OpenFOAM install never does. Every other program keeps
+    the plain "not on the engine's PATH".
     """
-    if name == "gmsh":
-        if env.native_tools:
-            return (
-                "Gmsh was not found in the FoamWin install's gmsh folder (beside of14-env.ps1). "
-                "FoamWin's installer does not copy it: copy the gmsh folder from the FoamWin ZIP "
-                "into the install folder, then restart Stokes. Or choose another mesher."
-            )
-        return (
-            "Gmsh is not installed on this host. Install it (Ubuntu: sudo apt install gmsh), "
-            "then restart Stokes. Or choose another mesher."
-        )
     if name == "coupledSimpleFoam":
         if env.native_tools:
             return (

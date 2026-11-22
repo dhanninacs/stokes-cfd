@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, Clock, Folder, FolderOpen, HardDrive, Package, TriangleAlert } from "lucide-react";
 import type { BrowseReply } from "./FolderBrowser";
+import { dedupeRecent, parentFolder } from "../app/startScreenModel";
 
 /**
  * The Open dialog: **Recent**, **Browse** and **Samples**, as the menu spec asks.
@@ -211,14 +212,14 @@ function Dialog({
         </h2>
 
         <div className="mb-2 flex gap-1.5" role="tablist" aria-label="Where to open from">
-          {tabButton("recent", "Recent", <Clock size={13} aria-hidden="true" />, recent.length)}
+          {tabButton("recent", "Recent", <Clock size={13} aria-hidden="true" />, dedupeRecent(recent).length)}
           {tabButton("browse", "Browse", <HardDrive size={13} aria-hidden="true" />)}
           {tabButton("samples", "Samples", <Package size={13} aria-hidden="true" />, samples.length)}
         </div>
 
         {tab === "recent" && (
           <ul className="m-0 list-none overflow-y-auto p-0" style={{ maxHeight: 260, minHeight: 120 }} aria-label="Recent projects">
-            {recent.map((row) => (
+            {dedupeRecent(recent).map((row) => (
               <li key={row.path}>
                 <div className="flex items-center gap-2">
                   <button
@@ -240,7 +241,8 @@ function Dialog({
                       {row.name}
                       {/* **The short path UNDER the name** (the spec): a name alone does not say
                           which folder it is in, and that is the question a Recent list answers. */}
-                      <span className="muted block text-[11px]">{shortPath(row.path)}</span>
+                      {/* The whole folder, cut at the end of the line; the row's tooltip has the whole path. */}
+                      <span className="muted block truncate text-[11px]">{parentFolder(row.path) || shortPath(row.path)}</span>
                     </span>
                     {!row.exists && (
                       <span className="text-[11px]" style={{ color: "var(--danger)" }}>

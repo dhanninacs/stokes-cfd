@@ -7,7 +7,7 @@
  * is marked Fluid when the file arrives; the rows still show it, and the user can change it.
  */
 import { useEffect, useMemo } from "react";
-import { Upload } from "lucide-react";
+import { Shapes, Upload } from "lucide-react";
 import { runAction } from "../../app/actions";
 import { Button } from "../../components/ui";
 import { useStore } from "../../state/store";
@@ -64,7 +64,12 @@ export default function GeometryCard({ step }: { step: GuidedStep }) {
         <Upload size={14} aria-hidden="true" />
         {bodies.length === 0 ? "Import CAD file" : "Import another file"}
       </Button>
-      {bodies.length === 0 && <Note tip="STEP, IGES, BREP, STL, OBJ or 3MF, dropped anywhere on the window.">Or drop a CAD file here</Note>}
+      {/* Geometry made in Stokes (ADR-0035): opens the build ribbon at the bottom of the viewport. */}
+      <Button onClick={() => useStore.getState().setBuildRibbon(true)} disabled={importing} data-ws="guided-create">
+        <Shapes size={14} aria-hidden="true" />
+        Create shape
+      </Button>
+      {bodies.length === 0 && <Note tip="STEP, IGES, BREP, STL, OBJ or 3MF, dropped anywhere on the window; or build the geometry here with Create shape.">Or drop a CAD file here</Note>}
       {bodies.length > 0 && (
         <ul className="guided-rows" aria-label="Bodies" data-ws="guided-bodies">
           {bodies.map((body) => (

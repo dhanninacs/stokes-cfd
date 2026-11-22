@@ -89,6 +89,12 @@ def legacy_basis(snap: SolveSnapshot) -> str:
     for name in ("max_courant", "write_time", "average", "average_start"):
         body.pop(name)
     body.pop("non_orthogonal")  # added with the limited schemes; not in the basis while off
+    # Added with the flow split's adjoint (ADR-0041); not in the basis at their defaults.
+    for name in ("adjoint_objective", "adjoint_outlets"):
+        body.pop(name)
+    # Added with multi-region cases (ADR-0042); not in the basis of a one-region case.
+    for name in ("regions", "region_order"):
+        body.pop(name)
     body.pop("cells")  # added for the coupled writer; never in the basis (the mesh basis is)
     for name in ("relax_pressure", "relax_velocity", "relax_turbulence", "relax_energy"):
         body.pop(name)  # added with the user's relaxation factors; out of the basis while unset

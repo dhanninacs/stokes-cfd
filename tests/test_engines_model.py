@@ -21,7 +21,12 @@ def test_the_catalogue_lists_the_built_engine_and_the_unbuilt_one() -> None:
     ids = [spec.id for spec in ENGINES]
     assert "of14.incompressibleFluid" in ids
     built = [spec.id for spec in built_engines()]
-    assert built == ["of14.incompressibleFluid", "of14.fluid", "coupled.simple"]  # ADR-0035
+    assert built == [
+        "of14.incompressibleFluid",
+        "of14.fluid",
+        "of14.adjoint",
+        "coupled.simple",
+    ]  # ADR-0044
     assert all(spec.why for spec in ENGINES if not spec.built), "an unbuilt engine must say why"
 
 
@@ -66,6 +71,8 @@ def test_the_settings_type_registers_under_solver() -> None:
         "relax_turbulence",
         "relax_energy",
         "cores",
+        "adjoint_objective",
+        "adjoint_outlets",
         "slice_origin",
         "slice_normal",
     }
@@ -390,3 +397,57 @@ def test_invalid_solver_core_count_is_atomic(fresh: Session, cores: object) -> N
     with pytest.raises(StokesError):
         fresh.execute("solve.configure", values={"cores": cores, "iterations": 42})
     assert fresh.project.find(SETTINGS_PATH).params["iterations"] == before
+
+
+def test_the_adjoint_objective_and_outlets_are_settings(fresh: Session) -> None:
+    """ADR-0041: the cycle sets the adjoint's objective and outlets with solve.configure; the
+    snapshot reads them for the adjoint engine only, and they undo as one step."""
+    from stokes.run.snapshot import _adjoint_fields
+
+    fresh.execute(
+        "solve.configure",
+        values={
+            "engine": "of14.adjoint",
+            "adjoint_objective": "flow_split",
+            "adjoint_outlets": ["out1", "out2"],
+        },
+    )
+    params = fresh.project.find(SETTINGS_PATH).params
+    assert params["adjoint_objective"] == "flow_split"
+    assert params["adjoint_outlets"] == ["out1", "out2"]
+    assert _adjoint_fields(params) == {
+        "adjoint_objective": "flow_split",
+        "adjoint_outlets": ("out1", "out2"),
+    }
+    assert _adjoint_fields({**params, "engine": "of14.incompressibleFluid"}) == {}
+    assert _adjoint_fields({**params, "adjoint_objective": "pressure_loss"}) == {
+        "adjoint_objective": "pressure_loss",
+        "adjoint_outlets": (),
+    }
+    fresh.execute("history.undo")
+    assert fresh.project.find(SETTINGS_PATH).params.get("adjoint_objective") in (
+        None,
+        "pressure_loss",
+    )
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"adjoint_objective": "drag"},
+        {"adjoint_outlets": ["a", "a"]},
+        {"adjoint_outlets": ["a", 3]},
+        {"adjoint_outlets": "a"},
+    ],
+)
+def test_bad_adjoint_settings_are_refused_atomically(
+    fresh: Session, values: dict[str, object]
+) -> None:
+    before = fresh.project.find(SETTINGS_PATH).params["iterations"]
+    with pytest.raises(StokesError):
+        fresh.execute("solve.configure", values={**values, "iterations": 42})
+    assert fresh.project.find(SETTINGS_PATH).params["iterations"] == before
+
+
+def test_the_adjoint_engine_label_names_no_single_objective() -> None:
+    assert engine("of14.adjoint").label == "OpenFOAM 14 · Adjoint (laminar)"

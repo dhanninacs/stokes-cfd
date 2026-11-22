@@ -77,14 +77,20 @@ _TIME = re.compile(r"^Time = ([-0-9.eE+]+)([A-Za-z]*)\s*$")
 # `smoothSolver: Solving for Ux, Initial residual = 1, Final residual = 2.88483e-06, No
 # Iterations 6`
 # — **two spaces** after the colon, and the solver name is not fixed (`GAMG` for p).
+#
+# `hot   DILUPBiCGStab:  Solving for Ux, ...` — **a multi-region run (`foamMultiRun`, ADR-0042)
+# puts the region's name first**, measured on Foundation 14; the residual is then keyed
+# `<region>.<field>`, so two fluids' `Ux` are two curves and not whichever came first.
 _SOLVE = re.compile(
-    r"^\S+:\s+Solving for (\w+), Initial residual = ([-0-9.eE+]+), "
+    r"^(?:([A-Za-z][A-Za-z0-9_]{0,15})\s+)?\S+:\s+Solving for (\w+), "
+    r"Initial residual = ([-0-9.eE+]+), "
     r"Final residual = ([-0-9.eE+]+), No Iterations (\d+)\s*$"
 )
 # `time step continuity errors : sum local = 1.75187e-05, global = 4.35307e-06`
 # **`cumulative` is present only on the LAST p-solve of a step**, so it is optional here.
 _CONTINUITY = re.compile(
-    r"^time step continuity errors : sum local = ([-0-9.eE+]+), "
+    r"^(?:[A-Za-z][A-Za-z0-9_]{0,15}\s+)?"
+    r"time step continuity errors : sum local = ([-0-9.eE+]+), "
     r"global = ([-0-9.eE+]+)(?:, cumulative = ([-0-9.eE+]+))?\s*$"
 )
 # `ExecutionTime = 0.346341 s ClockTime = 1 s` — **two spaces** before `ClockTime`. This
@@ -185,7 +191,8 @@ class FoamRunParser:
                 continue
             match = _SOLVE.match(line)
             if match is not None:
-                self._take_solve(match.group(1), float(match.group(2)))
+                # `<region>.<field>` for a multi-region run, the bare field otherwise.
+                self._take_solve(".".join(filter(None, match.group(1, 2))), float(match.group(3)))
                 continue
             match = _CONTINUITY.match(line)
             if match is not None:
@@ -342,7 +349,7 @@ class FoamRunParser:
 
     def _take_solve(self, field: str, initial: float) -> None:
         """Record one `Solving for <field>` line's initial residual in the block in progress."""
-        if field in _UNSOLVED_WHEN_ZERO and initial == 0.0:
+        if field.rpartition(".")[2] in _UNSOLVED_WHEN_ZERO and initial == 0.0:
             return
         # **The first occurrence in a block wins**: the solver solves p several times, and the
         # *initial* residual of the first solve is the iteration's convergence measure.

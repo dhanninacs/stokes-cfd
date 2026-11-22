@@ -38,61 +38,132 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
+/* The steps are segments on one progress rail rather than circles joined by dashes (owner, 2026-11-20: "more
+   modern, not the generic stepper"). Each segment is a quiet button, mark + label, with its own 2 px piece of
+   the rail along its foot; the rail pieces butt up to each other with a 3 px gap, so the row reads as one
+   track filling left to right in the status colours. No pill, no outline: the open step is told by its ink, a
+   faint accent wash rising from an accent rail piece. */
 .guided-steps {
   display: flex;
+  align-items: stretch;
+  gap: 3px;
   min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .guided-step-item {
+  --rail: var(--panel-border-strong);
+  position: relative;
   display: flex;
   min-width: 0;
 }
-/* The rail between steps: a hairline that fills with the status colour once the step before it is done, and
-   runs from that colour into the accent where it reaches the open step, so the bar reads as progress. */
-.guided-step-item + .guided-step-item::before {
-  align-self: center;
-  width: 14px;
+/* The rail piece: a hairline at rest, which the state colours. */
+.guided-step-item::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
   height: 2px;
-  margin: 0 1px;
   border-radius: 1px;
   content: "";
+  background: var(--rail);
+  pointer-events: none;
+  transition:
+    background 200ms ease-out,
+    opacity 200ms ease-out;
+}
+.guided-step-item[data-state="done"] {
+  --rail: color-mix(in srgb, var(--ok) 75%, transparent);
+}
+.guided-step-item[data-state="attention"] {
+  --rail: var(--warn);
+}
+.guided-step-item:has(> .guided-step[aria-current="step"]) {
+  --rail: var(--accent);
+}
+/* After the open step's rule: a running step's rail stays dim, open or not, so the band sweeping it shows. */
+.guided-step-item[data-state="running"] {
+  --rail: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+/* The running step's rail carries a band that sweeps along it, the strip's one moving thing. */
+.guided-step-item[data-state="running"] > .guided-step::after {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  width: 40%;
+  height: 2px;
+  border-radius: 1px;
+  content: "";
+  background: var(--accent);
+  pointer-events: none;
+  animation: guided-rail-sweep 1.4s ease-in-out infinite;
+}
+@keyframes guided-rail-sweep {
+  from {
+    left: 0;
+    width: 0;
+  }
+  50% {
+    width: 45%;
+  }
+  to {
+    left: 100%;
+    width: 0;
+  }
+}
+/* The optional last step stands apart: a gap and a hairline before it, and a dashed rail, because it is a door
+   and not part of the set-up the rail measures. */
+.guided-step-item[data-optional] {
+  margin-left: 9px;
+  padding-left: 9px;
+}
+.guided-step-item[data-optional]::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 0;
+  width: 1px;
+  content: "";
   background: var(--panel-border-strong);
-  transition: background 200ms ease-out;
 }
-.guided-step-item:has(> .guided-step[data-state="done"]) + .guided-step-item::before {
-  background: color-mix(in srgb, var(--ok) 70%, transparent);
+.guided-step-item[data-optional]::after {
+  left: 9px;
+  background: repeating-linear-gradient(90deg, var(--rail) 0 4px, transparent 4px 7px);
 }
-.guided-step-item:has(> .guided-step[data-state="done"]) + .guided-step-item:has(> .guided-step[aria-current="step"])::before {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--ok) 70%, transparent), var(--accent));
+.guided-step-item[data-optional][data-state="todo"]:not(:has(> .guided-step[aria-current="step"])) .guided-step {
+  color: var(--text-faint);
+}
+.guided-step-item[data-optional][data-state="todo"]:not(:has(> .guided-step[aria-current="step"])) .guided-step:hover {
+  color: var(--text);
 }
 .guided-step {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
   min-width: 0;
   max-width: 220px;
   height: 30px;
-  padding: 0 12px 0 7px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  padding: 0 10px 2px 8px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
   background: transparent;
   color: var(--text-muted);
   text-align: left;
   cursor: pointer;
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease;
+    background 140ms ease-out,
+    color 140ms ease-out;
 }
 .guided-step:hover {
   background: var(--hover);
   color: var(--text);
 }
+/* The open step: an inset wash of the accent that rests on its accent rail piece, open at the foot. */
 .guided-step[aria-current="step"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--accent) 4%, transparent));
   color: var(--text);
 }
 /* One line in every state, so the strip keeps one height and the steps do not shift when another opens. */
@@ -107,57 +178,62 @@
 .guided-step-label {
   font-size: 12.5px;
   font-weight: 600;
+  letter-spacing: -0.005em;
 }
-.guided-step-hint {
-  overflow: hidden;
-  font-size: 11px;
-  font-weight: 450;
-  color: var(--text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.guided-step:not([aria-current="step"]) .guided-step-label {
+  font-weight: 500;
 }
 /* The hint is the open card's subtitle and every step's tooltip; in the bar it would only crowd the project name. */
 .guided-step-hint {
   display: none;
 }
+/* The mark: a 16 px slot holding the step's index in mono tabular figures (to do), or a glyph in the state's
+   colour (done, needs attention, running). Never a disc or a ring: the rail under the step carries the colour. */
 .guided-dot {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 16px;
+  min-width: 16px;
   height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid var(--text-faint);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.guided-step:hover .guided-dot[data-state="todo"] {
   color: var(--text-muted);
 }
-/* Done is a soft tint with the check in the status colour (DESIGN.md 3b: status is never a filled badge). */
+.guided-step[aria-current="step"] .guided-dot[data-state="todo"] {
+  color: var(--accent-ink);
+}
 .guided-dot[data-state="done"] {
-  border-color: transparent;
-  background: var(--ok-soft);
   color: var(--ok);
 }
 .guided-dot[data-state="attention"] {
-  border-color: var(--warn);
-  background: transparent;
   color: var(--warn);
 }
 .guided-dot[data-state="running"] {
-  border-color: var(--accent);
   color: var(--accent);
 }
-.guided-dot[data-state="attention"] svg,
-.guided-dot[data-state="running"] svg {
-  margin: -1.5px;
-}
 /* A narrower bar drops the labels of the steps that are not open: the strip shares the bar with the project and
-   command clusters. */
+   command clusters. The marks and the rail stay, so the row is still a progress track. */
 @media (max-width: 1180px) {
   .guided-step:not([aria-current="step"]) .guided-step-text {
     display: none;
   }
   .guided-step:not([aria-current="step"]) {
-    padding-right: 7px;
+    padding: 0 7px 2px;
+  }
+  .guided-step-item[data-optional] {
+    margin-left: 5px;
+    padding-left: 5px;
+  }
+  .guided-step-item[data-optional]::after {
+    left: 5px;
   }
 }
 
@@ -201,6 +277,27 @@
   overscroll-behavior: contain;
   padding: 10px 12px 12px;
   pointer-events: auto;
+}
+/* A step's card arrives (a short fade and a 4 px settle) instead of swapping in place: with seven
+   cards of the same width in the same spot, an instant swap read as "nothing happened". */
+@keyframes guided-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.guided-card {
+  animation: guided-card-in 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .guided-card,
+  .guided-step-item[data-state="running"] > .guided-step::after {
+    animation: none;
+  }
 }
 .guided-card-head {
   display: flex;
@@ -290,6 +387,22 @@
 .guided-line strong {
   color: var(--text);
 }
+/* A card with two labelled blocks (Optimise): a small heading over each block's line and buttons. */
+.guided-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.guided-block + .guided-block {
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-border);
+}
+.guided-block-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
 .guided-error {
   margin: 0;
   font-size: 12px;
@@ -330,11 +443,24 @@
 .guided-state {
   font-size: 12px;
 }
+/* The card's residual chart keeps a compact legend (walkthrough 2026-11-18): without it four coloured
+   lines said nothing about which field was which. */
 .guided-spark {
-  height: 112px;
+  height: 132px;
+  display: flex;
+  flex-direction: column;
 }
 .guided-spark .run-legend {
-  display: none;
+  gap: 0 6px;
+  font-size: 10px;
+}
+.guided-spark .run-legend button {
+  height: 16px;
+  padding: 0 2px;
+}
+.guided-spark .run-chart {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ------------------------------------------------------------------ chips */
@@ -686,3 +812,61 @@
 .case-quick-row .guided-field { align-items: center; }
 .case-quick-row .guided-field > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .case-quick-row input.field { min-width: 0; }
+
+/* The Fluid card's other bodies (ADR-0042): a second stream, the wall between two streams. */
+.guided-other-bodies {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--panel-border);
+}
+.guided-other-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* The Results card's Streams table (results.streams): flow, Δp, temperatures and heat per stream. */
+.streams {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--panel-border);
+}
+.streams-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.streams-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.streams-table th,
+.streams-table td {
+  padding: 2px 4px;
+  text-align: right;
+  white-space: nowrap;
+}
+.streams-table th[scope="row"],
+.streams-table thead th:first-child {
+  text-align: left;
+}
+.streams-table thead th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.streams-balance {
+  font-size: 11px;
+  margin: 0;
+}
+
+.streams-table tr.streams-temps td {
+  padding-top: 0;
+  color: var(--text-muted);
+  text-align: left;
+  padding-left: 12px;
+}

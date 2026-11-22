@@ -216,3 +216,13 @@ describe("lines over the run's own mid-plane", () => {
     expect(out.slices.list).toHaveLength(1);
   });
 });
+
+describe("lines again over a hidden mid-plane slice", () => {
+  it("shows the hidden slice at that plane instead of adding a second", () => {
+    const first = linesFor(NO_SLICES, true, { axis: "z", offset: 0.0051 }, true, 8).slices;
+    const hidden = updateSlice(first, first.list[0]!.id, { visible: false });
+    const again = linesFor(hidden, true, { axis: "z", offset: 0.0051 }, true, 8);
+    expect(again.slices.list).toHaveLength(1);
+    expect(again.slices.list[0]!.visible).toBe(true);
+  });
+});

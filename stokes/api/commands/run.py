@@ -73,6 +73,20 @@ def _mesh_status(ctx: CommandContext) -> dict[str, Any]:
     return MeshService.of(ctx.session).status()
 
 
+def _require_adjoint_program(snap: Any, record: dict[str, Any], host: str) -> None:  # Any: snapshot
+    """Refuse a flow-split adjoint run on a host whose install has no `adjointFoam` (ADR-0041),
+    with the sentence that says how to get it, instead of a job that fails at its first step."""
+    from stokes.run.errors import AdjointProgramMissing
+    from stokes.run.hosts import ADJOINT_PROGRAM, adjoint_program_missing, install_utility
+
+    if snap.engine != "of14.adjoint" or snap.adjoint_objective != "flow_split":
+        return
+    if install_utility(record, ADJOINT_PROGRAM) is None:
+        raise AdjointProgramMissing(
+            adjoint_program_missing(host), details={"host": host, "program": ADJOINT_PROGRAM}
+        )
+
+
 @command(
     "run.start",
     params=(
@@ -178,6 +192,8 @@ def run_start(
             "reused": False,
             "name": record.name,
         }
+
+    _require_adjoint_program(snap, record, chosen)
 
     if not force:
         reusable = store.reusable(earned)
@@ -1120,6 +1136,26 @@ def _triangulation_cache() -> Any:
             required=False,
             description="With seed_patches: how many lines (default 50, at most 200).",
         ),
+        ParamDef(
+            "follow_walls",
+            "boolean",
+            required=False,
+            description="Volume traces: slide lines along walls instead of stopping them there, "
+            "for passages a few cells wide (default false).",
+        ),
+        ParamDef(
+            "terminal_fraction",
+            "number",
+            required=False,
+            description="Volume traces: a line stops where the flow is slower than this fraction "
+            "of the largest speed (default 0.0001).",
+        ),
+        ParamDef(
+            "max_steps",
+            "number",
+            required=False,
+            description="Volume traces: the most steps one line takes (default 20000).",
+        ),
     ),
     mutates=False,
 )
@@ -1136,6 +1172,9 @@ def run_streamlines(
     max_points: int = 400,
     seed_patches: list[str] | None = None,
     count: int = 50,
+    follow_walls: bool = False,
+    terminal_fraction: float = 1e-4,
+    max_steps: int = 20000,
 ) -> dict[str, Any]:
     """Streamlines through a VECTOR field on a patch - the direction a contour cannot show.
 
@@ -1159,7 +1198,17 @@ def run_streamlines(
         if not (isinstance(count, int | float) and 1 <= count <= MAX_LINES):
             raise StreamlinesInvalid(f"count must be 1 to {MAX_LINES} lines")
         return _volume_streamlines(
-            ctx, run, field, None, direction, max_length, step, max_points, seed_patches, count
+            ctx,
+            run,
+            field,
+            None,
+            direction,
+            max_length,
+            step,
+            max_points,
+            seed_patches,
+            count,
+            tracing=_tracing(follow_walls, terminal_fraction, max_steps),
         )
     if not seeds:
         raise StreamlinesInvalid("no seeds: give at least one [x, y, z] point")
@@ -1168,7 +1217,17 @@ def run_streamlines(
             f"{len(seeds)} seeds is more than the {MAX_LINES} this draws; use fewer"
         )
     if source == "volume":
-        return _volume_streamlines(ctx, run, field, seeds, direction, max_length, step, max_points)
+        return _volume_streamlines(
+            ctx,
+            run,
+            field,
+            seeds,
+            direction,
+            max_length,
+            step,
+            max_points,
+            tracing=_tracing(follow_walls, terminal_fraction, max_steps),
+        )
     # **`slice` is a patch the caller can name**, because on a model whose walls carry no flow it is
     # the only surface a streamline can run on - measured on the audit's duct.
     positions, values = (
@@ -1194,6 +1253,34 @@ def run_streamlines(
     }
 
 
+def _tracing(follow_walls: Any, terminal_fraction: Any, max_steps: Any) -> dict[str, Any]:
+    """The volume trace's options that differ from the host's defaults, checked.
+
+    Only what differs is sent, so a host whose agent predates these options is asked exactly what it
+    always was unless a caller asks for one.
+    """
+    from stokes.post.streamlines import StreamlinesInvalid
+
+    if not isinstance(follow_walls, bool):
+        raise StreamlinesInvalid("follow_walls must be true or false")
+    if (
+        isinstance(terminal_fraction, bool)
+        or not isinstance(terminal_fraction, int | float)
+        or not 0.0 <= float(terminal_fraction) < 1.0
+    ):
+        raise StreamlinesInvalid("terminal_fraction must be a fraction from 0 to 1")
+    if isinstance(max_steps, bool) or not isinstance(max_steps, int | float) or max_steps < 1:
+        raise StreamlinesInvalid("max_steps must be a positive number of steps")
+    out: dict[str, Any] = {}
+    if follow_walls:
+        out["follow_walls"] = True
+    if float(terminal_fraction) != 1e-4:
+        out["terminal_fraction"] = float(terminal_fraction)
+    if int(max_steps) != 20000:
+        out["max_steps"] = int(max_steps)
+    return out
+
+
 def _volume_streamlines(
     ctx: CommandContext,
     run: str | None,
@@ -1205,6 +1292,7 @@ def _volume_streamlines(
     max_points: int,
     seed_patches: list[str] | None = None,
     count: int = 50,
+    tracing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:  # Any: JSON
     """`run.streamlines` through the 3-D volume, traced by the run's host (ADR-0030).
 
@@ -1229,19 +1317,43 @@ def _volume_streamlines(
         max_points=max(2, min(int(max_points), 1000)),
         seed_patches=seed_patches,
         seed_count=int(count),
+        **(tracing or {}),
     )
     points = np.frombuffer(reply["points"], dtype="<f4").reshape(-1, 3)
     speeds = np.frombuffer(reply["speeds"], dtype="<f4")
     offsets = [int(v) for v in reply["offsets"]]
+    # The scalar fields the agent carried along the lines (T, p, ...), one float per point like
+    # `speeds`, so a line can be coloured by temperature or pressure. An older agent sends none.
+    carried = {
+        str(name): np.frombuffer(raw, dtype="<f4")
+        for name, raw in (reply.get("values") or {}).items()
+        if isinstance(raw, (bytes, bytearray)) and len(raw) == 4 * len(speeds)
+    }
     lines = [
         {
             "points": points[offsets[i] : offsets[i + 1]].tolist(),
             "speeds": speeds[offsets[i] : offsets[i + 1]].tolist(),
             "reason": reply["reasons"][i],
+            **(
+                {
+                    "values": {
+                        name: column[offsets[i] : offsets[i + 1]].tolist()
+                        for name, column in carried.items()
+                    }
+                }
+                if carried
+                else {}
+            ),
         }
         for i in range(int(reply["count"]))
     ]
-    return {"patch": "volume", "field": field, "source": "volume", "lines": lines}
+    return {
+        "patch": "volume",
+        "field": field,
+        "source": "volume",
+        "lines": lines,
+        "fields": sorted(carried),
+    }
 
 
 #: The most arrows `run.vectors` returns (the agent's own cap, `stokes_agent.sample`).

@@ -35,6 +35,7 @@ Open **Mesh** and pick the **Mesher**:
 | Tetrahedral (cfMesh tetMesh) | tetrahedra | any shape, but about ten times the cells for the same size |
 | Polyhedral (cfMesh pMesh) | polyhedra | fewer cells than tetrahedra, well-behaved gradients |
 | Poly-hexcore (cartesianMesh + polyDualMesh) | hexahedra in the core, polyhedra at transitions and walls | a balance of cell count and quality |
+| Tetrahedral + prism layers (Gmsh) | tetrahedra, with prism layers on the walls when layers are set | a part's own volume; needs Gmsh installed |
 | blockMesh | structured blocks | simple boxes and channels |
 
 Set **How fine** with the slider (Coarse, Medium, Fine) or type a cell size such

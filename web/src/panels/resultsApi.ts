@@ -3,8 +3,8 @@
  * the defensive reader of the command's reply and the byte fetch. When the server's contract changes this is
  * the only file that has to.
  *
- * * `run.fields {run?}` answers `{run, time, fields: [{name, units, min, max}], slice: bool, surfaces:
- *   "ok" | "missing", two_d?: bool}` from the server's cache only (it never reads the solver's files);
+ * * `run.fields {run?}` answers `{run, time, fields: [{name, units, min, max}], slice: bool, slice_skipped?: int,
+ *   surfaces: "ok" | "missing", two_d?: bool}` from the server's cache only (it never reads the solver's files);
  * * `GET /api/results/field/{run}/{target}?field=<name>`: one field on one surface, `target` a `mesh_patch`
  *   node id or the word `slice` (the codec is `state/fieldCodec.ts`); 404 for an unknown run, patch or no
  *   cache, 400 for an unknown field;
@@ -62,6 +62,11 @@ export interface RunFields {
   fields: FieldInfo[];
   /** The run has a mid-plane slice. */
   slice: boolean;
+  /**
+   * How many cells the mid-plane slice could not draw (`slice_skipped`: cells VTK would not contour even after
+   * the agent's tetrahedral re-cut). Absent when none, or from an older server.
+   */
+  sliceSkipped?: number;
   /** The mesh surfaces the fields are drawn on exist on the server. */
   surfaces: "ok" | "missing";
   /**
@@ -96,6 +101,7 @@ export function readRunFields(payload: unknown): RunFields | null {
     time: num(payload.time) ?? 0,
     fields,
     slice: payload.slice === true,
+    ...((num(payload.slice_skipped) ?? 0) >= 1 ? { sliceSkipped: Math.floor(num(payload.slice_skipped) ?? 0) } : {}),
     surfaces: payload.surfaces === "missing" ? "missing" : "ok",
     ...(typeof payload.two_d === "boolean" ? { twoD: payload.two_d } : {}),
     ...(Array.isArray(payload.times) ? { times: payload.times.map(num).filter((t): t is number => t !== null) } : {}),

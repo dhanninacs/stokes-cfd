@@ -375,3 +375,19 @@ def test_non_finite_numbers_are_dropped() -> None:
     assert _number("nan") is None
     assert _number("56.3099") == pytest.approx(56.3099)
     assert math.isfinite(_number("1e999") or 0.0) is not False
+
+
+def test_a_mesh_in_pieces_and_its_unused_points_are_read() -> None:
+    """cfMesh's polyhedral mesh of a lattice: two pieces no face joins, and points no face uses."""
+    log = (
+        "Checking topology...\n"
+        "    Boundary definition OK.\n"
+        " ***Unused points found in the mesh, number unused by faces: 374461 "
+        "number unused by cells: 374461\n"
+        "   *Number of regions: 2\n"
+        "    The mesh has multiple regions which are not connected by any face.\n"
+        "Failed 2 mesh checks.\n"
+    )
+    found = parse_checkmesh(log)
+    assert found["regions"] == 2 and found["unused_points"] == 374461
+    assert parse_checkmesh("    Number of regions: 1 (OK).\n")["regions"] == 1

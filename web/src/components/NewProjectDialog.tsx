@@ -273,9 +273,15 @@ function Dialog({
           by `project_dir`, so this is the only place a user can see what they are about to create -
           and the spec asks for exactly this line.
         */}
-        {showPath && (
-          <p className="mt-1.5 text-[12px]" style={{ color: "var(--text-muted)" }} data-ws="new-path">
-            will be created at{" "}
+        {/*
+          **The line keeps its room while the name is empty** (walkthrough 2026-11-18): it appeared
+          with the first letter typed, two lines tall, and pushed Create down under a pointer aimed at
+          it, so a click on Create after typing a name missed. Two lines are reserved.
+        */}
+        <p className="mt-1.5 min-h-[36px] text-[12px]" style={{ color: "var(--text-muted)" }} data-ws="new-path">
+          {showPath ? (
+            <>
+              will be created at{" "}
             {/*
               **Breaks at a separator, never inside a name.** With the default wrapping,
               `stokes-work` broke after its hyphen, so the path read as two folders - and a path is
@@ -296,8 +302,11 @@ function Dialog({
                 </Fragment>
               ))}
             </span>
-          </p>
-        )}
+            </>
+          ) : (
+            "Give the project a name: it is created as a folder of its own."
+          )}
+        </p>
 
         <div
           id={noteId}

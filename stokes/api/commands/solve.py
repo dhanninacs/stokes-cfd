@@ -265,7 +265,7 @@ def solve_check(ctx: CommandContext) -> dict[str, Any]:
                 "code": "solve.no_mesh",
                 "severity": "error",
                 "message": "there is no mesh result",
-                "suggestion": "run Mesh first",
+                "suggestion": "Generate the mesh first",
                 "nodes": [],
             }
         )

@@ -17,7 +17,17 @@ export function fitTargetIds(bodies: readonly FitCandidate[]): Set<string> {
  * `isoModel.ts`, and the test pins them).
  */
 export function isCutSource(source: string): boolean {
-  return source === "mesh:slice" || source.startsWith("mesh:slice:") || source === "mesh:slice-cap" || source === "mesh:iso";
+  return source === "mesh:slice" || source.startsWith("mesh:slice:") || source === "mesh:slice-cap" || source === "mesh:iso" || isOverlaySource(source);
+}
+
+/**
+ * The sources drawn whichever layer the stage shows, the geometry or the mesh: Fast mode's plane
+ * (`mesh:fast`, `fastLayer.ts`). It is a mesh source like a results slice, but a preview runs while the
+ * body is still being made, in the stages that draw the geometry layer: under the layer filter alone the
+ * plane was never drawn there, only the faded body around it (found in the app, 2026-11-22).
+ */
+export function isOverlaySource(source: string): boolean {
+  return source === "mesh:fast";
 }
 
 /** True for a source that is a slice (the mid-plane's or one of the list), which a fit keeps inside the frame. */

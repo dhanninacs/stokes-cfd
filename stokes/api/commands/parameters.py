@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from stokes.api.registry import CommandContext, ParamDef, command
-from stokes.errors import ValidationError
+from stokes.errors import StokesError, ValidationError
 from stokes.model import AddNode, Command, Composite, QuantityValue, SetParam
 from stokes.model.project import PARAMETERS_PATH
 from stokes.units import DIMENSIONS, format_quantity
@@ -66,6 +66,15 @@ def parameter_get(
     spec = project.spec_of(target).param(name)
     raw = target.params.get(name)
     out: dict[str, Any] = {"node": target.path, "name": name, "kind": spec.kind}
+    if spec.kind in ("vector", "quantity_map"):
+        # ADR-0037: each component is a quantity of its own, under <name>.<component>.
+        prefix = f"{name}."
+        out["components"] = {
+            key[len(prefix) :]: parameter_get(ctx, node, key, unit)
+            for key in target.params
+            if key.startswith(prefix)
+        }
+        return out
     if isinstance(raw, QuantityValue):
         dim = project.param_dimension(target, spec)
         q = project.value_of(target.id, name)
@@ -195,3 +204,148 @@ def parameter_set_many(
     for node_id in ids:
         ctx.session.emit("node.changed", node_id=node_id, param=name)
     return {"nodes": ids, "name": name, "results": result}
+
+
+MAX_UPDATE = 32
+
+
+@command(
+    "parameter.update",
+    params=(
+        NODE_REF,
+        ParamDef(
+            "values",
+            "object",
+            description="Parameter name to value, each as `parameter.set` takes it, applied in "
+            "the order given (a sketch's dimensions before the entities that name them).",
+        ),
+    ),
+)
+def parameter_update(ctx: CommandContext, node: str, values: Any) -> dict[str, Any]:
+    """Set several parameters of ONE node as **one undo step** and one journal record.
+
+    The sketcher's Finish (ADR-0036 addendum) writes a sketch's plane, dimensions, entities and
+    profile together: four ``parameter.set`` calls were four undo steps, and the first undo
+    changed nothing visible. A refusal of any value leaves every parameter as it was
+    (``Composite`` reverts what it applied before re-raising).
+    """
+    if not isinstance(values, dict) or not values:
+        raise ValidationError("values must be an object of at least one parameter")
+    if len(values) > MAX_UPDATE:
+        raise ValidationError(f"at most {MAX_UPDATE} parameters at once")
+    project = ctx.session.require_project()
+    node_id = project.get(node).id
+    commands: list[Command] = [SetParam(node_id, str(name), v) for name, v in values.items()]
+    label = f"Set {', '.join(str(n) for n in values)}"
+    result = ctx.session.undo.push(Composite(label=label, commands=commands), project)
+    for name in values:
+        ctx.session.emit("node.changed", node_id=node_id, param=str(name))
+    return {"node": node_id, "names": [str(n) for n in values], "results": result}
+
+
+MAX_LOCALS = 64
+
+
+@command(
+    "expression.evaluate",
+    params=(
+        ParamDef("text", "string", description="Quantity text ('20 [mm]') or an expression."),
+        ParamDef(
+            "dimension",
+            "string",
+            required=False,
+            description="The dimension the result must have (length, angle, ...).",
+        ),
+        ParamDef(
+            "names",
+            "object",
+            required=False,
+            description="Names known to this evaluation only, each quantity text or an "
+            "expression ({'W': '20 [mm]', 'H': 'W / 2'}): a sketch's dimensions before they are "
+            "stored. They are looked up before the project's parameters.",
+        ),
+    ),
+    mutates=False,
+)
+def expression_evaluate(
+    ctx: CommandContext, text: str, dimension: str | None = None, names: Any = None
+) -> dict[str, Any]:
+    """Evaluate an expression against the project's parameters and quantities (and ``names``),
+    with the grammar every quantity field uses; changes nothing. The sketcher previews a drawn
+    coordinate such as 'W / 2' with it."""
+    from stokes.errors import CycleError
+    from stokes.units import dimension as named
+    from stokes.units.expressions import evaluate
+    from stokes.units.quantities import is_quantity_text, parse_quantity
+    from stokes.units.registry import Quantity
+
+    project = ctx.session.require_project()
+    local = dict(names or {})
+    if len(local) > MAX_LOCALS:
+        raise ValidationError(f"at most {MAX_LOCALS} names")
+    found: dict[str, Quantity] = {}
+    active: set[str] = set()
+
+    def resolve(ref: str) -> Quantity:
+        if ref in found:
+            return found[ref]
+        if ref in local:
+            if ref in active:
+                raise CycleError(f"{ref} refers to itself", details={"ref": ref})
+            active.add(ref)
+            try:
+                found[ref] = value_of(str(local[ref]))
+            finally:
+                active.discard(ref)
+            return found[ref]
+        return project.resolve(ref)
+
+    def value_of(source: str) -> Quantity:
+        source = source.strip()
+        if is_quantity_text(source):
+            for guess in ("length", "angle", "dimensionless"):
+                try:
+                    return parse_quantity(source, named(guess))
+                except StokesError:
+                    continue
+        return evaluate(source, resolve)
+
+    expect = named(dimension) if dimension else None
+    result = evaluate(text, resolve, expect=expect) if expect else value_of(text)
+    si = result.to_base_units()
+    return {
+        "text": text,
+        "value": float(si.magnitude),
+        "unit": str(si.units),
+        "dimension": expect.name if expect else None,
+    }
+
+
+@command(
+    "parameter.assign",
+    params=(
+        ParamDef(
+            "values",
+            "object",
+            description="{reference: value}: each quantity as an expression names it ('R', "
+            "'geometry.cyl.radius', 'geometry.cyl.position.x'), set to an SI number, quantity text "
+            "or an expression.",
+        ),
+    ),
+)
+def parameter_assign(ctx: CommandContext, values: Any) -> dict[str, Any]:
+    """Set quantities by the names expressions use, as one undo step: what applying an
+    optimiser's best point does."""
+    if not isinstance(values, dict) or not values:
+        raise ValidationError("values is an object of reference: value")
+    project = ctx.session.require_project()
+    commands: list[Command] = []
+    targets: list[tuple[str, str, str]] = []
+    for reference, value in values.items():
+        node, name = project.resolve_param(str(reference).strip().strip("/").replace("/", "."))
+        commands.append(SetParam(node.id, name, value))
+        targets.append((node.id, node.path, name))
+    ctx.session.undo.push(Composite(label="assign parameters", commands=commands), project)
+    for node_id, path, name in targets:
+        ctx.session.emit("node.changed", node_id=node_id, path=path, param=name)
+    return {"assigned": [{"node": path, "name": name} for _, path, name in targets]}

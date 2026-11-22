@@ -58,6 +58,15 @@ export const QUICK_MATERIALS: readonly QuickMaterial[] = [
 ];
 
 /**
+ * The solids the card offers at one press for a body beside the fluid (ADR-0042): the wall between two
+ * streams, a heated block. A body given one is a solid region, meshed and solved with the fluids.
+ */
+export const QUICK_SOLIDS: readonly QuickMaterial[] = [
+  { label: "Aluminium", provider: "builtin", fluid: "aluminium" },
+  { label: "Copper", provider: "builtin", fluid: "copper" },
+];
+
+/**
  * Give the fluid body a material from the library: reuse the project's copy when it already has one,
  * else add it, then `region.assign` to the body. Returns the material's name in the project.
  */
@@ -209,7 +218,7 @@ export async function setFlowModel(model: string): Promise<void> {
   await refreshed(await configureSolve({ values: { turbulence: model } }));
 }
 
-/** The engines that solve a temperature (`stokes/engines/catalogue.py` `ENERGY_ENGINES`): the thermal one, and coupledSimpleFoam's passive scalar (ADR-0035). */
+/** The engines that solve a temperature (`stokes/engines/catalogue.py` `ENERGY_ENGINES`): the thermal one, and coupledSimpleFoam's passive scalar (ADR-0044). */
 export const ENERGY_ENGINES: readonly string[] = ["of14.fluid", "coupled.simple"];
 
 /**

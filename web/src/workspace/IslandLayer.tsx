@@ -61,11 +61,14 @@ export default function IslandLayer({ offsets }: { offsets: Record<Corner, Corne
       const b = corners.current[end] ?? null;
       const labelled = [a, b].flatMap((c) => (c ? Array.from(c.querySelectorAll<HTMLElement>(".island")).filter((el) => el.querySelector(".island-label")) : []));
       if (labelled.length === 0) continue;
-      for (const el of labelled) el.dataset.compact = "false";
-      const used = (a?.offsetWidth ?? 0) + (b?.offsetWidth ?? 0) + (a && b ? 12 : 0);
       const span = main.clientWidth - offsets[start].x - offsets[end].x;
-      const compact = String(used > span);
-      for (const el of labelled) el.dataset.compact = compact;
+      // Three steps, the least loss first: as drawn; "tight" (the same words in less padding, which
+      // is what a 1280 px window needs: it was 5 px short and lost every label); icons only.
+      for (const step of ["false", "tight", "true"] as const) {
+        for (const el of labelled) el.dataset.compact = step;
+        const used = (a?.offsetWidth ?? 0) + (b?.offsetWidth ?? 0) + (a && b ? 12 : 0);
+        if (used <= span) break;
+      }
     }
   }, [offsets]);
 

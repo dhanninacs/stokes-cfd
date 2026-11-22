@@ -271,7 +271,7 @@ def project_new(
     # through a different branch from `project.open` and `project.save`, so recording in those two
     # alone left the commonest case out - a project created from the start screen and then nowhere
     # to be seen on it. Measured. **Unconditional now**, because every new project has a folder.
-    _remember(ctx.session.project_path)
+    _remember(ctx.session.project_path, ctx.session)
     ctx.session.notify_extensions("project_opened", project=project, path=ctx.session.project_path)
     ctx.session.emit("project.opened", **(ctx.session.project_opened_data() or {}))
     return _info(ctx)
@@ -390,7 +390,7 @@ def _switch_to(
         if node is not None:
             ctx.session.emit("node.added", node_id=node.id, path=added)
     ctx.session.notify_extensions("project_opened", project=project, path=folder)
-    _remember(folder)
+    _remember(folder, ctx.session)
     ctx.session.emit("project.opened", **(ctx.session.project_opened_data() or {}))
 
 
@@ -474,7 +474,7 @@ def project_save(ctx: CommandContext, path: str | None = None) -> dict[str, Any]
     ctx.session.project_path = save_project(project, Path(target))
     _saved(ctx.session, project, ctx.session.project_path)
     _drop_recovery(ctx.session.project_path)
-    _remember(ctx.session.project_path)
+    _remember(ctx.session.project_path, ctx.session)
     ctx.session.emit("project.saved", path=str(ctx.session.project_path))
     return _info(ctx)
 
@@ -628,7 +628,7 @@ def _copy_to(
         _saved(ctx.session, project, previous_here)
         # Save as saved the unsaved work, in the new folder: the original's copy of it is done with.
         _drop_recovery(previous_here)
-        _remember(prepared)
+        _remember(prepared, ctx.session)
     else:
         # **Save a copy does NOT send `project_saved`** (Opus F3). The session stays in the
         # original, and the stores that keep a folder of their own - the study store's tables, the
@@ -748,13 +748,17 @@ def _drop_recovery(folder: Path | None) -> None:
         log.warning("could not remove the recovery copy", extra={"error": str(exc)[:200]})
 
 
-def _remember(folder: Path | None) -> None:
+def _remember(folder: Path | None, session: Any = None) -> None:  # Any: Session
     """Add a project to the recent list. **Never raises.**
+
+    A **private** session (``Session.private``: a shape optimisation's cycle, which opens a copy
+    of the user's project) is never listed: its folder is scratch, and the start screen filled
+    with twenty "obstacle" copies from one run.
 
     A start screen's list is a convenience; a project that saved correctly must not be reported
     as failed because a list could not be updated.
     """
-    if folder is None:
+    if folder is None or getattr(session, "private", False):
         return
     from stokes.model.recent import remember
 

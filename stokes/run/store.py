@@ -995,6 +995,8 @@ class RunStore:
             mesher = "cfmesh_tet"
         elif "pMesh" in utilities:
             mesher = "cfmesh_poly"
+        elif "gmshToFoam" in utilities:
+            mesher = "gmsh"
         try:
             MeshService.of(self._session).adopt_job_mesh(
                 record.job,
@@ -1756,6 +1758,18 @@ class RunStore:
         entry = header.get("slice")
         return isinstance(entry, dict) and int(entry.get("triangles") or 0) > 0
 
+    @staticmethod
+    def _slice_skipped(header: dict[str, Any]) -> int:
+        """How many cells the slice could not draw (the agent's `skipped_cells`); 0 when unsaid.
+
+        **Read defensively**: the header comes from the agent, and an old one has no such key.
+        """
+        entry = header.get("slice")
+        value = entry.get("skipped_cells") if isinstance(entry, dict) else None
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return 0
+        return value
+
     # --------------------------------------------------------------- iso-surfaces (ADR-0026)
 
     def iso_path(self, run_id: str, field: str, value: float) -> Path:
@@ -1850,6 +1864,7 @@ class RunStore:
         max_points: int = 400,
         seed_patches: Sequence[str] | None = None,
         seed_count: int = 50,
+        **tracing: Any,
     ) -> dict[str, Any]:
         """Streamlines through the run's 3-D volume, traced by the run's host (ADR-0030).
 
@@ -1883,6 +1898,7 @@ class RunStore:
             step_cells=step_cells,
             max_points=max_points,
             **where,
+            **tracing,
         )
         if not isinstance(reply, dict):
             raise StokesError("the host answered a trace with something that is not a result")
@@ -1999,6 +2015,9 @@ class RunStore:
             "times": times,
             "fields": entries,
             "slice": self._has_slice(header),
+            # **The cells the slice could not draw** (the T0 review's item 4): the agent re-cuts
+            # the cells VTK will not contour and counts the ones still missing.
+            "slice_skipped": self._slice_skipped(header),
             "surfaces": "ok",
             "two_d": self.two_d(),
         }

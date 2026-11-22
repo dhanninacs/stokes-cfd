@@ -122,7 +122,7 @@ function ManySelection({ rows, onPick }: { rows: readonly ChosenRow[]; onPick: (
         {rows.map((row) => (
           <li key={row.id}>
             <button type="button" className="link no-drag" onClick={() => onPick(row.id)}>
-              {row.id}
+              {row.name ?? row.id}
             </button>
             <span className="muted"> · {row.type}</span>
           </li>
@@ -339,7 +339,11 @@ export default function DetailsPanel({ overlay = false, onBack }: DetailsProps) 
   const selectedIds = useStore((s) => s.selection.ids);
   const treeForRows = useStore((s) => s.tree);
   const selectedRows = useMemo(
-    () => selectedIds.map((id) => ({ id, type: findNode(treeForRows, id)?.type ?? "" })),
+    () =>
+      selectedIds.map((id) => {
+        const found = findNode(treeForRows, id);
+        return { id, type: found?.type ?? "", name: found?.name };
+      }),
     [selectedIds, treeForRows],
   );
   /** A click on one of them narrows the selection to that row. */

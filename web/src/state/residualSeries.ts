@@ -123,8 +123,13 @@ export type ResidualsView =
  * The name a residual is shown under. OpenFOAM reports the energy equation as the variable it solves
  * (`e` or `h`), which says nothing to a reader who switched on "Energy"; the label names the equation
  * and keeps the solver's variable beside it. Every other field keeps the solver's own name.
+ *
+ * A run of several regions (ADR-0042) names each residual `<region>.<field>`: the region comes first,
+ * then the field read the same way ("hot · Energy (h)", "wall · Energy (e)", "cold · Ux").
  */
 export function residualLabel(name: string): string {
+  const dot = name.indexOf(".");
+  if (dot > 0 && dot < name.length - 1) return `${name.slice(0, dot)} · ${residualLabel(name.slice(dot + 1))}`;
   if (name === "e" || name === "h") return `Energy (${name})`;
   return name;
 }

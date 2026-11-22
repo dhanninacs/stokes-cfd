@@ -84,7 +84,7 @@ describe("Mesh card ⊂ mesh settings Basic", () => {
 
   it("every setting the card writes (the fineness chips, the layers switch) is a Basic field of the mesh settings", () => {
     const written = [...card.matchAll(/configureMesh\(\{ (\w+):/g)].map((m) => m[1]);
-    expect(written.sort()).toEqual(["base_size", "layers"]);
+    expect([...new Set(written)].sort()).toEqual(["base_size", "layers"]);
     for (const name of written) {
       expect(BASIC.mesh_settings).toContain(name);
       expect(namesAt(snappy, "basic", MESH_NAMES)).toContain(name);
@@ -112,15 +112,16 @@ describe("Run card ⊂ solver settings Basic", () => {
   const card = source("../guided/steps/RunCard.tsx");
   const steady = visibleFields("solver_settings", SOLVER_NAMES, {}, DEFAULT_CONTEXT);
 
-  it("the one setting the card writes (iterations) is a Basic field of the solver settings", () => {
+  it("the settings the card writes (iterations, the residual target) are Basic fields of the solver settings", () => {
     const written = [...card.matchAll(/values: \{ (\w+):/g)].map((m) => m[1]);
-    expect(written).toEqual(["iterations"]);
+    expect(written).toEqual(["iterations", "residual_target"]);
+    expect(BASIC.solver_settings).toContain("residual_target");
     expect(BASIC.solver_settings).toContain("iterations");
     expect(namesAt(steady, "basic", SOLVER_NAMES)).toContain("iterations");
   });
 
   it("the page adds the flow model to the card's iterations, and nothing the card lacks is Advanced-only for a first run", () => {
-    expect(namesAt(steady, "basic", SOLVER_NAMES)).toEqual(["turbulence", "iterations"]);
+    expect(namesAt(steady, "basic", SOLVER_NAMES)).toEqual(["turbulence", "iterations", "residual_target"]);
   });
 
   it("Run is the same press on the card and on the page", () => {

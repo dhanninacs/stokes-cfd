@@ -17,6 +17,8 @@ native/build/
 
 # Local runtime data
 .stokes/
+# The GUI walks' screenshots, recordings and scratch projects (`web/walk_*.mjs` write `../.local/`)
+/.local/
 *.log
 # **The pitzDaily fixtures are data, not logs.** `*.log` above would exclude them, and a clean
 # clone then fails ~10 tests with no hint why - claude-win2 found this in his merge. The negation
@@ -55,5 +57,11 @@ tests/perf/results.jsonl
 !tests/fixtures/**/*.log
 stokes/app/assets/THIRD-PARTY-NOTICES.md
 
+# The bundled open-source adjoint (ADR-0041, G30): a built GPL program staged for packaging, never committed.
+/bin/openfoam-adjoint/
+/stokes/bin/openfoam-adjoint/
 # Written per machine by scripts/setup-windows.ps1
 /run-stokes.ps1
+
+# Agent worktrees made by Claude Code sessions
+.claude/worktrees/

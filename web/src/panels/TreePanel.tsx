@@ -20,6 +20,7 @@ import { setShowAllRows, useRowMode } from "./outlineMode";
 import { useTreeRows } from "./treeRows";
 import { enterTargetOf, isVirtualId, openTargetOf, rowMetaOf } from "./stageTreeModel";
 import { RENAME_EVENT } from "../app/events";
+import { removeWithDependents } from "../app/removeNode";
 import { prefersReducedMotion } from "../app/prefs";
 import { IconButton, Panel, SectionTitle } from "../components/ui";
 import { Menu, type CloseReason, type MenuItemSpec } from "../components/Menu";
@@ -428,6 +429,13 @@ export default function TreePanel() {
       }
       const index = rowsRef.current.findIndex((r) => r.node.id === node.id);
       const neighbour = index >= 0 ? neighbourAfterRemoval(rowsRef.current, index) : null;
+      // A body or an operation others are built from goes with them, after asking (review A7).
+      const withDependents = await removeWithDependents(node);
+      if (withDependents !== "none") {
+        if (withDependents === "removed" && useStore.getState().selectedId === null) select(neighbour);
+        focusTree();
+        return;
+      }
       const doomed = new Set(subtreeIds(node));
       try {
         await execute("node.remove", { node: node.id });

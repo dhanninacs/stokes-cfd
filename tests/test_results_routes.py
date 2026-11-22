@@ -363,6 +363,8 @@ def test_a_finished_run_records_its_fields(
     listing = session.execute("run.fields", run=started["run"])
     assert listing["run"] == started["run"]
     assert listing["slice"] is True
+    # The agent's slice drew every cell it cut: nothing to report.
+    assert listing["slice_skipped"] == 0
     assert listing["surfaces"] == "ok"
     names = [entry["name"] for entry in listing["fields"]]
     assert names == ["U", "U_mag", "p"]

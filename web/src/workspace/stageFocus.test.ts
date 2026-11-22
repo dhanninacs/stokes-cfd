@@ -12,7 +12,8 @@
  * case: a slot emptied entirely, and a panel that must survive a stage it does not belong to.
  */
 import { describe, expect, it } from "vitest";
-import { panelsForStage, type FocusablePanel } from "./stageFocus";
+import { panelsForStage, visibleLayout, SAVED_PANEL_INDEX, type FocusablePanel } from "./stageFocus";
+import { defaultLayout } from "./defaults";
 
 const panel = (id: string, stages?: readonly ("Mesh" | "Physics" | "Results" | "Geometry")[]) => ({
   def: { id, ...(stages === undefined ? {} : { stages }) },
@@ -79,5 +80,19 @@ describe("panelsForStage", () => {
     expect(ids(panelsForStage(many, "Physics").shown)).toEqual(["materials"]);
     expect(ids(panelsForStage(many, "Solve").shown)).toEqual(["materials"]);
     expect(ids(panelsForStage(many, "Mesh").shown)).toEqual(["materials"]); // the empty-slot fallback
+  });
+});
+
+describe("Optimise visibility", () => {
+  it("keeps the saved placement hidden until explicitly opened, in every slot", () => {
+    const layout = defaultLayout();
+    for (const slot of ["left", "right", "bottom", "float"] as const) {
+      const saved = { ...layout, [slot]: { ...layout[slot], panels: [{ id: "optimise" }, { id: "tree" }] } };
+      const hidden = visibleLayout(saved, {});
+      expect(hidden[slot].panels.map((p) => p.id)).toEqual(["tree"]);
+      expect((hidden[slot].panels[0] as typeof hidden[typeof slot]["panels"][number] & { [SAVED_PANEL_INDEX]: number })[SAVED_PANEL_INDEX]).toBe(1);
+      expect(visibleLayout(saved, { [slot]: ["optimise"] })[slot].panels.map((p) => p.id)).toEqual(["optimise", "tree"]);
+      expect(saved[slot].panels.map((p) => p.id)).toEqual(["optimise", "tree"]);
+    }
   });
 });

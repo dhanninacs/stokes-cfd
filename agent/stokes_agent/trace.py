@@ -15,7 +15,11 @@ VTK is BSD-licensed and is the integrator (`vtkStreamTracer`); numpy carries the
   line that has slowed to that fraction of the case's largest speed (a stagnation point).
 
 **Why a line stopped is part of the answer** (`reasons`): `left_domain` (an outlet or a wall),
-`length`, `steps` or `stagnation`. A line that ran out of steps is not a line that reached an
+`length`, `steps`, `stagnation` or `wall` (a wall-following line that made no headway).
+
+**`follow_walls`** traces with `stokes_agent.walk` instead of `vtkStreamTracer`: lines that slide
+along walls rather than stop at them, for passages a few cells wide (see that module for the
+measurement that made it necessary). A line that ran out of steps is not a line that reached an
 end, and the picture can say so.
 
 A line longer than `max_points` is resampled by index (ends kept), never refused.
@@ -50,6 +54,7 @@ REASONS: dict[int, str] = {
     4: "length",
     5: "steps",
     6: "stagnation",
+    7: "wall",
 }
 
 
@@ -104,17 +109,25 @@ def trace_mesh(
     if max_length is None:
         low, high = mesh.GetBounds()[0::2], mesh.GetBounds()[1::2]
         max_length = 3.0 * float(np.linalg.norm(np.asarray(high) - np.asarray(low)))
-    tracer = _tracer(
-        mesh,
-        seeds,
-        direction=direction,
-        max_length=float(max_length),
-        steps=(step_cells, min_step_cells, max_step_cells),
-        max_steps=max_steps,
-        terminal_speed=float(terminal_fraction) * top,
-    )
-    tracer.Update()
-    return _collect(tracer.GetOutput(), max_points)
+
+    def run(start: np.ndarray, length: float) -> list[dict[str, Any]]:
+        tracer = _tracer(
+            mesh,
+            start,
+            direction=direction,
+            max_length=length,
+            steps=(step_cells, min_step_cells, max_step_cells),
+            max_steps=max_steps,
+            terminal_speed=float(terminal_fraction) * top,
+        )
+        tracer.Update()
+        return _raw_lines(tracer.GetOutput())
+
+    return _pack(run(seeds, float(max_length)), max_points)
+
+
+#: The scalar fields a streamline carries besides its speed, when the case has them.
+CARRIED_FIELDS: tuple[str, ...] = ("T", "p", "p_rgh", "k", "nut")
 
 
 def _tracer(
@@ -159,12 +172,20 @@ def _tracer(
     return tracer
 
 
-def _collect(out: Any, max_points: int) -> dict[str, Any]:
-    """The tracer's output polydata as the answer's arrays, long lines resampled."""
+def _raw_lines(out: Any) -> list[dict[str, Any]]:
+    """The tracer's lines, each `{seed, points, speeds, values, reason}` with VTK's reason code."""
     from vtkmodules.util.numpy_support import vtk_to_numpy
 
     if out is None or out.GetNumberOfPoints() == 0:
-        return _answer([], [], [0], [])
+        return []
+    # The scalar fields the lines pass through, so a client can colour them by temperature or
+    # pressure instead of speed (`values` in the answer, one float per point, like `speeds`).
+    carried_scalars = {
+        name: vtk_to_numpy(array)  # type: ignore[no-untyped-call]
+        for name in CARRIED_FIELDS
+        if (array := out.GetPointData().GetArray(name)) is not None
+        and array.GetNumberOfComponents() == 1
+    }
     coords: np.ndarray = vtk_to_numpy(out.GetPoints().GetData())  # type: ignore[no-untyped-call]
     carried = out.GetPointData().GetArray("U")
     along: np.ndarray = (
@@ -181,22 +202,55 @@ def _collect(out: Any, max_points: int) -> dict[str, Any]:
         if why is not None
         else np.zeros(cells.GetNumberOfCells(), dtype=int)
     )
-    line_points: list[np.ndarray] = []
-    line_speeds: list[np.ndarray] = []
-    reasons: list[str] = []
+    seed_array = out.GetCellData().GetArray("SeedIds")
+    seed_of_line = (
+        vtk_to_numpy(seed_array).astype(int)  # type: ignore[no-untyped-call]
+        if seed_array is not None
+        else np.arange(cells.GetNumberOfCells())
+    )
+    lines: list[dict[str, Any]] = []
     for i in range(cells.GetNumberOfCells()):
         ids = connectivity[int(offsets[i]) : int(offsets[i + 1])]
         if ids.size < 2:
             continue
-        if ids.size > max_points:
-            ids = ids[np.unique(np.linspace(0, ids.size - 1, max_points).round().astype(int))]
-        line_points.append(coords[ids])
-        line_speeds.append(along[ids])
-        reasons.append(REASONS.get(int(code_of_line[i]) if i < code_of_line.size else 0, "unknown"))
+        lines.append(
+            {
+                "seed": int(seed_of_line[i]) if i < seed_of_line.size else i,
+                "points": np.asarray(coords[ids], dtype=float),
+                "speeds": np.asarray(along[ids], dtype=float),
+                "values": {
+                    name: np.asarray(column[ids], dtype=float)
+                    for name, column in carried_scalars.items()
+                },
+                "reason": int(code_of_line[i]) if i < code_of_line.size else 0,
+            }
+        )
+    return lines
+
+
+def _pack(lines: list[dict[str, Any]], max_points: int) -> dict[str, Any]:
+    """The lines as the answer's arrays, long lines resampled by index (ends kept)."""
+    if not lines:
+        return _answer([], [], [0], [])
+    names = set.intersection(*(set(line["values"]) for line in lines))
+    line_points: list[np.ndarray] = []
+    line_speeds: list[np.ndarray] = []
+    line_values: dict[str, list[np.ndarray]] = {name: [] for name in sorted(names)}
+    reasons: list[str] = []
+    for line in lines:
+        count = len(line["points"])
+        ids = np.arange(count)
+        if count > max_points:
+            ids = np.unique(np.linspace(0, count - 1, max_points).round().astype(int))
+        line_points.append(line["points"][ids])
+        line_speeds.append(line["speeds"][ids])
+        for name, parts in line_values.items():
+            parts.append(line["values"][name][ids])
+        reasons.append(REASONS.get(int(line["reason"]), "unknown"))
     boundaries = [0]
-    for line in line_points:
-        boundaries.append(boundaries[-1] + line.shape[0])
-    return _answer(line_points, line_speeds, boundaries, reasons)
+    for points in line_points:
+        boundaries.append(boundaries[-1] + points.shape[0])
+    return _answer(line_points, line_speeds, boundaries, reasons, line_values)
 
 
 def _answer(
@@ -204,16 +258,24 @@ def _answer(
     line_speeds: list[np.ndarray],
     offsets: list[int],
     reasons: list[str],
+    line_values: dict[str, list[np.ndarray]] | None = None,
 ) -> dict[str, Any]:
     points = np.concatenate(line_points) if line_points else np.zeros((0, 3))
     speeds = np.concatenate(line_speeds) if line_speeds else np.zeros(0)
-    return {
+    found: dict[str, Any] = {
         "count": len(line_points),
         "points": np.ascontiguousarray(points, dtype="<f4").tobytes(),
         "speeds": np.ascontiguousarray(speeds, dtype="<f4").tobytes(),
         "offsets": [int(v) for v in offsets],
         "reasons": reasons,
     }
+    if line_values and line_points:
+        found["values"] = {
+            name: np.ascontiguousarray(np.concatenate(parts), dtype="<f4").tobytes()
+            for name, parts in line_values.items()
+            if parts
+        }
+    return found
 
 
 def unpack(answer: dict[str, Any]) -> list[dict[str, Any]]:
@@ -305,7 +367,7 @@ def _patch_blocks(reader: Any) -> dict[str, Any]:
     """The reader's boundary patches by name (a reader opened with its patches on)."""
     from stokes_agent import extract
 
-    output = reader.GetOutput()
+    output = extract.case_root(reader)
     found: dict[str, Any] = {}
     for index in range(output.GetNumberOfBlocks()):
         meta = output.GetMetaData(index)
@@ -367,6 +429,21 @@ def open_volume(
     return reader, float(used)
 
 
+def open_points(case_dir: Path, reader: Any) -> np.ndarray:
+    """The points of the case's open patches (inlets and outlets: OpenFOAM type `patch`)."""
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+    from stokes_agent import extract
+
+    types = extract._patch_types(case_dir)
+    found: list[np.ndarray] = []
+    for name, block in _patch_blocks(reader).items():
+        if types.get(name) == "patch" and block.GetPoints() is not None:
+            xyz = vtk_to_numpy(block.GetPoints().GetData())  # type: ignore[no-untyped-call]
+            found.append(np.asarray(xyz).astype("float64").reshape(-1, 3))
+    return np.concatenate(found) if found else np.zeros((0, 3))
+
+
 def trace_case(
     case_dir: Path,
     seeds: np.ndarray | None,
@@ -375,6 +452,7 @@ def trace_case(
     engine: str | None = None,
     seed_patches: list[str] | None = None,
     seed_count: int = 50,
+    follow_walls: bool = False,
     **options: Any,
 ) -> dict[str, Any]:
     """Trace through the internal mesh of the solved case in `case_dir`.
@@ -386,7 +464,9 @@ def trace_case(
     """
     from stokes_agent import extract
 
-    reader, used = open_volume(case_dir, patches=bool(seed_patches), time=time, engine=engine)
+    reader, used = open_volume(
+        case_dir, patches=bool(seed_patches) or follow_walls, time=time, engine=engine
+    )
     mesh = extract._internal_mesh(reader)
     if mesh is None:
         raise TraceInvalid("the case has no internal mesh to trace through")
@@ -399,7 +479,14 @@ def trace_case(
         given = np.asarray(seeds, dtype=float)
         _check(given, str(options.get("direction", "forward")), options.get("max_length"))
         start = into_domain(mesh, given)
-    answer = trace_mesh(mesh, start, **options) if start.shape[0] else _answer([], [], [0], [])
+    if not start.shape[0]:
+        answer = _answer([], [], [0], [])
+    elif follow_walls:
+        from stokes_agent import walk
+
+        answer = walk.walk_mesh(mesh, start, open_points=open_points(case_dir, reader), **options)
+    else:
+        answer = trace_mesh(mesh, start, **options)
     answer["time"] = used
     answer["seeds"] = int(start.shape[0])
     return answer

@@ -6,6 +6,9 @@
  */
 import { useMemo } from "react";
 import { useUpload } from "../app/upload";
+import { listStudies } from "../panels/explore/study";
+import { useOptimiseStatus } from "../panels/explore/optimiseStatus";
+import "../panels/explore/optimiseStatusWire";
 import { findMeshNodes, isStale, phaseNow, readResult } from "../panels/meshPanelModel";
 import { NO_FIELD } from "../panels/fieldsModel";
 import { latestProgress } from "../state/parts";
@@ -22,6 +25,7 @@ export function useGuidedView(): GuidedView {
   const field = useStore((s) => s.results.view.field);
   const importProgress = useStore((s) => s.importProgress);
   const uploading = useUpload((u) => u.phase === "uploading");
+  const shape = useOptimiseStatus();
 
   return useMemo(() => {
     const view = readResult(findMeshNodes(tree).result);
@@ -36,6 +40,7 @@ export function useGuidedView(): GuidedView {
       runs,
       resultsLoaded: loaded,
       fieldChosen: field !== NO_FIELD,
+      optimise: { running: shape.running, cycles: shape.cycles, finished: shape.finished, studies: listStudies(tree).length },
     });
-  }, [project, tree, setup, live, runs, loaded, field, importProgress, uploading]);
+  }, [project, tree, setup, live, runs, loaded, field, importProgress, uploading, shape]);
 }

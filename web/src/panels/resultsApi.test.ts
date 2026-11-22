@@ -43,6 +43,13 @@ describe("readRunFields", () => {
     expect(readRunFields({ run: "r_1", two_d: "yes" })).not.toHaveProperty("twoD");
   });
 
+  it("reads how many cells the slice could not draw, and nothing for none or a wrong value", () => {
+    expect(readRunFields({ run: "r_1", slice: true, slice_skipped: 3 })?.sliceSkipped).toBe(3);
+    expect(readRunFields({ run: "r_1", slice: true, slice_skipped: 0 })).not.toHaveProperty("sliceSkipped");
+    expect(readRunFields({ run: "r_1", slice: true, slice_skipped: "3" })).not.toHaveProperty("sliceSkipped");
+    expect(readRunFields({ run: "r_1", slice: true })).not.toHaveProperty("sliceSkipped");
+  });
+
   it("is null for a payload that is not one", () => {
     expect(readRunFields(null)).toBeNull();
     expect(readRunFields([])).toBeNull();

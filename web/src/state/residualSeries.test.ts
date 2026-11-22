@@ -115,6 +115,10 @@ describe("residualLabel", () => {
   it("names the energy equation and keeps the solver's variable", () => {
     expect(residualLabel("e")).toBe("Energy (e)");
     expect(residualLabel("h")).toBe("Energy (h)");
+    // A run of several regions names the region first (ADR-0042).
+    expect(residualLabel("hot.h")).toBe("hot · Energy (h)");
+    expect(residualLabel("wall.e")).toBe("wall · Energy (e)");
+    expect(residualLabel("cold.Ux")).toBe("cold · Ux");
   });
 
   it("leaves every other field under its own name", () => {

@@ -1,4 +1,5 @@
 import type { Stage } from "../state/store";
+import type { LayoutSpec, SlotName } from "./types";
 
 /**
  * Which panels a slot shows in a stage (T-220).
@@ -51,4 +52,18 @@ export function panelsForStage<T extends FocusablePanel>(
   // bare card with no tabs and no way back; the panels are shown instead, because a wrong tab is
   // recoverable and an empty slot is not.
   return shown.length > 0 ? { shown, hidden } : { shown: [...panels], hidden: [] };
+}
+
+/** Original position in the saved slot, retained when temporary visibility filters a panel. */
+export const SAVED_PANEL_INDEX = Symbol("saved panel index");
+
+/** Keep the saved location of Optimise, but open it only when requested in this session. */
+export function visibleLayout(layout: LayoutSpec, opened: Partial<Record<SlotName, readonly string[]>>): LayoutSpec {
+  const filter = (slot: SlotName) => ({
+    ...layout[slot],
+    panels: layout[slot].panels
+      .map((panel, index) => ({ ...panel, [SAVED_PANEL_INDEX]: index }))
+      .filter((panel) => panel.id !== "optimise" || (opened[slot] ?? []).includes(panel.id)),
+  });
+  return { ...layout, left: filter("left"), right: filter("right"), bottom: filter("bottom"), float: filter("float") };
 }

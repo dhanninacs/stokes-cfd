@@ -22,7 +22,9 @@ function schemaNames(file: string, from: string, to?: string): string[] {
   const body = text.slice(start, to === undefined ? undefined : text.indexOf(to, start + from.length));
   return [...body.matchAll(/ParamSpec\(\s*"(\w+)"/g)].map((m) => m[1]);
 }
-const SOLVER_NAMES = schemaNames("stokes/engines/model.py", '"Solver settings"', "def settings_summary");
+/** Solver parameters the schema marks hidden (`x-hidden`): the shape optimiser sets them, the property grid never shows them. */
+const HIDDEN_SOLVER = ["adjoint_objective", "adjoint_outlets"];
+const SOLVER_NAMES = schemaNames("stokes/engines/model.py", '"Solver settings"', "def settings_summary").filter((name) => !HIDDEN_SOLVER.includes(name ?? ""));
 const MESH_NAMES = schemaNames("stokes/mesh/model.py", '"mesh_settings",', '"mesh_result"');
 /** The solver fields as the schema offers them once the transient and turbulence fields exist (the grouping rules do not read the server). */
 const ALL_SOLVER_FIELDS = [

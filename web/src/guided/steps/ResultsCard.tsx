@@ -22,30 +22,34 @@
  * Geometry card remembers its guesses, so a user's own choice is never overruled by a later run.
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Box, ChevronsUpDown, Layers, Mountain, MoveUpRight, Scissors, Wind, type LucideIcon } from "lucide-react";
+import { Box, Layers, Mountain, MoveUpRight, Scissors, Wind, type LucideIcon } from "lucide-react";
 import { Button } from "../../components/ui";
 import { Tooltip } from "../../components/Tooltip";
 import { NO_FIELD, SMOOTH, chooseField, effectiveRange, parseRangeInput, setBandCount, setView } from "../../panels/fieldsModel";
 import { fieldLabel, fieldUnits } from "../../panels/fieldsModel";
-import { RANGE_MODE_WORDS, legendOf, rangeModeOf, setManualEnd, setMap, setRangeMode, type RangeMode } from "../../panels/legendModel";
+import { RANGE_MODE_WORDS, legendOf, rangeModeOf, setManualEnd, setMap, setRangeMode, setReverse, type RangeMode } from "../../panels/legendModel";
 import { LOOKS, DEFAULT_PREFS, activationActions, activeLook, controlActions, controlsOf, firstShowDefaults, lookAvailability, type LookControl, type LookId, type LookPrefs } from "../../panels/lookModel";
 import { createDebounce } from "../../panels/sliceModel";
 import { openExportDialog } from "../../panels/ExportImageDialog";
 import { openPanel } from "../../panels/panelOpen";
+import { openPanelById } from "../../panels/paletteItems";
 import { probeRows } from "../../panels/probeModel";
 import { showResults, useFieldOptions, useHasFinishedRun } from "../../panels/resultsControl";
-import { COLORMAPS, COLORMAP_IDS, type ColormapId } from "../../state/colormap";
 import { runAction } from "../../app/actions";
 import { useStore } from "../../state/store";
 import GuidedCard from "../GuidedCard";
 import ViewsMenu from "../ViewsMenu";
 import { LineButton, LinePlot } from "../LineBlock";
 import AnalyseBlock from "../AnalyseBlock";
+import StreamsSummary from "../../panels/StreamsSummary";
+import FieldPicker from "../../panels/FieldPicker";
+import ColormapPicker from "../../panels/ColormapPicker";
 import TimeBlock from "../TimeBlock";
+import ShownSurfaces from "../ShownSurfaces";
 import { fitRange } from "../fitRange";
 import { contourLinesOn, linesFor, withContourLines } from "../analyseModel";
 import { Chips, Note, type Choice } from "../controls";
-import { reportBlocker, resultChoices, RESULT_FIELD_WORDS, type GuidedStep } from "../guidedModel";
+import { reportBlocker, resultChoices, type GuidedStep } from "../guidedModel";
 import { lookContext, lookStateOf, runLooks, type Report } from "../looksControl";
 import { chooseMode } from "../modeStore";
 import { arrangeFor } from "../treeToggle";
@@ -188,6 +192,7 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
   const status = useStore((s) => s.results.status);
   const slices = useStore((s) => s.slices);
   const iso = useStore((s) => s.iso);
+  const contours = useStore((s) => s.contours);
   const streamlines = useStore((s) => s.streamlines);
   const arrows = useStore((s) => s.arrows);
   const section = useStore((s) => s.section);
@@ -249,7 +254,6 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
   }, [data, projectKey]);
 
   const choices: Choice<string>[] = useMemo(() => resultChoices(data === null ? null : options.map((o) => o.name)), [data, options]);
-  const others = useMemo(() => options.filter((o) => !(o.name in RESULT_FIELD_WORDS)), [options]);
   const chooseOrLoad = (name: string) => {
     if (data === null) {
       wanted.current = name;
@@ -265,7 +269,7 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
     [client, run, data],
   );
 
-  const state = { results, slices, iso, streamlines, arrows, section, orthographic, hiddenNodes };
+  const state = { results, slices, iso, contours, streamlines, arrows, section, orthographic, hiddenNodes };
   const availability = useMemo(() => lookAvailability(data), [data]);
   const active = activeLook(state, data);
   const shown = note.busy && pending !== null ? pending : active;
@@ -339,23 +343,10 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
         <>
           <div className="looks-fields">
             <Chips<string> label="What colours the model" value={view.field} choices={choices} onChange={chooseOrLoad} wide />
-            {others.length > 0 && (
-              <div className="select-wrap looks-more">
-                <Tooltip label="The run's other fields" side="top">
-                  <select className="field" aria-label="More fields" value={others.some((o) => o.name === view.field) ? view.field : ""} onChange={(e) => e.target.value !== "" && chooseOrLoad(e.target.value)} data-ws="guided-more-fields">
-                    <option value="" disabled hidden>
-                      more ▾
-                    </option>
-                    {others.map((o) => (
-                      <option key={o.name} value={o.name}>
-                        {fieldLabel(o.name, fieldUnits(data, o.name))}
-                      </option>
-                    ))}
-                  </select>
-                </Tooltip>
-                <ChevronsUpDown size={12} className="select-chevron" aria-hidden="true" />
-              </div>
-            )}
+          </div>
+          <div className="looks-row">
+            <span className="looks-label">Field</span>
+            <FieldPicker ws="guided-field-picker" onError={(text) => report(text, false)} />
           </div>
 
           <div className="looks-tiles" role="group" aria-label="Look" data-ws="guided-looks">
@@ -381,6 +372,7 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
             })}
           </div>
 
+          <ShownSurfaces />
           <TimeBlock />
           <LookControls shown={shown} controls={controls} onChoose={(id, value) => act(shown, id, value)} onSlide={(id, value) => act(shown, id, String(value))} onPress={(id) => act(shown, id, "")} />
           {note.text !== "" && <Note tip={note.tip}>{note.text}</Note>}
@@ -417,18 +409,13 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
             )}
             <div className="looks-row">
               <span className="looks-label">Map</span>
-              <div className="select-wrap looks-map">
-                <Tooltip label="The colours the field is drawn with, on the walls, cuts and legend" side="top">
-                  <select className="field" aria-label="Colour map" value={legend.map} onChange={(e) => update((live) => setView(live, setMap(live.view, e.target.value as ColormapId)))} data-ws="guided-map">
-                    {COLORMAP_IDS.map((id) => (
-                      <option key={id} value={id}>
-                        {COLORMAPS[id].label}
-                      </option>
-                    ))}
-                  </select>
-                </Tooltip>
-                <ChevronsUpDown size={12} className="select-chevron" aria-hidden="true" />
-              </div>
+              <ColormapPicker
+                map={legend.map}
+                reverse={legend.reverse}
+                onMap={(id) => update((live) => setView(live, setMap(live.view, id)))}
+                onReverse={(on) => update((live) => setView(live, setReverse(live.view, on)))}
+                ws="guided-map"
+              />
             </div>
             <Tooltip label="Flat colour steps instead of the smooth map" side="top" describe={false}>
               <div className="looks-row">
@@ -488,6 +475,11 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
                 Export…
               </Button>
             </Tooltip>
+            <Tooltip label="Change a parameter of the shape to lower the pressure loss, with gradients from the adjoint" side="top">
+              <Button onClick={() => openPanelById("optimise")} data-ws="guided-optimise">
+                Optimise…
+              </Button>
+            </Tooltip>
             <ViewsMenu
               stream={{ seeds: prefs.streamSeeds, count: prefs.streamCount }}
               onStream={(s) => setPrefs((p) => ({ ...p, streamSeeds: s.seeds, streamCount: s.count }))}
@@ -505,6 +497,7 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
               </Tooltip>
             )}
           </div>
+          <StreamsSummary run={run} />
           <LinePlot />
           <AnalyseBlock />
           {probing && probe.phase === "idle" && <Note tip="Click the model to read the field there">Click the model</Note>}

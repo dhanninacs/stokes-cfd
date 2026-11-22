@@ -67,7 +67,7 @@ logical core (24 here).
    | `cfmesh_tet` | tetrahedral | tetMesh | OpenMP threads |
    | `cfmesh_poly` | polyhedral | pMesh | OpenMP threads |
    | `polyhex` | poly-hexcore | cartesianMesh → polyDualMesh | OpenMP threads |
-   | `gmsh` | tetrahedral (alternative) | gmsh → gmshToFoam | not built |
+   | `gmsh` | tetrahedral (alternative) | gmsh → gmshToFoam | serial (built by ADR-0043) |
 
    New ids are appended to the enum so stored projects keep their meaning.
 3. **One cfMesh driver** (`stokes.mesh.drivers.cfmesh`) serves the four cfMesh types from the
@@ -89,7 +89,8 @@ logical core (24 here).
 7. **Gmsh stays unbuilt** in this slice: `gmsh.exe` sits outside `FOAM_APPBIN`, which is the only
    place the native agent resolves tools, and tetMesh already covers tetrahedra. Wiring it means
    a `.geo` writer (surface loop from the joined STL, physical groups per tag), a native tool path
-   for `gmsh`, and `gmshToFoam` with its patch-type fix-up.
+   for `gmsh`, and `gmshToFoam` with its patch-type fix-up. *(Superseded by ADR-0043, 2026-11-20:
+   Gmsh is built, with prism layers on the walls.)*
 
 ## Alternatives considered
 

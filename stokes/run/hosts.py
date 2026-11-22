@@ -65,6 +65,34 @@ INVENTORY_KEYS: tuple[str, ...] = (
 )
 
 
+#: The flow split's adjoint program (ADR-0041): the open-source `adjointFoam`, bundled with Stokes
+#: as a separate program (G30) or copied beside the install's solvers.
+ADJOINT_PROGRAM = "adjointFoam"
+
+
+def install_utility(record: dict[str, Any] | None, name: str) -> str | None:
+    """Where the probe record's default install has the allow-listed utility ``name``, or None
+    (absent, or a record from an agent that does not look for it)."""
+    if not isinstance(record, dict):
+        return None
+    wanted = record.get("default_install_id")
+    for entry in record.get("installs") or []:
+        if isinstance(entry, dict) and entry.get("id") == wanted:
+            found = (entry.get("utilities") or {}).get(name)
+            return str(found) if found else None
+    return None
+
+
+def adjoint_program_missing(host: str) -> str:
+    """The sentence a user reads when the host has no `adjointFoam`."""
+    return (
+        f"the flow split's adjoint needs adjointFoam, which was found neither beside the OpenFOAM "
+        f"solvers on {host} nor in the copy bundled with Stokes (bin/openfoam-adjoint): reinstall "
+        "Stokes, or build it from of14-adjoint and copy adjointFoam.exe beside the install's "
+        "solvers; or use finite differences"
+    )
+
+
 def wsl_host_names() -> list[str]:
     """`wsl:<distro>` for every WSL distribution the machine has; empty off Windows.
 

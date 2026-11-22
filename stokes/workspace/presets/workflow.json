@@ -48,6 +48,10 @@
         {
           "id": "plots",
           "order": 5
+        },
+        {
+          "id": "optimise",
+          "order": 6
         }
       ]
     },

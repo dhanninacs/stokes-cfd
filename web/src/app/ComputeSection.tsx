@@ -300,7 +300,7 @@ export default function ComputeSection() {
             <strong>Add install location…</strong> to point at one, or install {SUPPORTED_LABEL}.
           </p>
         )}
-        {/* A Windows computer with no install can get FoamWin from here (ADR-0037); the card hides itself elsewhere. */}
+        {/* A Windows computer with no install can get FoamWin from here (ADR-0046); the card hides itself elsewhere. */}
         {probe !== undefined && current !== null && (
           <FoamWinCard
             probe={{ host: current.name, system: probe.record?.system, installs }}

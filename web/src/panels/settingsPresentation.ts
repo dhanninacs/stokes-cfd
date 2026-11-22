@@ -68,10 +68,10 @@ export function groupSettingsFields(
 /**
  * The Basic names of the two settings pages (`setup/basicSets.ts` builds on these). Mesh: `base_size` is drawn
  * as Coarse / Medium / Fine and `layers` as the Boundary layers switch; the exact fields stay in Advanced.
- * Solver: the flow model (`turbulence`) and `iterations` are the real fields.
+ * Solver: the flow model (`turbulence`), `iterations` and the residual target are the real fields (the Run card writes the last two).
  */
 export const BASIC_MESH: readonly string[] = ["base_size", "layers"];
-export const BASIC_SOLVER: readonly string[] = ["turbulence", "iterations"];
+export const BASIC_SOLVER: readonly string[] = ["turbulence", "iterations", "residual_target"];
 
 /** The section the Solve tree's Initialisation row opens (it exists only for a turbulent run). */
 export const INITIAL_TURBULENCE_SECTION = "solver-initial";
@@ -94,7 +94,7 @@ export function findingsTouch(findings: readonly { nodes: readonly string[] }[],
   return findings.some((f) => f.nodes.includes(settingsId));
 }
 
-/** The user's under-relaxation factors (ADR-0036); each is empty for the engine's own value. */
+/** The user's under-relaxation factors (ADR-0045); each is empty for the engine's own value. */
 export const RELAXATION_FIELDS: readonly string[] = ["relax_pressure", "relax_velocity", "relax_turbulence", "relax_energy"];
 
 export const SOLVER_SETTINGS_SECTIONS: readonly SettingsSectionSpec[] = [
@@ -193,11 +193,13 @@ export function meshSettingIncluded(name: string, context: MeshSettingsContext):
   // cfMesh meshes a part's own volume (ADR-0032), so it has no margin; blockMesh and a snappy box do.
   if (name === "margin") return context.mesher === "blockmesh" || (context.mesher === "snappy" && context.domain === "box");
   if (["surface_size", "layers", "layer_mode", "expansion_ratio"].includes(name)) return followsShape(context.mesher);
-  // The feature angle reaches snappy's dictionaries and the poly-hexcore dual's argument; the other cfMesh fills ignore it.
-  if (name === "feature_angle") return context.mesher === "snappy" || context.mesher === "polyhex";
+  // The feature angle reaches snappy's dictionaries, the poly-hexcore dual's argument and Gmsh's surface
+  // classification (ADR-0043); the other cfMesh fills ignore it.
+  if (name === "feature_angle") return context.mesher === "snappy" || context.mesher === "polyhex" || context.mesher === "gmsh";
   // snappy-only layer controls: cfMesh sizes its layers from the local cell and has no equivalent.
   if (["min_thickness_ratio", "layer_feature_angle"].includes(name)) return context.mesher === "snappy";
-  if (name === "final_ratio") return context.mesher === "snappy" && context.layerMode === "final_ratio";
+  // Gmsh sizes its last layer from the wall cell size, as snappy's relative sizes do.
+  if (name === "final_ratio") return (context.mesher === "snappy" || context.mesher === "gmsh") && context.layerMode === "final_ratio";
   if (name === "first_layer_height") return followsShape(context.mesher) && context.layerMode === "first_height";
   return true;
 }

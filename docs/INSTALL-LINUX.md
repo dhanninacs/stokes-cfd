@@ -113,7 +113,8 @@ maintainer applied by script (the script is not published yet):
 
 Apply them if your build stops on those errors. cfMesh installs into
 `$FOAM_USER_APPBIN` and `$FOAM_USER_LIBBIN`, which OpenFOAM's `bashrc` puts on
-your path. Check:
+your path. Stokes finds a cfMesh built there: the agent sources OpenFOAM's
+`bashrc` with your account name, so `~/OpenFOAM/$USER-14` is searched. Check:
 
 ```bash
 source /opt/openfoam14/etc/bashrc

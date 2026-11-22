@@ -14,6 +14,7 @@
 import { useMemo } from "react";
 import { ACTION_SPECS, runAction } from "../app/actions";
 import { useWorkspace } from "./store";
+import { claimKeyboard, keyboardOwner } from "./keyOwner";
 
 /** The chords of a binding, primary first: a chord, a list of chords, or "" / [] for none. */
 export function chordsOf(binding: unknown): string[] {
@@ -161,7 +162,11 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return target.closest("[role='textbox'], [role='combobox'], [role='menu'], [role='dialog']") !== null;
 }
 
+export { claimKeyboard, keyboardOwner };
+
 function onKeyDown(e: KeyboardEvent): void {
+  // A modal editor (the sketcher) owns every key: P toggled Paint under it (review A2).
+  if (keyboardOwner() !== null) return;
   if (e.defaultPrevented || e.isComposing) return;
   if (document.querySelector("[aria-modal='true']")) return; // nothing acts behind a modal dialog
   const chords = eventChords(e);

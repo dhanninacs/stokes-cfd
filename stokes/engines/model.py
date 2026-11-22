@@ -56,7 +56,28 @@ def _positive_solver_value(_node: object, value: Any) -> Any:  # Any: stored JSO
     return value
 
 
-#: The under-relaxation factors a user may set (ADR-0036). Each is optional: unset, the engine's
+#: The most outlets a flow split names; more than any port count a case reaches.
+MAX_ADJOINT_OUTLETS = 64
+
+
+def _outlet_names(_node: object, value: Any) -> Any:  # Any: stored JSON
+    """``adjoint_outlets`` is a list of distinct boundary names (ADR-0041); empty means every
+    pressure outlet. Whether each is a pressure outlet is the writer's check, against the mesh."""
+    from stokes.errors import ValidationError
+
+    if value is None:
+        return []
+    if (
+        not isinstance(value, list)
+        or len(value) > MAX_ADJOINT_OUTLETS
+        or not all(isinstance(v, str) and v and len(v) <= 128 for v in value)
+        or len(set(value)) != len(value)
+    ):
+        raise ValidationError("the adjoint outlets are a list of different boundary names")
+    return value
+
+
+#: The under-relaxation factors a user may set (ADR-0045). Each is optional: unset, the engine's
 #: own value is written (see `stokes.compile.relaxation`).
 RELAXATION_PARAMS: tuple[str, ...] = (
     "relax_pressure",
@@ -348,6 +369,28 @@ def solver_specs() -> tuple[NodeSpec, ...]:
                     "on the selected host.",
                 ),
                 ParamSpec(
+                    "adjoint_objective",
+                    "enum",
+                    label="Adjoint objective",
+                    default="pressure_loss",
+                    choices=("pressure_loss", "flow_split"),
+                    hidden=True,
+                    doc="The adjoint engine only: the objective its adjoint is the derivative of. "
+                    "pressure_loss runs Foundation's adjointShapeOptimisationFoam; flow_split runs "
+                    "adjointFoam (installed separately) with equal shares of the flow.",
+                ),
+                ParamSpec(
+                    "adjoint_outlets",
+                    "json",
+                    label="Adjoint outlets",
+                    default=[],
+                    max_bytes=8192,
+                    validate=_outlet_names,
+                    hidden=True,
+                    doc="The adjoint engine's flow split only: the pressure outlets that share "
+                    "the flow, by boundary name; empty means every pressure outlet.",
+                ),
+                ParamSpec(
                     "slice_origin",
                     "array",
                     label="Slice origin",
@@ -401,6 +444,8 @@ def settings_summary(node: Any) -> dict[str, Any]:
             "residual_target",
             *RELAXATION_PARAMS,
             "cores",
+            "adjoint_objective",
+            "adjoint_outlets",
             "slice_origin",
             "slice_normal",
         )

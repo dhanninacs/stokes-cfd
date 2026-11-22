@@ -194,4 +194,4 @@ export function localSizesApply(mesher: string): boolean {
 }
 
 /** The blockMesh page's one honest line (brief M-503 §UI). */
-export const BLOCKMESH_NOTE = "Local sizes apply to snappyHexMesh and the cfMesh types only";
+export const BLOCKMESH_NOTE = "Local sizes apply to snappyHexMesh, the cfMesh types and Gmsh only";

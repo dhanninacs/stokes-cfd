@@ -26,9 +26,10 @@ import { useStore } from "../state/store";
 import { Tooltip } from "../components/Tooltip";
 import { Switch } from "../components/ui";
 import FieldLabel from "./FieldLabel";
+import { DimensionsField, VectorField } from "./CompoundFields";
 import { FieldError } from "./PlainField";
 import { loadConversions } from "./explore/conversions";
-import { converterFor, hasConversion } from "./explore/format";
+import { converterFor, hasConversion, rememberConversion } from "./explore/format";
 import { formatNumber, prettyDisplay, prettyUnit } from "../util/units";
 import { FOCUS_TREE_EVENT } from "./treeKeyboard";
 import { enterStaysInField, fieldKindOf, isOptionalNumber, nodesOfType, numberRefusal, quantityRefusal, vectorRefusal } from "./schemaFields";
@@ -65,7 +66,22 @@ export interface SchemaFieldsProps {
    * its editor so a user can still change the method.
    */
   notStored?(name: string): string | null;
+  /**
+   * The unit system the fields show, in place of the project's display units. The geometry forms
+   * pass `mm` (millimetres and degrees, review finding A5), so a bare number means the same in
+   * every field of the modeller whatever units the solver shows.
+   */
+  unitSystem?: string;
+  /** A choice's value in words ("Rounded box" for `rounded_box`); the value itself when absent. */
+  optionLabel?(name: string, value: string): string;
 }
+
+// The geometry forms show millimetres and degrees before the server has answered a conversion: these
+// factors are exact, so they are known here rather than fetched (`units.convert` gives the same).
+rememberConversion("m", "mm", 1000, 0);
+rememberConversion("m**2", "mm**2", 1e6, 0);
+rememberConversion("m**3", "mm**3", 1e9, 0);
+rememberConversion("rad", "deg", 180 / Math.PI, 0);
 
 const BARE_NUMBER = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
 const FLASH_MS = 400;
@@ -148,17 +164,17 @@ function NotStoredField({ name, schema, reason }: { name: string; schema: Proper
   );
 }
 
-function JsonField({ name, value, text, action }: { name: string; value: unknown; text?: string | null; action?: ReactNode }) {
+function JsonField({ name, title, value, text, action }: { name: string; title?: string; value: unknown; text?: string | null; action?: ReactNode }) {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2 text-[12.5px]">
-        <span>{name}</span>
+        <span>{title ?? name}</span>
         {action}
       </div>
       {text != null ? (
         <div
           data-prop-field="json"
-          aria-label={name}
+          aria-label={title ?? name}
           className="rounded-md px-2 py-1.5 text-[12px]"
           style={{ background: "var(--bg-elev)", border: "1px solid var(--panel-border)" }}
         >
@@ -209,6 +225,7 @@ function QuantityField({
   disabled,
   error,
   action,
+  unitSystem,
 }: {
   name: string;
   schema: PropertySchema;
@@ -222,9 +239,11 @@ function QuantityField({
   error?: string;
   /** A control beside the label (the operation card's "Pick in view"). */
   action?: ReactNode;
+  unitSystem?: string;
 }) {
   const units = useStore((s) => s.units);
-  const system = useStore((s) => s.project?.display_units ?? "si");
+  const projectSystem = useStore((s) => s.project?.display_units ?? "si");
+  const system = unitSystem ?? projectSystem;
   const inputId = useId();
   const hintId = useId();
 
@@ -348,7 +367,6 @@ function QuantityField({
           )}
         </FieldLabel>
         {action}
-        <span className="muted text-[11px]">{dimensionName}</span>
       </div>
       <div className="relative">
         <input
@@ -363,7 +381,7 @@ function QuantityField({
           aria-invalid={shownError !== ""}
           data-refused={localError !== "" ? "true" : undefined}
           aria-describedby={hasHint ? hintId : undefined}
-          placeholder={`value in ${unitText || "SI"} or an expression`}
+          placeholder={unitText ? `a number in ${unitText}, or an expression` : "a number or an expression"}
           onChange={(e) => {
             const text = e.target.value;
             setF((s) => ({ ...s, text }));
@@ -401,6 +419,9 @@ function QuantityField({
                   className="h-[22px] cursor-pointer rounded-md border px-2 text-[11.5px] transition-colors hover:text-[var(--text)] motion-reduce:transition-none"
                   style={{ background: "var(--hover)", borderColor: "var(--panel-border)", color: "var(--text-muted)" }}
                   aria-label={`Display unit ${unitText}. Switch to ${prettyUnit(nextUnit)}.`}
+                  // One Tab per field (review finding B9): the chip is a pointer convenience, and a
+                  // unit can always be typed with the number.
+                  tabIndex={-1}
                   onMouseDown={(e) => e.preventDefault()} // keep the caret in the input
                   onClick={() => void cycleUnit()}
                 >
@@ -620,6 +641,7 @@ function EnumField({
   disabled,
   error,
   action,
+  label,
 }: {
   name: string;
   schema: PropertySchema;
@@ -628,10 +650,12 @@ function EnumField({
   disabled?: boolean;
   error?: string;
   action?: ReactNode;
+  label?: (name: string, value: string) => string;
 }) {
   const id = useId();
   const errorId = useId();
   const shown = String(value ?? "");
+  const word = (option: string): string => (label ? label(name, option) : option);
   // The choice is shown at once while the command runs, and restored if the server refuses it.
   const [choice, setChoice] = useState(shown);
   useEffect(() => setChoice(shown), [shown]);
@@ -661,10 +685,10 @@ function EnumField({
         >
           {(schema.enum ?? []).map((option) => (
             <option key={option} value={option}>
-              {option}
+              {word(option)}
             </option>
           ))}
-          {choice !== "" && !listed && <option value={choice} disabled>{choice}</option>}
+          {choice !== "" && !listed && <option value={choice} disabled>{word(choice)}</option>}
         </select>
         <ChevronsUpDown size={13} className="select-chevron" aria-hidden="true" />
       </div>
@@ -800,6 +824,7 @@ function Array3Field({
   disabled,
   error,
   action,
+  unitSystem,
 }: {
   name: string;
   schema: PropertySchema;
@@ -810,9 +835,11 @@ function Array3Field({
   error?: string;
   /** A control beside the label (the operation card's "Pick in view" on `seed`). */
   action?: ReactNode;
+  unitSystem?: string;
 }) {
   const units = useStore((s) => s.units);
-  const system = useStore((s) => s.project?.display_units ?? "si");
+  const projectSystem = useStore((s) => s.project?.display_units ?? "si");
+  const system = unitSystem ?? projectSystem;
   const id = useId();
   const errorId = useId();
   const [localError, setLocalError] = useState("");
@@ -947,6 +974,8 @@ export default function SchemaFields({
   jsonText,
   labelAction,
   notStored,
+  unitSystem,
+  optionLabel,
 }: SchemaFieldsProps) {
   // The tree root for the ref selects: the store's tree when the caller does not pass one.
   const tree = useStore((s) => s.tree);
@@ -988,20 +1017,51 @@ export default function SchemaFields({
                   disabled={disabled}
                   error={error}
                   action={action}
+                  unitSystem={unitSystem}
                 />
               );
             }
             case "ref":
               return <RefField key={name} name={name} schema={pschema} value={values[name]} nodes={root} onCommit={onCommit} disabled={disabled} error={error} action={action} />;
+            case "vector":
+              return (
+                <VectorField
+                  key={name}
+                  name={name}
+                  schema={pschema}
+                  values={values as Record<string, unknown>}
+                  displays={displays}
+                  onCommit={onCommit}
+                  onEdit={onEdit}
+                  disabled={disabled}
+                  errors={errors}
+                  action={action}
+                  unitSystem={unitSystem}
+                />
+              );
+            case "map":
+              return (
+                <DimensionsField
+                  key={name}
+                  name={name}
+                  schema={pschema}
+                  values={values as Record<string, unknown>}
+                  displays={displays}
+                  onCommit={onCommit}
+                  disabled={disabled}
+                  error={error}
+                  unitSystem={unitSystem}
+                />
+              );
             case "array3":
-              return <Array3Field key={name} name={name} schema={pschema} value={values[name]} onCommit={onCommit} onEdit={onEdit} disabled={disabled} error={error} action={action} />;
+              return <Array3Field key={name} name={name} schema={pschema} value={values[name]} onCommit={onCommit} onEdit={onEdit} disabled={disabled} error={error} action={action} unitSystem={unitSystem} />;
             case "enum":
-              return <EnumField key={name} name={name} schema={pschema} value={values[name]} onCommit={onCommit} disabled={disabled} error={error} action={action} />;
+              return <EnumField key={name} name={name} schema={pschema} value={values[name]} onCommit={onCommit} disabled={disabled} error={error} action={action} label={optionLabel} />;
             case "bool":
               return <BoolField key={name} name={name} schema={pschema} value={values[name]} onCommit={onCommit} disabled={disabled} error={error} action={action} />;
             case "array":
             case "json":
-              return <JsonField key={name} name={name} value={values[name]} text={jsonText?.(name, values[name]) ?? null} action={action} />;
+              return <JsonField key={name} name={name} title={pschema.title} value={values[name]} text={jsonText?.(name, values[name]) ?? null} action={action} />;
             default:
               return (
                 <PlainInput

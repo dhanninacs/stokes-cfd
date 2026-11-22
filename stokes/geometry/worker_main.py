@@ -46,7 +46,7 @@ from stokes.geometry.errors import (
     GeometryWorkerError,
 )
 from stokes.geometry.mesh import DEFAULT_COLOR, U32, TriMesh, Vec3, vertex_normals, weld
-from stokes.geometry.meshfile import MeshBody, split_faces, unit_scale
+from stokes.geometry.meshfile import FEATURE_ANGLE_DEG, MeshBody, split_faces, unit_scale
 from stokes.geometry.step import Quality, StepSolid
 from stokes.log import fields, get_logger
 
@@ -130,6 +130,8 @@ def _dispatch(conn: Connection, job: dict[str, Any]) -> None:
         _brep_job(conn, job)
     elif kind == "export_step":
         _export_job(conn, job)
+    elif kind == "operation" and str(job.get("op_type", "")).startswith("implicit_"):
+        _implicit_job(conn, job)
     elif kind == "operation":
         _operation_job(conn, job)
     elif kind == "topology":
@@ -916,3 +918,464 @@ def _shape_message(
         "tags": tags,
         "report": {**output.report, "check": check},
     }
+
+
+DISPLAY_CELLS = 192
+"""Cells across the largest side of an implicit part's display mesh (ADR-0035 decision 20); a
+finer cell is used when the smallest feature needs it (a quarter of that feature), down to
+:data:`FINEST_DISPLAY_CELLS` across."""
+FINEST_DISPLAY_CELLS = 1024
+"""The finest display mesh, in cells across the largest side. Thinner repeated features are drawn
+as their envelope from slice 5 on (decision 21); until then they are coarse."""
+COARSE_DISPLAY_CELLS = 64
+"""Cells across the largest side of the first, coarse mesh an implicit output is shown with while
+the display mesh is made (ADR-0039). Measured on a 40 x 20 x 20 mm pull on the owner's laptop
+(median of five): 0.57 s at 64 cells against 2.07 s at 192, so the body is on screen about 1.5 s
+sooner for 0.5 s more in all."""
+COARSE_RATIO = 2.5
+"""The coarse pass runs only when the display cell is at least this many times finer than the
+coarse one (a small or feature-bound part meshes fast enough at once) and the display mesh is not
+in the cache already (an undo, a value put back)."""
+SLIVER_TRIANGLES = 4
+"""A region of at most this many triangles may be a sliver (:func:`implicit_faces`)."""
+SLIVER_WIDTH_CELLS = 0.25
+"""A region narrower than this share of the mesher's cell is a sliver; its width is twice its area
+over its perimeter (half the side of a square, the width of a long strip). Measured on a rod, a
+manifold with square stubs and a square bar at 64 and 192 cells (2026-11-15): the narrow triangles
+dual contouring leaves along a sharp edge are 0.03 to 0.07 cells wide, the smallest real face (a
+10 mm square cap at a 3.1 mm cell, four triangles) 1.6."""
+
+
+def implicit_faces(
+    positions: Any,  # Any: F32 | F64 (n, 3)
+    triangles: Any,  # Any: U32 | I64 (m, 3), vertices welded
+    cell: float,
+    angle_deg: float = FEATURE_ANGLE_DEG,
+) -> U32:
+    """The face of every triangle of an implicit display mesh: the regions of :func:`split_faces`,
+    with the slivers merged into the neighbouring region whose normal they match best.
+
+    Dual contouring leaves one or two narrow triangles along a sharp edge, at an angle between
+    its two faces; alone they would be faces (and shading groups) of their own and draw as dark
+    ticks. A sliver is a region of at most :data:`SLIVER_TRIANGLES` triangles that is narrower
+    than :data:`SLIVER_WIDTH_CELLS` of ``cell`` (the mesher's cell, in the unit of ``positions``),
+    or narrower than a cell and a step between its neighbours (:func:`_between`). A small region
+    that is neither (a flat port cap the simplifier left as four triangles) stays a face of its
+    own, so a tag can name it; counting triangles alone once merged it into its neighbour
+    (ADR-0040). Ids run 0 to faces - 1 by first appearance.
+    """
+    groups = split_faces(positions, triangles, angle_deg).astype(np.int64)
+    count = int(triangles.shape[0])
+    if count == 0:
+        return groups.astype(np.uint32)
+    pos = np.asarray(positions, dtype=np.float64)
+    tri = np.asarray(triangles, dtype=np.int64)
+    normal = np.cross(pos[tri[:, 1]] - pos[tri[:, 0]], pos[tri[:, 2]] - pos[tri[:, 0]])
+    length = np.linalg.norm(normal, axis=1)
+    area = 0.5 * length
+    normal = np.divide(
+        normal, length[:, None], out=np.zeros_like(normal), where=length[:, None] > 0
+    )
+    # Neighbours across shared edges (by vertex index; the mesher's vertices are welded).
+    edges = np.sort(np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]]), axis=1)
+    owner = np.tile(np.arange(count), 3)
+    order = np.lexsort((edges[:, 1], edges[:, 0]))
+    edges, owner = edges[order], owner[order]
+    same = (edges[1:] == edges[:-1]).all(axis=1)
+    left, right = owner[:-1][same], owner[1:][same]
+    shared = edges[:-1][same]
+    span = np.linalg.norm(pos[shared[:, 0]] - pos[shared[:, 1]], axis=1)
+    pairs = np.concatenate([np.stack([left, right], 1), np.stack([right, left], 1)])
+    floor = SLIVER_WIDTH_CELLS * cell
+    # Flat faces merged through a curved surface that crosses them at a shallow angle are taken
+    # apart first (`stokes.geometry.faceleaks`); the narrow strips that leaves are slivers below.
+    from stokes.geometry.faceleaks import separate_flat_faces
+
+    # Which triangles lie on a side of the body's bounding box: every corner on one of its planes.
+    low, high = pos.min(axis=0), pos.max(axis=0)
+    near = 0.01 * cell  # a facet of a curved surface sits a sagitta inside the box, far more
+    corners = pos[tri]
+    on_box = np.zeros(count, dtype=bool)
+    box_side = np.full(count, -1, dtype=np.int64)
+    for axis in range(3):
+        for index, extreme in enumerate((low[axis], high[axis])):
+            side = _side_plane(corners[:, :, axis], normal[:, axis], area, extreme, cell)
+            lying = (np.abs(corners[:, :, axis] - side) <= near).all(axis=1)
+            on_box |= lying
+            box_side[lying] = 2 * axis + index
+    groups, strips = separate_flat_faces(
+        groups, normal, area, left, right, span, cell, angle_deg, on_box
+    )
+    for _ in range(3):
+        regions = int(groups.max()) + 1
+        sizes = np.bincount(groups, minlength=regions)
+        border = groups[left] != groups[right]
+        perimeter = np.bincount(
+            groups[left][border], span[border], minlength=regions
+        ) + np.bincount(groups[right][border], span[border], minlength=regions)
+        width = np.divide(
+            2.0 * np.bincount(groups, area, minlength=regions),
+            perimeter,
+            out=np.full(regions, np.inf),
+            where=perimeter > 0,
+        )
+        sliver = (sizes <= SLIVER_TRIANGLES) & (width < floor)
+        strips = strips[strips < regions]  # a strip merged away may have been the last id
+        sliver[strips] = sizes[strips] > 0
+        for region in np.flatnonzero((sizes <= SLIVER_TRIANGLES) & ~sliver & (width < cell)):
+            sliver[region] = _between(
+                int(region), groups, normal, area, left, right, border, angle_deg
+            )
+        small = sliver[groups]
+        candidate = pairs[small[pairs[:, 0]] & ~small[pairs[:, 1]]]
+        if candidate.shape[0] == 0:
+            break
+        agree = np.einsum("ij,ij->i", normal[candidate[:, 0]], normal[candidate[:, 1]])
+        best = np.lexsort((-agree, candidate[:, 0]))
+        first = np.unique(candidate[best, 0], return_index=True)[1]
+        chosen = candidate[best][first]
+        groups[chosen[:, 0]] = groups[chosen[:, 1]]
+    groups = _box_side_faces(groups, box_side, area, left, right, corners, cell)
+    return np.asarray(np.unique(groups, return_inverse=True)[1], dtype=np.uint32).reshape(-1)
+
+
+#: The fewest triangles a piece of a box side needs to become a face of its own (`_box_side_faces`).
+MIN_SIDE_TRIANGLES = 4
+
+#: The share of a side of its box a body must cover for that side to be an end (`_box_side_faces`).
+MIN_SIDE_COVER = 0.12
+
+
+def _side_plane(
+    along: Any,  # Any: F64 (m, 3), each triangle's corners along the axis
+    normal: Any,  # Any: F64 (m,), each triangle's unit normal along the axis
+    area: Any,  # Any: F64 (m,)
+    extreme: float,
+    cell: float,
+) -> float:
+    """Where a side of the body's box really is: the plane that the most area of flat, square-on
+    triangles within a cell of the box's extreme lies on.
+
+    The extreme itself can be a little beyond it: dual contouring placed a few vertices of a
+    gyroid channel 18 um outside its block's face (measured, at a 125 um cell), and every
+    triangle of that end then missed the box side by more than the tolerance.
+    """
+    flat = np.abs(normal) > 0.999
+    close = flat & (np.abs(along - extreme) <= cell).all(axis=1)
+    if not close.any():
+        return float(extreme)
+    heights = along[close].mean(axis=1)
+    weights = area[close]
+    rounded = np.round(heights / (0.01 * cell))
+    keys, index = np.unique(rounded, return_inverse=True)
+    best = int(np.argmax(np.bincount(index.reshape(-1), weights, minlength=len(keys))))
+    return float(np.median(heights[index.reshape(-1) == best]))
+
+
+def _box_side_faces(
+    groups: Any,  # Any: I64 (m,), the face of every triangle
+    box_side: Any,  # Any: I64 (m,), the side of the bounding box a triangle lies on, or -1
+    area: Any,  # Any: F64 (m,)
+    left: Any,  # Any: I64, the two triangles of every shared edge
+    right: Any,
+    corners: Any,  # Any: F64 (m, 3, 3)
+    cell: float,
+) -> Any:  # Any: I64 (m,)
+    """Triangles on a side of the bounding box, taken out of a face that is mostly elsewhere.
+
+    A lattice body's channel mouths lie on the sides of its box, and a mouth too narrow for the
+    flat-region rule (`separate_flat_faces`, two cells wide) stayed in the lattice wall's face:
+    measured on a gyroid channel at a 6 mm cell, half of one end's mouth area could not be picked
+    as an outlet, and the solver saw it as wall. Here every such patch of triangles, one side and
+    connected, becomes a face of its own when its face has most of its area off that side. A face
+    that lies on the side already (a box's own face, a wide mouth) is left as it is, and so is a
+    piece narrower than half a cell or of fewer than `MIN_SIDE_TRIANGLES` triangles: the tip of a
+    sphere, the sliver dual contouring leaves along a sharp edge.
+    """
+    from stokes.geometry.selection import components
+
+    count = int(groups.shape[0])
+    if count == 0 or not (box_side >= 0).any():
+        return groups
+    faces = int(groups.max()) + 1
+    total = np.bincount(groups, area, minlength=faces)
+    # Only a side the body covers much of is an end the flow crosses: a cylinder's round side
+    # only touches its box along a strip, which must stay part of the round face.
+    extent = corners.reshape(-1, 3).max(axis=0) - corners.reshape(-1, 3).min(axis=0)
+    face_area = np.array(
+        [extent[(a + 1) % 3] * extent[(a + 2) % 3] for a in range(3) for _ in (0, 1)]
+    )
+    covered = np.bincount(box_side[box_side >= 0], area[box_side >= 0], minlength=6)
+    open_side = covered >= MIN_SIDE_COVER * np.maximum(face_area, 1e-300)
+    on = (box_side >= 0) & open_side[np.maximum(box_side, 0)]
+    if not on.any():
+        return groups
+    # Each face's area on each side, keyed face * 6 + side.
+    key = groups[on] * 6 + box_side[on]
+    share = np.bincount(key, area[on], minlength=faces * 6)
+    mostly = np.zeros(count, dtype=bool)
+    mostly[on] = share[key] >= 0.5 * total[groups[on]]
+    moved = on & ~mostly
+    if not moved.any():
+        return groups
+    same = moved[left] & moved[right] & (box_side[left] == box_side[right])
+    same &= groups[left] == groups[right]
+    piece = components(np.stack([left[same], right[same]], axis=1), count)
+    out = groups.copy()
+    keys, ids = np.unique(piece[moved], return_inverse=True)
+    ids = ids.reshape(-1)
+    rows = np.flatnonzero(moved)
+    sizes = np.bincount(ids, minlength=len(keys))
+    areas = np.bincount(ids, area[rows], minlength=len(keys))
+    next_id = faces
+    for index in range(len(keys)):
+        if sizes[index] < MIN_SIDE_TRIANGLES:
+            continue
+        mine = rows[ids == index]
+        points = corners[mine].reshape(-1, 3)
+        span = float(np.max(points.max(axis=0) - points.min(axis=0)))
+        if span <= 0.0 or areas[index] / span < 0.5 * cell:
+            continue
+        out[mine] = next_id
+        next_id += 1
+    return out
+
+
+def _between(
+    region: int,
+    groups: Any,  # Any: I64 (m,), the region of every triangle
+    normal: Any,  # Any: F64 (m, 3), unit triangle normals
+    area: Any,  # Any: F64 (m,)
+    left: Any,  # Any: I64, the two triangles of every shared edge
+    right: Any,
+    border: Any,  # Any: bool, the shared edges between two regions
+    angle_deg: float,
+) -> bool:
+    """Whether a small ``region`` is a step between its neighbours rather than a face: its normal
+    is within ``angle_deg`` of the bisector of two triangles across its border (a facet of a curved
+    surface the cell does not resolve, a wide sliver along an edge). A flat cap is not: its normal
+    is square, or at least ``angle_deg`` off, to every bisector of the walls around it."""
+    mine = groups == region
+    mean = (normal[mine] * area[mine, None]).sum(axis=0)
+    size = float(np.linalg.norm(mean))
+    if size == 0.0:
+        return True
+    mean /= size
+    outside = np.concatenate([right[border & mine[left]], left[border & mine[right]]])
+    near = normal[np.unique(outside)]
+    if near.shape[0] == 0:
+        return False
+    bisector = near[:, None, :] + near[None, :, :]
+    length = np.linalg.norm(bisector, axis=2)
+    agree = np.einsum("ijk,k->ij", bisector, mean)
+    usable = length > 1e-6
+    cos = np.divide(agree, length, out=np.full_like(agree, -1.0), where=usable)
+    return bool(cos.max() >= np.cos(np.radians(angle_deg)))
+
+
+def _implicit_job(conn: Connection, job: dict[str, Any]) -> None:
+    """Run one implicit operation (ADR-0035 decision 8, ADR-0036): rebuild its bodies from the
+    recipes (one, or two for a split), mesh each with the implicit mesher, and send each output's
+    ``shape`` and display mesh as an operation's outputs. No OCP is used; the worker's OCP version
+    still names the outputs' versions, as for every operation."""
+    import OCP
+
+    from stokes.geometry.errors import OperationFailed, OperationInvalid
+    from stokes.geometry.operations import implicit as implicit_ops
+    from stokes.implicit.errors import ImplicitError, MesherCancelled
+
+    start = time.perf_counter()
+    version = str(getattr(OCP, "__version__", ""))
+    op_type = str(job.get("op_type"))
+    params = dict(job.get("params") or {})
+    passes = [str(p["name"]) for p in job.get("passes") or [] if isinstance(p, dict)]
+    pass_name = passes[-1] if passes else "fine"
+
+    def progress(stage: str, fraction: float, message: str = "") -> None:
+        reply = {"stage": stage[:64], "fraction": fraction, "message": message[:256]}
+        _send_json(conn, {"type": "progress", **reply})
+
+    specs = [s for s in job.get("inputs") or [] if isinstance(s, dict)]
+    tool_ids = {str(t) for t in params.get("tools") or []}
+    recipe = {
+        "type": op_type,
+        "params": params,
+        "inputs": [s.get("recipe") for s in specs if str(s.get("part")) not in tool_ids],
+        "tools": [s.get("recipe") for s in specs if str(s.get("part")) in tool_ids],
+    }
+    progress("build", 0.0, "building the field")
+    outputs: list[dict[str, Any]] = []  # Any: JSON reports
+    warnings: list[str] = []
+    try:
+        bodies = implicit_ops.bodies_of(recipe)
+        count = len(bodies)
+        for index, (name, body) in enumerate(bodies):
+            label = (name or op_type)[:128]
+            out_report, folds = _implicit_output(
+                conn, job, version, pass_name, (index, count), label, body, progress
+            )
+            outputs.append(out_report)
+            if folds:
+                warnings.append(
+                    f"{label}: the mesh has {folds} folded triangles the mesher could not "
+                    "remove; a finer or coarser cell usually clears them"
+                )
+    except MesherCancelled as exc:
+        raise OperationFailed(exc.message, details={"code": exc.code}) from exc
+    except ImplicitError as exc:
+        raise OperationInvalid(exc.message, details={**exc.details, "code": exc.code}) from exc
+    report = {"family": "implicit", **(outputs[0] if len(outputs) == 1 else {"outputs": outputs})}
+    _send_json(
+        conn,
+        {
+            "type": "done",
+            "seconds": time.perf_counter() - start,
+            "version": version,
+            "report": report,
+            "warnings": warnings,
+        },
+    )
+
+
+def _implicit_output(
+    conn: Connection,
+    job: dict[str, Any],
+    version: str,
+    pass_name: str,
+    at: tuple[int, int],
+    name: str,
+    body: Any,  # Any: stokes.implicit.features.Body
+    progress: Any,  # Any: the job's progress callback
+) -> tuple[dict[str, Any], int]:  # Any: JSON report
+    """Mesh output ``at[0]`` of ``at[1]`` of an implicit job and send its ``shape`` and display
+    mesh; its report and the folds the mesher left."""
+    from stokes.implicit import runner
+    from stokes.implicit.bodymesh import display_request, mesh_body
+
+    index, count = at
+    cache = Path(str(job["cache_dir"])) / "implicit"
+    where = f" ({index + 1} of {count})" if count > 1 else ""
+    fine = display_request(body, cells=DISPLAY_CELLS, finest=FINEST_DISPLAY_CELLS)
+    coarse = display_request(body, cells=COARSE_DISPLAY_CELLS, finest=COARSE_DISPLAY_CELLS)
+    if coarse.request.cube.cell >= COARSE_RATIO * fine.request.cube.cell and not runner.is_cached(
+        fine.request, cache
+    ):
+        # A first look (ADR-0039): the store shows a pass that is not the final one at once.
+        first = mesh_body(
+            body,
+            cache,
+            cells=COARSE_DISPLAY_CELLS,
+            finest=COARSE_DISPLAY_CELLS,
+            progress=lambda fraction, stage: progress("mesh", 0.25 * fraction, stage),
+            started=lambda nodes, cube: progress(
+                "mesh", 0.0, f"a first look at a {cube.cell:.3g} mm cell{where}"
+            ),
+        )
+        if len(first.triangles) > 0:
+            _send_implicit_mesh(conn, job, version, "coarse", at, name, body, first)
+    made = mesh_body(
+        body,
+        cache,
+        cells=DISPLAY_CELLS,
+        finest=FINEST_DISPLAY_CELLS,
+        progress=lambda fraction, stage: progress("mesh", fraction, stage),
+        started=lambda nodes, cube: progress(
+            "mesh", 0.0, f"meshing {nodes} nodes at a {cube.cell:.3g} mm cell{where}"
+        ),
+    )
+    return _send_implicit_mesh(conn, job, version, pass_name, at, name, body, made)
+
+
+def _send_implicit_mesh(
+    conn: Connection,
+    job: dict[str, Any],
+    version: str,
+    pass_name: str,
+    at: tuple[int, int],
+    name: str,
+    body: Any,  # Any: stokes.implicit.features.Body
+    made: Any,  # Any: stokes.implicit.bodymesh.BodyMesh
+) -> tuple[dict[str, Any], int]:  # Any: JSON report
+    """Send output ``at[0]``'s ``shape`` and its ``pass_name`` mesh; its report and the folds the
+    mesher left. A coarse pass sends the shape too (the output must exist before its mesh); the
+    final pass's shape replaces it."""
+    from stokes.geometry import operations
+    from stokes.geometry.errors import OperationFailed
+
+    index, count = at
+    low, high = body.bounded()
+    outcome, cube, nodes = made.outcome, made.cube, made.nodes
+    if len(made.triangles) == 0:
+        raise OperationFailed(f"{name} is empty: its field is positive everywhere")
+    positions = made.positions.astype(np.float32)
+    indices = made.triangles
+    # Faces until slice 2's faces by key (ADR-0035 decision 10): the regions that meet below the
+    # feature angle, with the narrow triangles dual contouring leaves along a sharp edge in the
+    # face they belong to, so an end cap, however small, is a face of its own that a tag can name
+    # (an inlet, an outlet), as on an imported STL. The ids are those of this run.
+    face_ids = implicit_faces(positions, indices, cube.cell / 1000.0)
+    face_count = int(face_ids.max()) + 1 if face_ids.size else 0
+    corners = positions.astype(np.float64)
+    volume = float(
+        np.einsum(
+            "ij,ij->i",
+            corners[indices[:, 0]],
+            np.cross(corners[indices[:, 1]], corners[indices[:, 2]]),
+        ).sum()
+        / 6.0
+    )
+    stats = outcome.stats
+    open_edges = int(stats.get("open_edges", 0) or 0)
+    closed = open_edges == 0 and int(stats.get("nonmanifold_edges", 0) or 0) == 0
+    report = {
+        "name": name,
+        "nodes": nodes,
+        "metric": body.metric,
+        "smallest": body.smallest / 1000.0,
+        "cell": cube.cell / 1000.0,
+        "depth": cube.depth,
+        "cached": outcome.cached,
+        "mesher": {k: stats[k] for k in list(stats)[:16]},
+    }
+    _send_json(
+        conn,
+        {
+            "type": "shape",
+            "index": index,
+            "count": count,
+            "part": operations.output_id(str(job["op"]), index),
+            "basis": operations.output_basis(str(job["seed"]), version, index),
+            "name": name,
+            "faces": face_count,
+            "valid": True,
+            "closed": closed,
+            "volume": volume,
+            "bbox": [*(v / 1000.0 for v in low), *(v / 1000.0 for v in high)],
+            "family": "implicit",
+            # Faces are numbered afresh on every run until slice 2's faces by key, so no face of
+            # an input is said to become a face of an output.
+            "history": {},
+            "history_edges": {},
+            "history_vertices": {},
+            "history_source": "same",
+            "tags": {},
+            "report": report,
+        },
+    )
+    # Shading: smooth inside each face, sharp across the edges between faces.
+    flat = np.ascontiguousarray(positions[indices]).reshape(-1, 3)
+    shaded, shaded_indices = weld(flat, np.repeat(face_ids, 3))
+    mesh = TriMesh(
+        name,
+        "solid",
+        DEFAULT_COLOR,
+        shaded,
+        vertex_normals(shaded, shaded_indices),
+        shaded_indices,
+        face_ids,
+        face_count,
+        0,
+        pass_name,
+    )
+    send_solid(conn, mesh, pass_name, index, count, outcome.seconds)
+    return report, int(stats.get("folds", 0) or 0)

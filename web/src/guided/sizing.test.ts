@@ -48,6 +48,7 @@ describe("the Mesh card's size control", () => {
   });
 });
 
+import { suggestedBase } from "./sizing";
 import { MARKS, SLIDER_MAX_DIVISOR, SLIDER_MIN_DIVISOR, baseSizeAt, parseCellSize, positionOf, positionOfDivisor } from "./sizing";
 
 describe("the fineness slider", () => {
@@ -89,5 +90,18 @@ describe("the fineness slider", () => {
     expect(parseCellSize("0", box)).toBeNull();
     expect(parseCellSize("0.001", box)).toBeNull(); // 0.001 mm: 100,000 cells across
     expect(parseCellSize("90", box)).toBeNull(); // 90 mm: barely one cell
+  });
+});
+
+describe("suggestedBase", () => {
+  const box = { min: [0, 0, 0] as const, max: [0.06, 0.02, 0.025] as const };
+  it("puts Coarse in place of an untouched 5 mm default that does not suit the model", () => {
+    expect(suggestedBase(box, 0.005, false)).toBe(0.001);
+  });
+  it("leaves a size the user chose, a model it suits, and a project that has a mesh", () => {
+    expect(suggestedBase(box, 0.001, false)).toBeNull();
+    expect(suggestedBase({ min: [0, 0, 0], max: [0.4, 0.2, 0.2] }, 0.005, false)).toBeNull();
+    expect(suggestedBase(box, 0.005, true)).toBeNull();
+    expect(suggestedBase(null, 0.005, false)).toBeNull();
   });
 });

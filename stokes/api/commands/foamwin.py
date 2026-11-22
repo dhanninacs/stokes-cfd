@@ -1,4 +1,4 @@
-"""The ``host.foamwin*`` commands: give a Windows computer an engine (ADR-0037).
+"""The ``host.foamwin*`` commands: give a Windows computer an engine (ADR-0046).
 
 `host.foamwin` says whether this computer can take FoamWin, whether it already has it and what a
 download would fetch (the release, the archive and its size), **without downloading anything**.

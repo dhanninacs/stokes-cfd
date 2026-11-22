@@ -29,6 +29,7 @@ PANELS: dict[str, str] = {
     "solve": "right",
     "results": "right",
     "plots": "right",
+    "optimise": "right",
     "output": "bottom",
     "design-table": "bottom",
 }
@@ -81,7 +82,10 @@ SLOT_SIZES: dict[str, int] = {"left": 300, "right": 320, "bottom": 240, "float":
 DEFAULT_EXPANDED = 2
 """Tree levels open on load: the top-level groups and the groups directly inside them."""
 
-Context = Literal["global", "tree"]
+Context = Literal["global", "tree", "build"]
+"""Where an action's chord applies: everywhere, the tree with the focus, or the build ribbon while
+it is open (its handlers exist only then, so the same letter falls through to the global action
+otherwise; listed first, a `build` chord wins while the ribbon is open)."""
 
 
 @dataclass(frozen=True)
@@ -117,6 +121,14 @@ ACTIONS: tuple[Action, ...] = (
         "global",
         "Cycle the mouse scheme: CAD, Orbit, Blender, Select/Orbit",
     ),
+    # **The modeller's letters** (review finding B10, the owner's S, P, M, C): bound in the `build`
+    # context, so they act only while the build ribbon is open and fall through to Section, Paint
+    # and Measure otherwise. They come before those actions because the keymap tries a chord's
+    # actions in document order and runs the first that has a handler.
+    Action("build.sketch", ("S",), "build", "Sketch: open the sketcher (build ribbon open)"),
+    Action("build.pull", ("P",), "build", "Pull: edit the depth of the picked sketched body"),
+    Action("build.move", ("M",), "build", "Move the picked body"),
+    Action("build.combine", ("C",), "build", "Combine the picked bodies"),
     Action("view.section", ("S",), "global", "Section view (not built yet)"),
     Action("view.measure", ("M",), "global", "Measure (not built yet)"),
     # **The package-two chords** (claude-win2 approved 2026-10-17, owner's priority list). Every one
@@ -150,6 +162,12 @@ ACTIONS: tuple[Action, ...] = (
     Action("prepare.extractFluid", (), "global", "Extract the fluid around a seed point"),
     Action("prepare.boolean", (), "global", "Fuse, cut or intersect the picked bodies"),
     Action("prepare.repair", (), "global", "Heal, sew or solidify the picked bodies"),
+    Action("create.sketch", (), "global", "Sketch a profile and pull or revolve it"),
+    Action("create.shape", (), "global", "Create a shape: box, cylinder, sphere, torus…"),
+    Action("create.transform", (), "global", "Move, rotate, mirror or scale the picked body"),
+    Action("create.combine", (), "global", "Union, subtract, intersect or split the picked bodies"),
+    Action("create.pattern", (), "global", "Copy the picked body in a row or around an axis"),
+    Action("create.modify", (), "global", "Offset or shell the picked body"),
     Action("palette.open", ("Ctrl+K",), "global", "Open the command palette"),
     Action("history.undo", ("Ctrl+Z",), "global", "Undo"),
     Action("history.redo", ("Ctrl+Y", "Ctrl+Shift+Z"), "global", "Redo"),
@@ -266,7 +284,7 @@ def default_layout() -> dict[str, JSON]:
         # item is still accounted for exactly once - which is what the preset test checks - while
         # nothing is drawn on the right. They are reachable from the Commands palette and the View
         # menu, which is what the owner's request 2 asks for.
-        "hidden": ["properties", "mesh", "conditions", "solve", "results", "plots"],
+        "hidden": ["properties", "mesh", "conditions", "solve", "results", "plots", "optimise"],
     }
 
 

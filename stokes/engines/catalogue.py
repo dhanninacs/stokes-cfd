@@ -29,7 +29,7 @@ from stokes.run.errors import SolveInvalid
 #: The one engine an energy case may use (ADR-0027 decision 1). Named here so the settings node,
 #: the refusal in `solve.configure` and the check in `solve.check` say the same id.
 ENERGY_ENGINE = "of14.fluid"
-#: coupledSimpleFoam (ADR-0035): steady incompressible, run on any host that has it (Linux, WSL,
+#: coupledSimpleFoam (ADR-0044): steady incompressible, run on any host that has it (Linux, WSL,
 #: or FoamWin built with its `scripts/build-coupled.sh`).
 COUPLED_ENGINE = "coupled.simple"
 #: The engines that solve a temperature: the thermal engine, and coupledSimpleFoam's passive
@@ -78,6 +78,23 @@ ENGINES: tuple[EngineSpec, ...] = (
     ),
     EngineSpec(
         ENERGY_ENGINE, "OpenFOAM 14 · Thermal / compressible flow", True, names_for(ENERGY_ENGINE)
+    ),
+    # ADR-0038: Foundation 14's adjointShapeOptimisationFoam with its porosity off, for the wall
+    # sensitivity of the pressure loss. Stable for laminar flow only (measured), so laminar only.
+    # ADR-0041: the flow split's adjoint is adjointFoam; the objective picks the program.
+    EngineSpec(
+        "of14.adjoint",
+        "OpenFOAM 14 · Adjoint (laminar)",
+        True,
+        ("laminar",),
+        kinds=(
+            "velocity_inlet",
+            "pressure_outlet",
+            "wall",
+            "symmetry",
+            "empty",
+            "wedge",
+        ),
     ),
     EngineSpec(
         COUPLED_ENGINE,

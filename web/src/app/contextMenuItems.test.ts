@@ -437,3 +437,15 @@ describe("every target", () => {
     expect(d.calls).toEqual(["run view.fit"]);
   });
 });
+
+describe("a body made with Create (review B3)", () => {
+  it("leads with Edit sketch or Edit <operation>, and an imported body has none", () => {
+    const ran: string[] = [];
+    const made = contextMenuItems(deps(BODY, bodyOver, { edit: { label: "Edit cylinder", run: () => ran.push("edit") } }));
+    expect(groups(made)[0]).toEqual(["body.edit"]);
+    find(made, "body.edit").onSelect?.();
+    expect(ran).toEqual(["edit"]);
+    const imported = contextMenuItems(deps(BODY, bodyOver));
+    expect(ids(imported)).not.toContain("body.edit");
+  });
+});

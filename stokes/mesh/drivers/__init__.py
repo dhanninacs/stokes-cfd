@@ -44,7 +44,7 @@ DRIVER_MODULES: dict[str, str] = {
     "cfmesh_tet": "stokes.mesh.drivers.cfmesh",
     "cfmesh_poly": "stokes.mesh.drivers.cfmesh",
     "polyhex": "stokes.mesh.drivers.cfmesh",
-    # Gmsh on the part's B-rep, converted with gmshToFoam (ADR-0007 decision 5).
+    # ADR-0043: Gmsh as a separate program, driven through a `.geo` script and `gmshToFoam`.
     "gmsh": "stokes.mesh.drivers.gmsh",
 }
 

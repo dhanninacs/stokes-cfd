@@ -189,7 +189,7 @@ def test_the_catalogue_lists_every_mesher_with_a_reason() -> None:
     built = [spec for spec in MESHERS if spec.built]
     # **Two are built now** (claude-win2's 1045): snappyHexMesh is implemented and is the default,
     # so the list is blockMesh (the bounding-box shortcut, still user-selectable) and snappyHexMesh
-    # (follows the shape). cfMesh and Gmsh are listed with their reasons rather than hidden.
+    # (follows the shape). ADR-0032 built the cfMesh fills and ADR-0043 the Gmsh driver.
     assert [spec.id for spec in built] == [
         "blockmesh",
         "snappy",

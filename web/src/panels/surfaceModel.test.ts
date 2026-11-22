@@ -41,13 +41,14 @@ describe("the words", () => {
 
   it("the two notes name what snappy does and does not have", () => {
     expect(NO_SURFACE_MESH_NOTE).toContain("no separate surface mesh");
-    expect(BLOCKMESH_NOTE).toBe("Surfaces and sharp edges apply to snappyHexMesh and the cfMesh types only");
+    expect(BLOCKMESH_NOTE).toBe("Surfaces and sharp edges apply to snappyHexMesh, the cfMesh types and Gmsh only");
   });
 
   it("appliesTo is every shape-following mesher, not blockMesh", () => {
     expect(appliesTo("snappy")).toBe(true);
     expect(appliesTo("polyhex")).toBe(true);
     expect(appliesTo("cfmesh_tet")).toBe(true);
+    expect(appliesTo("gmsh")).toBe(true);
     expect(appliesTo("blockmesh")).toBe(false);
   });
 });

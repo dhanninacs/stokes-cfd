@@ -64,12 +64,23 @@ import json
 import math
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from stokes.errors import StokesError
+from stokes.log import fields as fields_of
+from stokes.log import get_logger
+
+log = get_logger(__name__)
+
+from stokes_agent.derived import (  # noqa: E402 - after the logger, as the module reads top down
+    DERIVED_COMPONENTS,
+    DERIVED_FIELDS,
+    DERIVED_UNITS,
+)
 
 #: `bytes[8]`, so the file starts with a readable tag and the version is in the name.
 MAGIC = b"STKMSH1\0"
@@ -122,6 +133,8 @@ COMPONENTS: dict[str, int] = {
     "nut": 1,
     "kMean": 1,
     "nutMean": 1,
+    "alphat": 1,
+    **DERIVED_COMPONENTS,
 }
 
 #: Fields a model run reads **when the case has them**: the turbulence model's own variables and
@@ -138,6 +151,7 @@ OPTIONAL_FIELDS: tuple[str, ...] = (
     "nut",
     "kMean",
     "nutMean",
+    "alphat",
 )
 
 #: The SI units of the optional fields; `pMean` takes the engine's `p` unit (`units_for`).
@@ -150,10 +164,16 @@ OPTIONAL_UNITS: dict[str, str] = {
     "omega": "1/s",
     "nut": "m2/s",
     "nutMean": "m2/s",
+    "alphat": "kg/m/s",
 }
 
 #: Each derived magnitude and the vector it is the length of, in header order.
-MAGNITUDES: dict[str, str] = {"U": "U_mag", "UMean": "UMean_mag"}
+MAGNITUDES: dict[str, str] = {
+    "U": "U_mag",
+    "UMean": "UMean_mag",
+    "vorticity": "vorticity_mag",
+    "wallShearStress": "wallShearStress_mag",
+}
 
 
 def with_magnitudes(found: dict[str, np.ndarray], shape: tuple[int, ...] = (-1,)) -> None:
@@ -198,8 +218,8 @@ def fields_for(engine: str | None) -> tuple[str, ...]:
     if engine == EXTERNAL_ENGINE:
         return ()
     if engine == ENERGY_ENGINE:
-        return (*ENERGY_FIELDS, *OPTIONAL_FIELDS, "TMean")
-    return (*FIELDS, *OPTIONAL_FIELDS)
+        return (*ENERGY_FIELDS, *OPTIONAL_FIELDS, "TMean", *DERIVED_FIELDS)
+    return (*FIELDS, *OPTIONAL_FIELDS, *DERIVED_FIELDS)
 
 
 def engine_of_job(state: Any) -> str | None:
@@ -237,9 +257,11 @@ def units_for(engine: str | None) -> dict[str, str]:
     if engine == EXTERNAL_ENGINE:
         return {}
     base = dict(ENERGY_FIELD_UNITS if engine == ENERGY_ENGINE else FIELD_UNITS)
-    extra = {**OPTIONAL_UNITS, "pMean": base["p"]}
+    extra = {**OPTIONAL_UNITS, "pMean": base["p"], **DERIVED_UNITS}
     if engine == ENERGY_ENGINE:
         extra["TMean"] = "K"
+        # The energy engine's stress is a real stress, in Pa, like its pressure (`derived`).
+        extra["wallShearStress"] = extra["wallShearStress_mag"] = "Pa"
     return {**base, **extra}
 
 
@@ -380,6 +402,10 @@ def engine_of_steps(steps: Any) -> str | None:
         return None
     for step in steps:
         argv = step.get("argv") if isinstance(step, dict) else None
+        if isinstance(argv, list) and argv and argv[0] == "foamMultiRun":
+            # A multi-region case (ADR-0042): every fluid region is an `of14.fluid` case, and the
+            # whole-mesh fields the merge wrote are its `U`, `p` in Pa and `T` in K.
+            return ENERGY_ENGINE
         if not isinstance(argv, list) or not argv or argv[0] != "foamRun":
             continue
         for index, item in enumerate(argv[:-1]):
@@ -612,6 +638,15 @@ def plane_offset_overflows(
     return None
 
 
+def _slice_counts(slice_: dict[str, Any]) -> dict[str, int]:
+    """`skipped_cells` and `recut_cells` for the slice header, each only when it is not zero."""
+    return {
+        count: int(slice_[count])
+        for count in ("skipped_cells", "recut_cells")
+        if int(slice_.get(count) or 0) > 0
+    }
+
+
 def _component_count(name: str, array: Any, points: int) -> int:
     """How many components a field has: the table for a known name, the array's own size otherwise.
 
@@ -789,6 +824,7 @@ def pack_fields(
             slice_entry["normal"] = [float(v) for v in slice_["normal"]]
         if "field" in slice_ and "value" in slice_:
             slice_entry["iso"] = {"field": str(slice_["field"]), "value": float(slice_["value"])}
+        slice_entry.update(_slice_counts(slice_))
         slice_entry.update(
             {
                 "points": points,
@@ -958,6 +994,15 @@ def open_case(
     reader.UpdateInformation()  # the patch names are known only after this
     if patches:
         reader.EnableAllPatchArrays()
+    # **Only the whole mesh of a multi-region case** (ADR-0042). The reader lists each region's
+    # own mesh as `/<region>/internalMesh`, `/<region>/patch/<name>`; the agent measures, draws
+    # and cuts the whole mesh (`constant/polyMesh`), whose fields the run's merge step wrote, so
+    # the regions' copies are left unread. Measured on VTK 9.6: the output then holds a
+    # `defaultRegion` block and one empty block per region (`case_root`).
+    for index in range(reader.GetNumberOfPatchArrays()):
+        name = reader.GetPatchArrayName(index)
+        if name.startswith("/"):
+            reader.SetPatchArrayStatus(name, 0)
     reader.SetCreateCellToPoint(internal)
     reader.SetSkipZeroTime(False)
     if fields:
@@ -981,6 +1026,22 @@ def open_case(
             reader.SetCellArrayStatus(name, 1)
     reader.Update()
     return reader
+
+
+def case_root(reader: Any) -> Any:
+    """The block of the reader's output that holds `internalMesh` and `boundary`.
+
+    The output itself for a case of one region. A case with region meshes beside the whole mesh
+    (ADR-0042) comes back one level deeper, as `defaultRegion` and a block per region (measured,
+    VTK 9.6.2); the whole mesh is `defaultRegion`.
+    """
+    output = reader.GetOutput()
+    key = _name_key()
+    for index in range(output.GetNumberOfBlocks()):
+        meta = output.GetMetaData(index)
+        if meta is not None and meta.Get(key) == "defaultRegion":
+            return output.GetBlock(index)
+    return output
 
 
 def _patch_types(case_dir: Path) -> dict[str, str]:
@@ -1023,7 +1084,7 @@ def extract_surfaces(case_dir: Path) -> tuple[bytes, dict[str, Any]]:
     from vtkmodules.util.numpy_support import vtk_to_numpy
 
     reader = open_case(case_dir, patches=True, internal=False)
-    output = reader.GetOutput()
+    output = case_root(reader)
     boundary = None
     for index in range(output.GetNumberOfBlocks()):
         meta = output.GetMetaData(index)
@@ -1133,10 +1194,15 @@ def latest_time(reader: Any) -> float:
     return float(values.GetValue(values.GetNumberOfValues() - 1))
 
 
+#: The cell-id array `cut_plane` puts on a shallow copy of the internal mesh, so the cutter's output
+#: says which cells it cut. A name no OpenFOAM field can have (a field name has no spaces).
+CELL_ID_ARRAY = "stokes cell id"
+
+
 def cut_plane(
     reader: Any, origin: Any, normal: Any, fields: tuple[str, ...] = FIELDS
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, np.ndarray]]:
-    """One plane through the internal mesh: positions, triangles, edges and point fields.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, np.ndarray], dict[str, int]]:
+    """One plane through the internal mesh: positions, triangles, edges, point fields and counts.
 
     **`GenerateTrianglesOff()`**, so each cut cell gives one polygon and `triangulate_fan` makes the
     fan the patches get — a `vtkTriangleFilter` would add diagonals that are not mesh edges, and the
@@ -1148,37 +1214,192 @@ def cut_plane(
     one-hex case carrying `U (1 0 0)` and `p 5` gives `[(1, 0, 0)] * 4` and `[5, 5, 5, 5]` on the
     four cut points.
 
+    **Cells the cutter refuses are found and cut again** (the T0 review's item 4). `vtkPolyhedron`
+    will not contour a cell it judges non-manifold ("non-manifold triangulation ... cannot be
+    contoured", or "not watertight or non-manifold") and drops it with a warning, leaving a hole in
+    the slice. A cell-id array on the cutter's input says which cells it did cut; the cells whose
+    points lie on both sides of the plane, minus those, are the skipped ones. They alone are
+    tetrahedralised (`vtkDataSetTriangleFilter`) and cut again; measured on an open polyhedron the
+    cutter drops, the tets' cut covers the cell's whole cross-section (area 1.0 of a unit cube at
+    three heights). The re-cut pieces add triangles and point values but **no edges**: their
+    polygons are pieces of tets, and the cell's outline is already drawn by its neighbours.
+
+    The counts are `{"skipped_cells": n, "recut_cells": m}`: `m` cells were recovered by the re-cut
+    and `n` are still not drawn, which the slice header carries for the Results card.
+
     The plane is a `vtkPlane` at `origin` with `normal`, both used as given; choosing the default is
     `extract_fields`' job, because it needs the mesh's bounds.
     """
     from vtkmodules.util.numpy_support import vtk_to_numpy
     from vtkmodules.vtkCommonDataModel import vtkPlane
-    from vtkmodules.vtkFiltersCore import vtkCutter
 
+    counts = {"skipped_cells": 0, "recut_cells": 0}
     mesh = _internal_mesh(reader)
+    if mesh is not None and any(name in fields for name in DERIVED_FIELDS):
+        _add_volume_fields(mesh)
     if mesh is None:
         empty = np.zeros((0, 3), dtype="float32")
-        return empty, np.zeros((0, 3), dtype="uint32"), np.zeros((0, 2), dtype="uint32"), {}
+        return (
+            empty,
+            np.zeros((0, 3), dtype="uint32"),
+            np.zeros((0, 2), dtype="uint32"),
+            {},
+            counts,
+        )
 
     plane = vtkPlane()
     plane.SetOrigin(float(origin[0]), float(origin[1]), float(origin[2]))
     plane.SetNormal(float(normal[0]), float(normal[1]), float(normal[2]))
+    source = _with_cell_ids(mesh)
+    output = _cut(source, plane)
+
+    positions = (
+        np.asarray(vtk_to_numpy(output.GetPoints().GetData()), dtype="float32").reshape(-1, 3)
+        if output.GetPoints() is not None
+        else np.zeros((0, 3), dtype="float32")
+    )
+    offsets, polys = _poly_arrays(output)
+    triangles = triangulate_fan(offsets, polys)
+    edges = unique_edges(offsets, polys)
+    found = _point_fields(output, fields)
+
+    skipped = np.setdiff1d(
+        straddling_cells(source, origin, normal), _cut_cell_ids(output), assume_unique=False
+    )
+    if skipped.size:
+        positions, triangles, found, counts = _recut(
+            source, plane, skipped, fields, positions, triangles, found
+        )
+        log.warning(
+            "the slice skipped cells the cutter could not contour",
+            extra=fields_of(
+                skipped=int(skipped.size),
+                recut=counts["recut_cells"],
+                still_skipped=counts["skipped_cells"],
+                first=[int(v) for v in skipped[:10]],
+            ),
+        )
+    triangles = drop_zero_area(positions, triangles)
+    edges = drop_degenerate_edges(edges)
+    return positions.astype("float32"), triangles, edges, found, counts
+
+
+def _add_volume_fields(mesh: Any) -> Any:
+    """Vorticity and Q on the mesh's points (`derived.add_volume_fields`); `∇U` or None.
+
+    **Never fatal**: a derived field is an extra, and a failure here (a mesh VTK cannot take the
+    gradient of) is logged and the extraction goes on with the solver's fields.
+    """
+    from stokes_agent.derived import add_volume_fields
+
+    try:
+        return add_volume_fields(mesh)
+    except Exception:
+        log.warning("the derived volume fields could not be computed", exc_info=True)
+        return None
+
+
+def _add_wall_fields(
+    case_dir: Path,
+    engine: str | None,
+    time: float,
+    patches: list[dict[str, Any]],
+    triangles: dict[str, np.ndarray],
+) -> None:
+    """Vorticity and Q at every patch's points, and wall shear stress and y+ on the walls, in place.
+
+    One volume read at `time` gives `∇U` at every mesh point; a boundary point is a mesh point, so
+    each patch point takes its own row. **Never fatal**, like `_add_volume_fields`.
+    """
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+    from stokes_agent import derived
+
+    try:
+        reader = open_case(case_dir, patches=False, internal=True, fields=fields_for(engine))
+        reader.CreateCellToPointOn()
+        reader.UpdateTimeStep(time)
+        reader.Update()
+        mesh = _internal_mesh(reader)
+        if mesh is None or mesh.GetPoints() is None:
+            return
+        grad = derived.velocity_gradient(mesh)
+        if grad is None:
+            return
+        volume_points = np.asarray(vtk_to_numpy(mesh.GetPoints().GetData()), dtype=np.float64)
+        volume_points = volume_points.reshape(-1, 3)
+        span = float(np.linalg.norm(volume_points.max(axis=0) - volume_points.min(axis=0)))
+        curl, q = derived.vorticity_and_q(grad)
+        nu, rho = derived.read_viscosity(case_dir)
+        kinds = _patch_types(case_dir)
+        grad_t = derived.scalar_gradient(mesh, "T") if engine == ENERGY_ENGINE else None
+        conductivity = derived.read_conductivity(case_dir) if grad_t is not None else (None, None)
+        centres: np.ndarray | None = None
+        for patch in patches:
+            index = derived.match_points(volume_points, patch["points"], max(span, 1e-12) * 1e-6)
+            if index is None:
+                continue
+            found = patch["fields"]
+            found["vorticity"] = curl[index].astype(np.float32)
+            found["vorticity_mag"] = np.linalg.norm(curl[index], axis=1).astype(np.float32)
+            found["Q"] = q[index].astype(np.float32)
+            tris = triangles.get(patch["name"])
+            if kinds.get(patch["name"]) != "wall" or nu is None or tris is None:
+                continue
+            if engine == ENERGY_ENGINE and rho is None:
+                continue
+            if centres is None:
+                centres = derived.cell_centres(mesh)
+            if engine == ENERGY_ENGINE and grad_t is not None and conductivity[0] is not None:
+                alphat = found.get("alphat")
+                found["wallHeatFlux"] = derived.wall_heat_flux(
+                    patch["points"],
+                    tris,
+                    grad_t[index],
+                    conductivity[0],
+                    conductivity[1] or 0.0,
+                    None if alphat is None else np.asarray(alphat).reshape(-1),
+                )
+            nut = found.get("nut")
+            wall = derived.wall_fields(
+                patch["points"],
+                tris,
+                grad[index],
+                nu,
+                None if nut is None else np.asarray(nut).reshape(-1),
+                centres,
+                rho if engine == ENERGY_ENGINE else None,
+            )
+            found.update(wall)
+    except Exception:
+        log.warning("the derived wall fields could not be computed", exc_info=True)
+
+
+def _cut(dataset: Any, plane: Any) -> Any:
+    """The cutter's polygons (not triangles) of ``dataset`` at ``plane``."""
+    from vtkmodules.vtkFiltersCore import vtkCutter
+
     cutter = vtkCutter()
-    cutter.SetInputData(mesh)
+    cutter.SetInputData(dataset)
     cutter.SetCutFunction(plane)
     cutter.GenerateTrianglesOff()
     cutter.Update()
-    output = cutter.GetOutput()
+    return cutter.GetOutput()
 
-    positions = np.asarray(vtk_to_numpy(output.GetPoints().GetData()), dtype="float32").reshape(
-        -1, 3
-    )
+
+def _poly_arrays(output: Any) -> tuple[np.ndarray, np.ndarray]:
+    """The polygons' offsets and connectivity, as uint32."""
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+
     polys = np.asarray(vtk_to_numpy(output.GetPolys().GetConnectivityArray()), dtype="uint32")
     offsets = np.asarray(vtk_to_numpy(output.GetPolys().GetOffsetsArray()), dtype="uint32")
-    triangles = triangulate_fan(offsets, polys)
-    edges = unique_edges(offsets, polys)
-    triangles = drop_zero_area(positions, triangles)
-    edges = drop_degenerate_edges(edges)
+    return offsets, polys
+
+
+def _point_fields(output: Any, fields: tuple[str, ...]) -> dict[str, np.ndarray]:
+    """The cut's point arrays by name, `(points, components)` float32."""
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+
     found: dict[str, np.ndarray] = {}
     point_data = output.GetPointData()
     for name in _names(point_data, fields):
@@ -1188,7 +1409,118 @@ def cut_plane(
         components = int(array.GetNumberOfComponents())
         block = np.asarray(vtk_to_numpy(array), dtype="float32")
         found[name] = block.reshape(-1, components)
-    return positions.astype("float32"), triangles, edges, found
+    return found
+
+
+def _with_cell_ids(mesh: Any) -> Any:
+    """A shallow copy of ``mesh`` with `CELL_ID_ARRAY`; the reader's own block is not changed."""
+    from vtkmodules.util.numpy_support import numpy_to_vtk
+
+    copy = mesh.NewInstance()
+    copy.ShallowCopy(mesh)
+    ids = numpy_to_vtk(np.arange(mesh.GetNumberOfCells(), dtype="int64"), deep=True)
+    ids.SetName(CELL_ID_ARRAY)
+    copy.GetCellData().AddArray(ids)
+    return copy
+
+
+def _cut_cell_ids(output: Any) -> np.ndarray:
+    """The ids of the cells the cutter produced polygons for."""
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+    array = output.GetCellData().GetArray(CELL_ID_ARRAY)
+    if array is None:
+        return np.zeros(0, dtype="int64")
+    return np.unique(np.asarray(vtk_to_numpy(array), dtype="int64"))
+
+
+def straddling_cells(mesh: Any, origin: Any, normal: Any) -> np.ndarray:
+    """The ids of the cells with points strictly on both sides of the plane, ascending.
+
+    Every such cell must give the cutter at least one polygon; one that gives none was skipped.
+    **Strictly**, with a tolerance of 1e-9 of the mesh's size: a cell that only touches the plane
+    at a vertex or along a face may rightly give nothing, and must not be counted. Only a dataset
+    with a cell array (the reader's `vtkUnstructuredGrid`) is measured; anything else gives none.
+    """
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+    get_cells = getattr(mesh, "GetCells", None)
+    cells = get_cells() if get_cells is not None else None
+    points = mesh.GetPoints()
+    if cells is None or points is None or mesh.GetNumberOfCells() == 0:
+        return np.zeros(0, dtype="int64")
+    xyz = np.asarray(vtk_to_numpy(points.GetData()), dtype="float64").reshape(-1, 3)
+    unit = np.asarray(normal, dtype="float64")
+    length = float(np.linalg.norm(unit))
+    if length == 0.0:
+        return np.zeros(0, dtype="int64")
+    distance = (xyz - np.asarray(origin, dtype="float64")) @ (unit / length)
+    offsets = np.asarray(vtk_to_numpy(cells.GetOffsetsArray()), dtype="int64")
+    connectivity = np.asarray(vtk_to_numpy(cells.GetConnectivityArray()), dtype="int64")
+    starts, ends = offsets[:-1], offsets[1:]
+    filled = ends > starts
+    if not filled.any() or connectivity.size == 0:
+        return np.zeros(0, dtype="int64")
+    values = distance[connectivity]
+    lows = np.minimum.reduceat(values, starts[filled])
+    highs = np.maximum.reduceat(values, starts[filled])
+    span = xyz.max(axis=0) - xyz.min(axis=0)
+    tolerance = 1e-9 * max(float(np.linalg.norm(span)), 1e-30)
+    ids = np.flatnonzero(filled)[(lows < -tolerance) & (highs > tolerance)]
+    return ids.astype("int64")
+
+
+def _recut(
+    source: Any,
+    plane: Any,
+    skipped: np.ndarray,
+    fields: tuple[str, ...],
+    positions: np.ndarray,
+    triangles: np.ndarray,
+    found: dict[str, np.ndarray],
+) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray], dict[str, int]]:
+    """Tetrahedralise the skipped cells, cut them again and append the pieces to the slice."""
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+    from vtkmodules.vtkCommonCore import vtkIdList
+    from vtkmodules.vtkFiltersCore import vtkExtractCells
+    from vtkmodules.vtkFiltersGeneral import vtkDataSetTriangleFilter
+
+    ids = vtkIdList()
+    for cell in skipped:
+        ids.InsertNextId(int(cell))
+    extract = vtkExtractCells()
+    extract.SetInputData(source)
+    extract.SetCellList(ids)
+    tets = vtkDataSetTriangleFilter()
+    tets.SetInputConnection(extract.GetOutputPort())
+    tets.Update()
+    piece = _cut(tets.GetOutput(), plane)
+    recovered = np.intersect1d(_cut_cell_ids(piece), skipped)
+    counts = {
+        "skipped_cells": int(skipped.size - recovered.size),
+        "recut_cells": int(recovered.size),
+    }
+    extra_points = piece.GetPoints()
+    if recovered.size == 0 or extra_points is None:
+        return positions, triangles, found, {"skipped_cells": int(skipped.size), "recut_cells": 0}
+    more = _point_fields(piece, fields)
+    # **The same fields or none**: a piece that cannot carry every array the slice has would leave
+    # its points without values, so it is not drawn and its cells still count as skipped.
+    if positions.shape[0] and set(found) - set(more):
+        return positions, triangles, found, {"skipped_cells": int(skipped.size), "recut_cells": 0}
+    xyz = np.asarray(vtk_to_numpy(extra_points.GetData()), dtype="float32").reshape(-1, 3)
+    offsets, polys = _poly_arrays(piece)
+    base = int(positions.shape[0])
+    extra = triangulate_fan(offsets, polys).astype("uint32") + np.uint32(base)
+    merged_fields = (
+        {name: np.concatenate([found[name], more[name]]) for name in found} if base else more
+    )
+    return (
+        np.concatenate([positions.reshape(-1, 3), xyz]),
+        np.concatenate([triangles.reshape(-1, 3).astype("uint32"), extra.reshape(-1, 3)]),
+        merged_fields,
+        counts,
+    )
 
 
 def drop_zero_area(positions: np.ndarray, triangles: np.ndarray) -> np.ndarray:
@@ -1248,7 +1580,7 @@ def _internal_mesh(reader: Any) -> Any:
     """
     from vtkmodules.vtkCommonDataModel import vtkCompositeDataSet
 
-    output = reader.GetOutput()
+    output = case_root(reader)
     for index in range(output.GetNumberOfBlocks()):
         meta = output.GetMetaData(index)
         name = meta.Get(vtkCompositeDataSet.NAME()) if meta is not None else None
@@ -1407,7 +1739,7 @@ def extract_fields(
     times = all_times(reader)
     time = pick_time(reader, time)
     reader.UpdateTimeStep(time)
-    output = reader.GetOutput()
+    output = case_root(reader)
     boundary = None
     for index in range(output.GetNumberOfBlocks()):
         meta = output.GetMetaData(index)
@@ -1422,6 +1754,7 @@ def extract_fields(
         )
 
     patches: list[dict[str, Any]] = []
+    patch_triangles: dict[str, np.ndarray] = {}
     for index in range(boundary.GetNumberOfBlocks()):
         block = boundary.GetBlock(index)
         meta = boundary.GetMetaData(index)
@@ -1437,11 +1770,18 @@ def extract_fields(
             {
                 "name": name,
                 "points": positions.reshape(-1, 3),
-                "fields": _order_fields(_patch_point_fields(block, fields), fields),
+                "fields": _patch_point_fields(block, fields),
             }
         )
+        if block.GetPolys() is not None and block.GetPolys().GetNumberOfCells() > 0:
+            offsets, polys = _poly_arrays(block)
+            patch_triangles[name] = triangulate_fan(offsets, polys)
 
     _check_patch_order(surfaces_header, patches)
+    if engine != EXTERNAL_ENGINE:
+        _add_wall_fields(case_dir, engine, time, patches, patch_triangles)
+    for patch in patches:
+        patch["fields"] = _order_fields(patch["fields"], fields)
 
     # **`slice_plane is None` means the default plane, not "no slice".** The brief says so: the
     # caller that wants no plane at all passes `{"slice": false}` at the method level (T-216's
@@ -1493,7 +1833,7 @@ def cut_slice(
     slice_reader.CreateCellToPointOn()
     slice_reader.UpdateTimeStep(latest_time(slice_reader) if time is None else time)
     slice_reader.Update()
-    positions, triangles, edges, found = cut_plane(slice_reader, origin, normal, fields)
+    positions, triangles, edges, found, counts = cut_plane(slice_reader, origin, normal, fields)
     # **An empty cut carries no fields.** A plane outside the mesh gives VTK an empty polydata whose
     # point arrays are zero-length; storing an entry per field with `min: 0, max: 0` would tell a
     # client the plane holds a value of zero everywhere, which is a different answer from "the plane
@@ -1517,6 +1857,10 @@ def cut_slice(
         ),
     }
     with_magnitudes(slice_["fields"])
+    # **The cells the cutter could not contour** (after the tetrahedral re-cut), for the Results
+    # card's "n cells not drawn in this slice"; the header carries it only when it is not zero.
+    slice_["skipped_cells"] = int(counts["skipped_cells"])
+    slice_["recut_cells"] = int(counts["recut_cells"])
     # **The time travels with the cut.** A caller that packed a slice with no time would write
     # `time: 0.0`, which is a claim about which instant the contours belong to - and `0` is the
     # initial condition, so it would be a believable wrong answer.
@@ -1579,15 +1923,30 @@ def cut_iso(
     single value to contour, so the caller refuses it before this runs.
     """
     fields = fields_for(engine)
-    reader = open_case(case_dir, patches=False, internal=True, fields=fields)
-    reader.CreateCellToPointOn()
-    reader.UpdateTimeStep(latest_time(reader) if time is None else time)
-    reader.Update()
-    time_used = float(latest_time(reader) if time is None else time)
-    mesh = _internal_mesh(reader)
-    if mesh is None:
-        return _empty_iso(field, value, time_used)
-    return contour_surface(mesh, field, value, time_used, fields)
+    # **One case's reader is kept for the next value** (several levels of one field are cut in a row
+    # for a set of contours; reading a 1.2 M-cell case is most of a cut). A finished case does not
+    # change. The lock serialises the cuts that share it: a VTK pipeline is not for two threads.
+    key = (str(Path(case_dir).resolve()), time, engine)
+    with _ISO_LOCK:
+        held = _ISO_READER.get(key)
+        if held is None:
+            reader = open_case(case_dir, patches=False, internal=True, fields=fields)
+            reader.CreateCellToPointOn()
+            reader.UpdateTimeStep(latest_time(reader) if time is None else time)
+            reader.Update()
+            held = (reader, float(latest_time(reader) if time is None else time))
+            _ISO_READER.clear()
+            _ISO_READER[key] = held
+        reader, time_used = held
+        mesh = _internal_mesh(reader)
+        if mesh is None:
+            return _empty_iso(field, value, time_used)
+        return contour_surface(mesh, field, value, time_used, fields)
+
+
+#: The reader of the last case an iso-surface was cut from, and its time (`cut_iso`).
+_ISO_READER: dict[tuple[str, float | None, str | None], tuple[Any, float]] = {}
+_ISO_LOCK = threading.Lock()
 
 
 def contour_surface(
@@ -1616,7 +1975,13 @@ def contour_surface(
             array = numpy_to_vtk(np.ascontiguousarray(speed, dtype="float32"), deep=1)
             array.SetName("U_mag")
             mesh.GetPointData().AddArray(array)
-        else:
+        elif field in ("Q", "vorticity_mag") and mesh.GetPointData().GetArray("U") is not None:
+            # Derived from the velocity gradient, as the fields extraction derives them: the
+            # Q-criterion surface is the usual picture of a flow's vortices.
+            from stokes_agent import derived
+
+            derived.add_volume_fields(mesh)
+        if mesh.GetPointData().GetArray(field) is None:
             raise ValueError(f"the case has no point field {field!r} to contour")
 
     contour = vtkContourFilter()

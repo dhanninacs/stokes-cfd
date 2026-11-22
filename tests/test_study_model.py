@@ -88,6 +88,7 @@ def test_defaults_are_valid_for_every_type() -> None:
     assert study.params == {
         "type": "sweep",
         "sampler": "full_factorial",
+        "engine": "function",
         "seed": 0,
         "count": 0,
         "status": "idle",

@@ -10,6 +10,7 @@
  * right) a side slot folds to its icon strip unless the user opened it, as before.
  */
 import { PANELS, type PanelDef } from "./registry";
+import { SAVED_PANEL_INDEX } from "./stageFocus";
 import type { Corner, LayoutSpec, PanelPlacement, SideSlot, SlotMode, SlotSpec } from "./types";
 
 /** Gap between a panel and the viewport edge, and between neighbours, in px. */
@@ -39,7 +40,7 @@ export interface ResolvedPanel {
 /** The panels a slot shows, in display order (lowest `order` first, ties in list order); unknown ids are skipped. */
 export function slotPanels(slot: SlotSpec): ResolvedPanel[] {
   return slot.panels
-    .map((placement, index) => ({ placement, index, def: PANELS.get(placement.id) }))
+    .map((placement, index) => ({ placement, index: (placement as typeof placement & { [SAVED_PANEL_INDEX]?: number })[SAVED_PANEL_INDEX] ?? index, def: PANELS.get(placement.id) }))
     .filter((p): p is ResolvedPanel => p.def !== undefined)
     .sort((a, b) => (a.placement.order ?? a.index) - (b.placement.order ?? b.index) || a.index - b.index);
 }

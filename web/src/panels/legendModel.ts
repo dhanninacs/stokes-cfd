@@ -46,6 +46,11 @@ export interface LegendSettings {
   placement: LegendPlacement;
   /** Fonts 1.5x and a thicker bar, which the image export uses. */
   printSize: boolean;
+  /**
+   * Clip to the range: a value outside it keeps the surface's own colour instead of taking the end colour
+   * (Fluent's "Clip to Range", EnSight's "Limit Fringes"). Off, as the colours have always been.
+   */
+  clip: boolean;
 }
 
 /** The settings with every default filled in, plus the band count. */
@@ -94,6 +99,7 @@ export function legendOf(view: Partial<ResultsView> | null | undefined): LegendV
     digits: clampDigits(v.digits),
     placement: oneOf(v.placement, PLACEMENTS, "right"),
     printSize: v.printSize === true,
+    clip: v.clip === true,
     bands,
   };
 }
@@ -168,6 +174,11 @@ export function setPlacement(view: ResultsView, placement: LegendPlacement): Res
   return legendOf(view).placement === placement ? view : { ...view, placement: oneOf(placement, PLACEMENTS, "right") };
 }
 
+/** The view with clip-to-range on or off. */
+export function setClip(view: ResultsView, on: boolean): ResultsView {
+  return legendOf(view).clip === on ? view : { ...view, clip: on };
+}
+
 export function setPrintSize(view: ResultsView, on: boolean): ResultsView {
   return legendOf(view).printSize === on ? view : { ...view, printSize: on };
 }
@@ -206,6 +217,33 @@ export function formatTickWith(value: number, format: TickFormat = "auto", digit
   if (value === 0) return sig > 1 ? (0).toFixed(sig - 1) : "0";
   const precise = value.toPrecision(sig);
   return precise.includes("e") ? exponentForm(precise.replace("e+", "e")) : precise;
+}
+
+/**
+ * How many labels the legend's bar carries. **A banded map is labelled at its band edges** (Fluent and
+ * EnSight do the same), so a label never sits in the middle of a flat colour: N bands have N + 1 edges, every
+ * other one past 8 bands so the labels do not crowd (16 bands: 9 labels). A smooth map has six.
+ */
+export function legendTickCount(bands: number): number {
+  if (!(bands >= 2)) return 6;
+  const n = Math.min(Math.trunc(bands), 32);
+  return n <= 8 ? n + 1 : n % 2 === 0 ? n / 2 + 1 : 6;
+}
+
+/** Where the data reaches past the colour range: values above `shown.max` or below `shown.min` (they take the end colours). */
+export interface Clipped {
+  above: boolean;
+  below: boolean;
+}
+
+/**
+ * Whether the colour range cuts the data off at either end. STAR-CCM+ marks a clamped legend; a figure that
+ * hides it lets a reader take the end colour for the extreme. A relative 1e-6 of the span is "at" the end.
+ */
+export function clippedEnds(shown: Range, data: Range | null): Clipped {
+  if (data === null) return { above: false, below: false };
+  const eps = Math.max(Math.abs(shown.max - shown.min), Math.abs(shown.max), Math.abs(shown.min), 1e-30) * 1e-6;
+  return { above: data.max > shown.max + eps, below: data.min < shown.min - eps };
 }
 
 /** The ticks of a legend, highest first (as the bar is read), already formatted. */

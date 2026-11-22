@@ -8,14 +8,15 @@
  * state: the field, the range and the slice switch are view state in the store's `results` slice and are
  * never journaled.
  */
+import StreamsSummary from "./StreamsSummary";
 import { useEffect, useId, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChevronsUpDown, CircleAlert, ClipboardCopy, Download, ImageDown, LoaderCircle, RefreshCw } from "lucide-react";
 import { Button, Switch } from "../components/ui";
 import { Tooltip } from "../components/Tooltip";
 import { collectParts } from "../state/parts";
 import { BAND_CHOICES, SMOOTH, bandCount, hasPercentiles, setBandCount } from "./fieldsModel";
-import { COLORMAPS, COLORMAP_IDS, gradientCssFor, type ColormapId } from "../state/colormap";
-import { RANGE_MODE_WORDS, chooseRange, legendOf, rangeModeOf, setManualEnd, setMap, setReverse, type RangeChoice } from "./legendModel";
+import { type ColormapId } from "../state/colormap";
+import { RANGE_MODE_WORDS, chooseRange, legendOf, rangeModeOf, setManualEnd, setMap, setClip, setReverse, type RangeChoice } from "./legendModel";
 import { fadeAvailable, fadeTargets } from "./fadeResults";
 import { useStore } from "../state/store";
 import { placeOf } from "../workspace/geometry";
@@ -24,7 +25,6 @@ import {
   NO_FIELD,
   chooseField,
   effectiveRange,
-  fieldTitle,
   fieldUnits,
   formatTick,
   isLocked,
@@ -37,7 +37,11 @@ import {
   slicePlaneText,
   type ResultsLive,
 } from "./fieldsModel";
-import { showResults, useFieldOptions, useHasFinishedRun } from "./resultsControl";
+import { showResults, useHasFinishedRun } from "./resultsControl";
+import FieldPicker from "./FieldPicker";
+import ColormapPicker from "./ColormapPicker";
+import { fitRange } from "../guided/fitRange";
+import { prettyUnits } from "./variablesModel";
 import SlicesSection from "./SlicesSection";
 import IsoSection from "./IsoSection";
 import { copyTableText, saveTextFile } from "./monitorsExport";
@@ -215,23 +219,9 @@ function MapSection({ map, reverse, disabled, onMap, onReverse }: { map: Colorma
   return (
     <section className="mesh-section" aria-label="Map" data-ws="results-map">
       <div className="section-title">Map</div>
-      <Tooltip label="The colours the field is drawn with, on the walls, cuts and legend" side="top">
-        <div className="select-wrap">
-          <select className="field" aria-label="Colour map" value={map} disabled={disabled} onChange={(e) => onMap(e.target.value as ColormapId)} data-ws="results-map-select">
-            {COLORMAP_IDS.map((id) => (
-              <option key={id} value={id}>
-                {COLORMAPS[id].label}
-              </option>
-            ))}
-          </select>
-          <ChevronsUpDown size={13} className="select-chevron" aria-hidden="true" />
-        </div>
-      </Tooltip>
-      <div
-        aria-hidden="true"
-        data-ws="results-map-strip"
-        style={{ height: 8, borderRadius: 4, marginTop: 6, background: gradientCssFor(map, reverse, "to right"), border: "1px solid var(--panel-border)" }}
-      />
+      <div className="field-picker-row-wrap">
+        <ColormapPicker map={map} reverse={reverse} disabled={disabled} onMap={onMap} onReverse={onReverse} ws="results-map-picker" />
+      </div>
       <Tooltip label="Read the map from the other end: high values take the low colour" side="top">
         <div>
           <Switch checked={reverse} label="Reverse" disabled={disabled} onChange={onReverse} />
@@ -266,7 +256,6 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
   const stage = useStore((s) => s.stage);
   const connected = useStore((s) => s.connected);
   const results = useStore((s) => s.results);
-  const options = useFieldOptions();
   const hasRun = useHasFinishedRun();
   const { view, data, status } = results;
   const range = effectiveRange(view, data);
@@ -341,30 +330,21 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
       {shown("field") && (
         <section className="mesh-section" aria-label="Field" data-ws="results-field">
           <div className="section-title">Field</div>
-          <div className="select-wrap">
-            <select
-              className="field"
-              aria-label="Field to colour the mesh with"
-              value={view.field}
-              disabled={data === null || options.length === 0}
-              onChange={(e) => update((live) => chooseField(live, e.target.value))}
-              data-ws="results-select"
-            >
-              <option value={NO_FIELD}>None</option>
-              {options.map((o) => (
-                <option key={o.name} value={o.name}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <ChevronsUpDown size={13} className="select-chevron" aria-hidden="true" />
+          <div className="field-picker-row-wrap">
+            <FieldPicker label="Field to colour the mesh with" ws="results-field-picker" />
+            <Tooltip label="Show the plain model, coloured by no field" side="top">
+              <Button aria-pressed={view.field === NO_FIELD} disabled={data === null} onClick={() => update((live) => chooseField(live, NO_FIELD))} data-ws="results-field-none">
+                None
+              </Button>
+            </Tooltip>
           </div>
           {data === null && (
             <Note className="mesh-hint" tip={hasRun ? "Press Show results to read the fields of the newest finished run." : "Run a simulation to see fields."}>{hasRun ? "Press Show results" : "No run yet"}</Note>
           )}
           {colouring && range !== null && (
             <p className="muted mesh-hint" data-ws="results-title">
-              {fieldTitle(data, view.field)}: {formatTick(range.min)} to {formatTick(range.max)}
+              {/* The picker names the field; this line says what the colours span. */}
+              Colours from {formatTick(range.min)} to {formatTick(range.max)} {prettyUnits(fieldUnits(data, view.field))}
             </p>
           )}
         </section>
@@ -415,18 +395,23 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
             range when the run reports one), locked freezes the range as it is, manual is typed ends. "Full
             range" is offered only when the run has percentiles, because without them it is the same as auto.
           */}
-          <Tooltip label="Auto follows the results; Locked and Manual fix the range" side="top">
+          <Tooltip label="Auto follows the results; Fit spreads the colours over what is on screen; Locked and Manual fix the range" side="top">
             <div className="select-wrap">
               <select
                 className="field"
                 aria-label="Colour range"
                 value={rangeValue}
                 disabled={!colouring}
-                onChange={(e) => update((live) => setView(live, chooseRange(live.view, live.data, e.target.value as RangeChoice)))}
+                onChange={(e) => {
+                  // Fit is an action, not a mode: it asks the server for the range on screen and lands in Manual.
+                  if (e.target.value === "fit") void fitRange().then((why) => why !== null && useStore.getState().log("error", `Fit: ${why}`));
+                  else update((live) => setView(live, chooseRange(live.view, live.data, e.target.value as RangeChoice)));
+                }}
                 data-ws="results-range-select"
               >
                 <option value="auto">{RANGE_MODE_WORDS.auto}</option>
                 {percentiles && <option value="full">Full range</option>}
+                <option value="fit">Fit to what is shown</option>
                 <option value="locked">{RANGE_MODE_WORDS.locked}</option>
                 <option value="manual">{RANGE_MODE_WORDS.manual}</option>
               </select>
@@ -439,6 +424,15 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
             <RangeInput label="Max" value={range === null ? null : range.max} disabled={!locked || !colouring} why={!colouring ? "Turn on a field to colour the mesh with first." : "Pick Locked or Manual to type the ends"}
                 onCommit={(v) => update((live) => setView(live, setManualEnd(live.view, live.data, "max", v)))} />
             {units !== "" && colouring && <span className="muted results-units">{units}</span>}
+          </div>
+          <div data-ws="results-clip">
+            <Switch
+              checked={legendOf(view).clip}
+              label="Clip to range"
+              description="Values outside the range keep the model's own colour instead of the end colours"
+              disabled={!colouring}
+              onChange={(next) => update((live) => setView(live, setClip(live.view, next)))}
+            />
           </div>
         </section>
       )}
@@ -476,6 +470,7 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
       {shown("monitors") && (
         <section className="mesh-section" aria-label="Monitors" data-ws="results-monitors">
           <div className="section-title">Monitors</div>
+          <StreamsSummary run={shownRun?.id ?? null} />
           {rows.length > 0 ? (
             <table className="mesh-quality" aria-label="Monitors of the run" data-ws="monitors-table">
               <thead>
@@ -533,6 +528,11 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
               <Switch checked={view.slice && hasSlice} label="Mid-plane slice" onChange={(next) => hasSlice && update((live) => setSlice(live, next))} />
             </div>
           </Tooltip>
+          {hasSlice && (data?.sliceSkipped ?? 0) > 0 && (
+            <p className="muted mesh-hint" data-ws="results-slice-skipped" title="VTK could not cut these cells, even split into tetrahedra; the slice has a hole there. The values elsewhere are unaffected.">
+              {data?.sliceSkipped === 1 ? "1 cell not drawn in this slice" : `${data?.sliceSkipped ?? 0} cells not drawn in this slice`}
+            </p>
+          )}
           <Tooltip label="Draw the mesh's cell edges on the slice" side="top">
             <div data-ws="results-slice-edges">
               <Switch checked={view.sliceEdges === true} label="Cell edges" onChange={(next) => update((live) => setSliceEdges(live, next))} />

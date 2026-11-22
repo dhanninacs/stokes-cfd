@@ -1,0 +1,33 @@
+# Proprietary — part of Stokes. Links Fidget (MPL-2.0); see README.md for the licence split.
+[package]
+name = "stokes-implicit-mesh"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "Meshes a closed-form implicit body (Fidget text format) to a Stokes binary mesh."
+license = "LicenseRef-Stokes-Proprietary"
+publish = false
+
+[[bin]]
+name = "stokes-implicit-mesh"
+path = "src/main.rs"
+
+[dependencies]
+# Interpreter only (ADR-0035 decision 15): no "jit", so no dynasmrt and no writable-and-executable
+# pages in the process.
+fidget = { version = "=0.5.1", default-features = false, features = ["mesh"] }
+nalgebra = "0.35"
+rayon = "1.12"
+
+[profile.release]
+opt-level = 3
+
+# Our own workspace, so the program never joins a parent workspace. The patched fidget-mesh under
+# vendor/ is a path dependency inside this directory and so becomes a member of it.
+[workspace]
+
+# Fidget's mesher with a finer task split for load balance and progress counts (search
+# "stokes patch" in vendor/fidget-mesh/src; the list is vendor/fidget-mesh/CHANGES-STOKES.md).
+# MPL-2.0, as upstream.
+[patch.crates-io]
+fidget-mesh = { path = "vendor/fidget-mesh" }
