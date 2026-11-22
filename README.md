@@ -15,9 +15,10 @@
 > the [releases page](https://github.com/dhanninacs/stokes-cfd/releases).
 
 **Stokes is a desktop CFD workbench and graphical interface for OpenFOAM®
-Foundation 14.** Import a STEP file, click faces to make them inlets, outlets,
-walls or symmetry planes, mesh with snappyHexMesh or cfMesh, run the solver and
-look at slices, streamlines and iso-surfaces, in one window. Every action is
+Foundation 14.** Import a STEP file or model the part in the app, click faces
+to make them inlets, outlets, walls or symmetry planes, preview the flow on the
+GPU, mesh with snappyHexMesh, cfMesh or Gmsh, run the solver and look at slices,
+streamlines and iso-surfaces, in one window. Every action is
 also an API call, so scripts and LLM agents can drive a simulation the same way
 you do.
 
@@ -86,18 +87,50 @@ The run shown stopped at 1,500 iterations with residuals just above its
 1e-4 target, so treat it as a demonstration of the workflow, not as a validated
 prediction.
 
+### Fast mode, modelling and heat exchangers
+
+Newer than the elbow tour above. Fast mode is a lattice-Boltzmann preview on
+the GPU: it draws the flow in a plane while you change a value. **It is a quick
+look, not a sign-off**; the same case is then meshed and solved in OpenFOAM.
+
+**[docs/video/ball-walkthrough.mp4](docs/video/ball-walkthrough.mp4)** (about
+2½ minutes, no sound): air past a 4 mm ball in a duct, modelled in the app,
+previewed in Fast mode, then meshed and solved. The waits are sped up.
+
+| | |
+|---|---|
+| ![Fast mode preview of the speed around the ball](docs/images/ball-fast-mode-speed.jpg) **Fast mode, the preview.** 2.6 M lattice cells on the GPU: pressure drop 9.17 mPa, 36 s to a picture. | ![OpenFOAM result in the same plane and colours](docs/images/ball-openfoam-speed.jpg) **OpenFOAM, the result.** snappyHexMesh with boundary layers, 247,932 cells: 9.56 mPa, 5 min 20 s on one CPU core (mesh and solve). 4 % apart. |
+| ![Hex mesh cut through the ball with boundary layers](docs/images/ball-mesh-boundary-layers.jpg) **Mesh with boundary layers.** The section view cuts through the cells: three thin layers on every wall. | ![A box with a ball subtracted, cut by the section view](docs/images/ball-cad-subtract-section.jpg) **Model it in the app.** Primitives, sketches, booleans and lattices; here a ball subtracted from a box. |
+| ![Temperature on a plane through a gyroid plate heat exchanger](docs/images/gyroid-exchanger-temperature.jpg) **Conjugate heat transfer.** An example gyroid plate heat exchanger: two streams and the solid between them, solved together. | ![Streamlines through the gyroid core](docs/images/gyroid-exchanger-streamlines.jpg) **Streamlines that follow the walls**, coloured by temperature. |
+
+The ball numbers are one measurement of a simple laminar case on one computer.
+In passages only a few cells wide Fast mode reads high: on the gyroid core above
+it gives about 2 to 3 times the solved pressure drop and heat, so it shows where
+the flow and heat go and does not size an exchanger. The exchanger run shown
+stopped at its 500-iteration limit, not converged, with the two streams' heat
+agreeing to 8.8 %.
+
 ## What you get
 
 - **A guided path and a full tree.** *Guided* mode walks Geometry → Fluid →
   Boundaries → Mesh → Run → Results. *Full* mode is a Fluent-style tree with
   every setting. Both edit the same model.
 - **CAD to mesh.** STEP import (Open CASCADE), face picking and tagging,
-  snappyHexMesh, cfMesh (tet, polyhedral, hex-dominant) and blockMesh, with 2D
-  and axisymmetric modes.
+  snappyHexMesh, cfMesh (tet, polyhedral, hex-dominant), blockMesh and Gmsh
+  (tetrahedra with prism layers), with 2D and axisymmetric modes.
+- **Model it in the app.** Primitives, sketches pulled into shapes, booleans,
+  patterns, offset and shell, and gyroid, Schwarz P and diamond lattices, with
+  a section view through the body and through the mesh.
+- **Fast mode.** A GPU lattice-Boltzmann preview drawn live in a plane. A quick
+  look, not a sign-off. It needs a GPU and a part modelled in the app.
 - **Real solvers.** OpenFOAM Foundation 14: laminar and RANS (k-ε, k-ω SST),
-  energy equation, parallel runs over MPI, stop and resume.
-- **Results you can use.** Slices, iso-surfaces, clips, streamlines, vectors,
-  probes, line plots, a field calculator, reports and exports.
+  energy equation, conjugate heat transfer across fluids and solids, parallel
+  runs over MPI, stop and resume. coupledSimpleFoam is an optional coupled
+  engine.
+- **Results you can use.** Slices, iso-surfaces and 3-D contours, clips,
+  wall-following streamlines, vectors, probes, line plots, a Streams table
+  (flow, pressure drop, temperatures and heat per stream), a field calculator,
+  reports and exports.
 - **Quantities everywhere.** Every number carries a unit; type `2 [m/s]` or
   `U_in * 1.5`.
 - **Agent-ready.** One Python API sits behind the window, the `stokes` command
@@ -128,10 +161,12 @@ prediction.
 | Linux x86-64 | Supported; one full end-to-end run recorded so far ([details](docs/LINUX-READINESS.md)). |
 | macOS | Not supported. |
 | Geometry import | STEP (also IGES and BREP from the command line). |
-| Meshers | snappyHexMesh, blockMesh, cfMesh (hex-dominant, tetrahedral, polyhedral) and poly-hexcore; 2D planar and axisymmetric modes. |
-| Physics | Incompressible and heat-transfer flows: laminar, k-ε, k-ω SST, energy equation. |
-| Post-processing | Slices, iso-surfaces, clips, streamlines, vectors, probes, line plots, reports, picture export. |
-| Installer | None yet: run from source. |
+| Modelling in the app | Primitives, sketches, booleans, patterns, offset and shell, gyroid, Schwarz P and diamond lattices. |
+| Meshers | snappyHexMesh, blockMesh, cfMesh (hex-dominant, tetrahedral, polyhedral), poly-hexcore and Gmsh (tetrahedra with prism layers); 2D planar and axisymmetric modes. |
+| Physics | Incompressible and heat-transfer flows: laminar, k-ε, k-ω SST, energy equation, conjugate heat transfer. |
+| Fast mode | GPU lattice-Boltzmann preview for parts modelled in the app. A preview, not a validated prediction. |
+| Post-processing | Slices, iso-surfaces, 3-D contours, clips, streamlines, vectors, probes, line plots, Streams table, reports, picture export. |
+| Installer | None yet: run from source. Version 0.0.1.dev0, pre-alpha. |
 
 ## Install and run
 
