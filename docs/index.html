@@ -1,14 +1,15 @@
 ---
 layout: default
 title: Stokes, an OpenFOAM GUI for Windows and Linux
-description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Import STEP, click faces to set boundaries, mesh with snappyHexMesh or cfMesh, run and view results. Native on Windows without WSL, and on Linux.
+description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Import STEP or model the part in the app, preview the flow on the GPU, mesh with snappyHexMesh, cfMesh or Gmsh, run and view results. Native on Windows without WSL, and on Linux.
 ---
 <section class="hero">
   <div class="wrap">
     <p class="product" translate="no">Stokes</p>
-    <h1>OpenFOAM, from CAD to&nbsp;results.</h1>
-    <p class="sub">A desktop GUI for OpenFOAM&nbsp;14 on Windows and Linux. Import a STEP file, pick faces
-    for the boundaries, mesh it, run it and look at the flow, all in one window.</p>
+    <h1>CAD in. Results&nbsp;out.</h1>
+    <p class="sub">A desktop GUI for OpenFOAM&nbsp;14 on Windows and Linux. Import a STEP file or model
+    the part in the app, preview the flow on the GPU, then mesh it, run it and read the results, all
+    in one window.</p>
     <div class="cta">
       <a class="pill" href="#install" data-track="hero_install" data-track-label="Install (hero)">Install</a>
       <a class="pill outline" href="https://github.com/dhanninacs/stokes-cfd" data-track="hero_github" data-track-label="Source on GitHub (hero)">Source on GitHub</a>
@@ -61,6 +62,132 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
   </div>
 </section>
 
+<section class="band" id="fast-mode" aria-labelledby="fast-title">
+  <div class="wrap">
+    <h2 class="headline" id="fast-title">See the flow before you&nbsp;mesh.</h2>
+    <p class="intro">Fast mode is a lattice-Boltzmann preview that runs on your graphics card. It draws
+    the flow in a plane while it solves. Change an inlet speed or raise the fidelity and the picture
+    follows, live. <strong>It is a quick look, not a sign-off.</strong> For the answer, Stokes runs the
+    same case in OpenFOAM.</p>
+  </div>
+  <figure class="film">
+    <video controls playsinline preload="none" width="1920" height="1080" poster="{{ '/images/ball-walkthrough-poster.jpg' | relative_url }}">
+      <source src="{{ '/video/ball-walkthrough.mp4' | relative_url }}" type="video/mp4">
+      Your browser can’t play this video. <a href="{{ '/video/ball-walkthrough.mp4' | relative_url }}" data-track="video_download_ball" data-track-label="Download the ball video">Download it</a>.
+    </video>
+    <figcaption>Air past a 4&nbsp;mm ball in a duct: modelled in the app, previewed in Fast mode, then meshed
+    and solved with OpenFOAM. Two and a half minutes, no sound; the waits are sped&nbsp;up.</figcaption>
+  </figure>
+  <div class="wrap">
+    <div class="tiles">
+      <article class="tile wide">
+        <div class="copy">
+          <h3>A plane, a legend and the numbers.</h3>
+          <p>The panel shows the pressure drop and the flow in and out as they settle. Five fidelity
+          levels set how many cells span the passage. It needs a GPU, and for now it works on parts
+          modelled in the app, not on imported CAD.</p>
+        </div>
+        <img src="{{ '/images/ball-fast-mode-panel.jpg' | relative_url }}" width="1122" height="626" alt="The Fast mode panel beside a duct with a ball in it: speed drawn on a plane through the middle, with the fidelity, the plane position, the colour legend and a steady pressure drop of 9.2 mPa" loading="lazy">
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="two-solvers" aria-labelledby="compare-title">
+  <div class="wrap">
+    <h2 class="headline" id="compare-title">Same case, two solvers.</h2>
+    <p class="intro">The ball in the duct, air in at 0.05&nbsp;m/s. Speed in the middle plane, with the same
+    view, colour map and range on both sides.</p>
+    <div class="pair">
+      <figure>
+        <img src="{{ '/images/ball-fast-mode-speed.jpg' | relative_url }}" width="630" height="250" alt="Fast mode preview: speed in the middle plane of the duct, slow in the wake behind the ball and fast above and below it" loading="lazy">
+        <figcaption><strong>Fast mode, the preview.</strong> Lattice-Boltzmann on the GPU, 2.6&nbsp;million cells.</figcaption>
+      </figure>
+      <figure>
+        <img src="{{ '/images/ball-openfoam-speed.jpg' | relative_url }}" width="630" height="250" alt="OpenFOAM result: speed in the same plane with the same colours, showing the same wake behind the ball" loading="lazy">
+        <figcaption><strong>OpenFOAM, the result.</strong> snappyHexMesh with boundary layers, 247,932 cells.</figcaption>
+      </figure>
+    </div>
+    <dl class="specs">
+      <div><dt>Pressure drop</dt><dd>9.17&nbsp;mPa in Fast mode, 9.56&nbsp;mPa in OpenFOAM solved to a residual of 1e-5. They are 4&nbsp;% apart.</dd></div>
+      <div><dt>Time to a picture</dt><dd>36&nbsp;s on the GPU. 5&nbsp;min 20&nbsp;s on one CPU core for OpenFOAM: 3&nbsp;min 08&nbsp;s to mesh and 2&nbsp;min 12&nbsp;s to solve.</dd></div>
+      <div><dt>Where it stops</dt><dd>This is a simple laminar case, and one measurement on one computer. In passages only a few cells wide the preview reads high: on the gyroid exchanger below, about 2 to 3 times the solved pressure drop and heat. Use it to look, and OpenFOAM to decide.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="band" id="modelling" aria-labelledby="cad-title">
+  <div class="wrap">
+    <h2 class="headline" id="cad-title">Model it in the&nbsp;app.</h2>
+    <p class="intro">No CAD file? Build the part here. Start from a box, a cylinder or a sphere, or sketch
+    a profile and pull it into a shape. Join, subtract and intersect bodies. Fill one with a gyroid,
+    Schwarz&nbsp;P or diamond lattice. Sizes are values with units, so they can be changed later.</p>
+    <div class="tiles">
+      <article class="tile">
+        <div class="copy">
+          <h3>Shapes and booleans.</h3>
+          <p>A ball subtracted from a box leaves a ball-shaped hole. The section view cuts the body so
+          you can see inside it.</p>
+        </div>
+        <img class="shot" src="{{ '/images/ball-cad-subtract-section.jpg' | relative_url }}" width="1280" height="744" alt="A box cut open by the section view, showing the round hole left by subtracting a ball, beside the Subtract settings" loading="lazy">
+      </article>
+      <article class="tile">
+        <div class="copy">
+          <h3>Lattices.</h3>
+          <p>A section through an example gyroid plate heat exchanger. The gyroid wall keeps two
+          channel networks apart, one for each stream.</p>
+        </div>
+        <img class="shot" src="{{ '/images/gyroid-section-geometry.jpg' | relative_url }}" width="1280" height="810" alt="Section through a plate filled with a gyroid lattice: rows of slanted channels between four ports" loading="lazy">
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="heat-exchangers" aria-labelledby="hx-title">
+  <div class="wrap">
+    <h2 class="headline" id="hx-title">Heat exchangers: two streams and a&nbsp;solid.</h2>
+    <p class="intro">An example gyroid plate heat exchanger, set up as conjugate heat transfer: a hot
+    stream, a cold stream and the solid between them, meshed as one case and solved together in
+    OpenFOAM.</p>
+    <div class="tiles">
+      <article class="tile wide">
+        <div class="copy">
+          <h3>Temperature on a plane through the core.</h3>
+          <p>Hot comes in at 350&nbsp;K on the left, cold at 300&nbsp;K on the right. The two never mix; the
+          heat crosses the gyroid wall.</p>
+        </div>
+        <img src="{{ '/images/gyroid-exchanger-temperature.jpg' | relative_url }}" width="1118" height="760" alt="Temperature on a plane through the gyroid core, from 300 to 350 K: hot channels in yellow and cold channels in purple, side by side, with the solid between them in green" loading="lazy">
+      </article>
+      <article class="tile">
+        <div class="copy">
+          <h3>The Streams table.</h3>
+          <p>The Results card lists each stream’s flow, pressure drop, temperature in and out, and
+          heat. Here the hot side gives up 117.5&nbsp;W and the cold side takes 107.1&nbsp;W. They agree to
+          8.8&nbsp;%, and the card says so. This run stopped at its 500-iteration limit, not converged.</p>
+        </div>
+        <img class="shot narrow" src="{{ '/images/gyroid-exchanger-streams-table.jpg' | relative_url }}" width="548" height="312" alt="Streams table. Hot: 3.813 g/s, 1911 Pa, 350 to 342.63 K, minus 117.5 W. Cold: 3.817 g/s, 2070 Pa, 300 to 306.71 K, plus 107.1 W. Heat exchanged 112.3 W; the streams agree to 8.8 %" loading="lazy">
+      </article>
+      <article class="tile">
+        <div class="copy">
+          <h3>Streamlines that follow the walls.</h3>
+          <p>Lines seeded at the inlets slide along a wall they meet and carry on, so they run the
+          whole path through the narrow passages. Coloured by temperature.</p>
+        </div>
+        <img class="shot" src="{{ '/images/gyroid-exchanger-streamlines.jpg' | relative_url }}" width="1000" height="700" alt="Streamlines from both inlets winding through the gyroid core, the hot stream in yellow and the cold stream in purple" loading="lazy">
+      </article>
+      <article class="tile wide">
+        <div class="copy">
+          <h3>Fast mode shows where the heat goes. It does not size the exchanger.</h3>
+          <p>This is the preview of the same model. The picture is useful for checking the set-up.
+          The numbers are not: on a core this fine it reads about 2 to 3 times the solved pressure
+          drop and heat. The figures above are from OpenFOAM.</p>
+        </div>
+        <img class="mid" src="{{ '/images/gyroid-exchanger-fast-preview.jpg' | relative_url }}" width="720" height="680" alt="Fast mode preview of the gyroid exchanger: temperature on a plane through the core, drawn inside the see-through body with its four ports" loading="lazy">
+      </article>
+    </div>
+  </div>
+</section>
+
 <section class="band" aria-labelledby="model-title">
   <div class="wrap">
     <h2 class="headline" id="model-title">Change a value.<br>The case follows.</h2>
@@ -68,20 +195,20 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
     speed or shrink a cell size and the dictionaries are written again</strong>, so there is nothing to
     hunt for in <code>system/</code> and nothing to keep in sync by hand.</p>
     <div class="tiles">
-      <article class="tile dark wide">
+      <article class="tile wide">
         <div class="copy">
-          <h3>Boundary layers on every wall.</h3>
-          <p>One switch adds three layers of thin cells along the walls, where the velocity changes fastest.
-          This is the elbow’s symmetry plane, coloured by speed. The inset is where the side inlet meets
-          the bend.</p>
+          <h3>Mesh with boundary layers.</h3>
+          <p>One switch adds three layers of thin cells along every wall, where the velocity changes
+          fastest. This is a snappyHexMesh hex mesh cut through the ball. The section view shows the
+          cells, and the layers hugging the ball and the duct walls.</p>
         </div>
-        <img class="figure" src="{{ '/images/feat-layers.jpg' | relative_url }}" width="1600" height="880" alt="Mesh on the symmetry plane coloured by velocity, with a close-up of the three boundary-layer cells along the wall at the side-inlet junction" loading="lazy">
+        <img src="{{ '/images/ball-mesh-boundary-layers.jpg' | relative_url }}" width="1600" height="838" alt="A hex mesh cut through the middle of the duct, with three thin layers of cells wrapped around the ball and along the top and bottom walls" loading="lazy">
       </article>
       <article class="tile dark">
         <div class="copy">
           <h3>Meshes you can check.</h3>
-          <p>snappyHexMesh, cfMesh or blockMesh. This one has 81,749 cells and passed its quality
-          check.</p>
+          <p>snappyHexMesh, cfMesh, blockMesh, or Gmsh for tetrahedra with prism layers. This elbow
+          mesh has 81,749 cells and passed its quality check.</p>
         </div>
         <img src="{{ '/images/feat-mesh.jpg' | relative_url }}" width="1200" height="995" alt="The elbow meshed with snappyHexMesh, cell edges drawn" loading="lazy">
       </article>
@@ -112,13 +239,15 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
       <div><dt>Windows 10 and 11</dt><dd><span class="yes">Yes</span>, natively, with no WSL. OpenFOAM comes from <a href="https://dhanninacs.github.io/foamWin/" data-track="out_foamwin_specs" data-track-label="FoamWin (specs)">FoamWin</a>. The most tested platform.</dd></div>
       <div><dt>Linux</dt><dd><span class="yes">Yes</span>, with the official OpenFOAM&nbsp;14 packages. Less tested than Windows so far.</dd></div>
       <div><dt>macOS</dt><dd><span class="no">Not supported.</span></dd></div>
-      <div><dt>Geometry</dt><dd>STEP import through Open CASCADE. IGES and BREP from the command line.</dd></div>
-      <div><dt>Meshing</dt><dd>snappyHexMesh, blockMesh, and cfMesh hex-dominant, tetrahedral, polyhedral and poly-hexcore. 2D planar and axisymmetric.</dd></div>
-      <div><dt>Physics</dt><dd>Laminar, k-ε and k-ω SST, with the energy equation. Parallel runs over MPI.</dd></div>
-      <div><dt>Results</dt><dd>Slices, clips, iso-surfaces, streamlines, vectors, probes, line plots, reports and picture export.</dd></div>
+      <div><dt>Geometry</dt><dd>STEP import through Open CASCADE. IGES and BREP from the command line. Or model in the app: primitives, sketches, booleans, patterns, offset and shell, and gyroid, Schwarz&nbsp;P and diamond lattices.</dd></div>
+      <div><dt>Meshing</dt><dd>snappyHexMesh, blockMesh, cfMesh hex-dominant, tetrahedral, polyhedral and poly-hexcore, and Gmsh tetrahedra with prism layers. 2D planar and axisymmetric. A section view through the cells.</dd></div>
+      <div><dt>Physics</dt><dd>Laminar, k-ε and k-ω SST, with the energy equation. Conjugate heat transfer across fluids and solids. Parallel runs over MPI.</dd></div>
+      <div><dt>Solvers</dt><dd>OpenFOAM’s <code>foamRun</code> and <code>foamMultiRun</code>, and coupledSimpleFoam as an optional coupled engine. Under-relaxation factors can be set for steady runs.</dd></div>
+      <div><dt>Fast mode</dt><dd>A lattice-Boltzmann preview on the GPU, drawn live in a plane. A quick look, not a sign-off. Needs a graphics card, and a part modelled in the app.</dd></div>
+      <div><dt>Results</dt><dd>Slices, clips, iso-surfaces and 3-D contours, wall-following streamlines, vectors, probes, line plots, a Streams table for flow, pressure drop and heat, reports and picture export.</dd></div>
       <div><dt>Units</dt><dd>Every value carries a unit. Type <code>2 [m/s]</code> or <code>U_in * 1.5</code>.</dd></div>
       <div><dt>Automation</dt><dd>The window, the <code>stokes</code> command and a local server share one API, so scripts and LLM agents can drive a case.</dd></div>
-      <div><dt>Installer</dt><dd><span class="no">Not yet.</span> Stokes runs from source with Python 3.13 or 3.14.</dd></div>
+      <div><dt>Installer</dt><dd><span class="no">Not yet.</span> Stokes runs from source with Python 3.13 or 3.14. Version 0.0.1.dev0, pre-alpha.</dd></div>
       <div><dt>Licence</dt><dd>Free for noncommercial use under PolyForm Noncommercial. Source-available, not open source. Commercial licences on request.</dd></div>
     </dl>
   </div>
@@ -178,6 +307,8 @@ source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</cod
     <div class="faq">
       <details><summary>Does it need WSL on Windows?</summary>
         <p>No. It drives <a href="https://dhanninacs.github.io/foamWin/" data-track="out_foamwin_faq" data-track-label="FoamWin (FAQ)">FoamWin</a>, a native Windows build of OpenFOAM&nbsp;14, directly. There is no WSL, virtual machine or Docker layer.</p></details>
+      <details><summary>Can I trust Fast mode’s numbers?</summary>
+        <p>Treat it as a preview. On a ball in a duct its pressure drop was 4&nbsp;% from OpenFOAM’s. On a fine gyroid core, where the passages are only a few cells wide, it read about 2 to 3 times the solved pressure drop and heat. Run the case in OpenFOAM before you rely on a number.</p></details>
       <details><summary>Does it replace OpenFOAM?</summary>
         <p>No. You install OpenFOAM separately. Stokes writes the case, runs your OpenFOAM tools as separate processes and reads the results back. It never bundles or links OpenFOAM.</p></details>
       <details><summary>Can I use my own OpenFOAM cases?</summary>

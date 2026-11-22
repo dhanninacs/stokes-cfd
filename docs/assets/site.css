@@ -280,3 +280,27 @@ dialog.contact p { color: var(--muted); margin: 0 0 22px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* App screenshots on a light tile: inset with rounded corners, never masked. */
+.band.alt .tile:not(.dark) { background: var(--tile-alt); }
+.tile img.shot { width: calc(100% - 56px); margin: 28px auto; border-radius: 12px; }
+.tile img.shot.narrow { max-width: 360px; padding: 10px 16px; background: #f9fafb; }
+.tile.wide img.mid { max-width: 560px; }
+.tile:not(.dark) img { box-shadow: 0 0 0 1px color-mix(in srgb, var(--hair) 70%, transparent); }
+
+/* Two pictures side by side (the same case in two solvers). */
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 48px; }
+.pair > * { min-width: 0; }
+.pair figure { margin: 0; }
+.pair img { width: 100%; border-radius: 14px; }
+.pair figcaption { font-size: 15px; color: var(--muted); margin-top: 12px; }
+.pair figcaption strong { color: var(--ink); font-weight: 600; }
+.band > .wrap + .film { margin-top: 48px; }
+.film + .wrap > .tiles { margin-top: 64px; }
+
+@media (max-width: 860px) {
+  .tile img.shot { width: calc(100% - 40px); margin: 24px auto 20px; }
+}
+@media (max-width: 640px) {
+  .pair { grid-template-columns: 1fr; margin-top: 36px; }
+}
