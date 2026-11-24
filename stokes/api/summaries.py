@@ -272,9 +272,13 @@ def _energy_readers(project: Project, event: str, node: Node | None) -> list[str
     temperature profile, when the node changed (or removed) is one :data:`ENERGY_TYPES` names."""
     if event != "node.removed" and (node is None or node.type not in ENERGY_TYPES):
         return []
+    # Only `/regions/<region>/boundaries` is read, not the whole tree: a part is one of the types
+    # above, and an import announces thousands of them (tests/perf/test_tree_perf.py).
+    from stokes.api.commands.setup_plan import boundary_nodes
+
     return [
         other.id
-        for other in project.root.walk()
+        for other in boundary_nodes(project)
         if other.type == "boundary"
         and isinstance(other.params.get("profiles"), dict)
         and "temperature" in other.params["profiles"]
