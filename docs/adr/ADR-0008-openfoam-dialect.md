@@ -37,3 +37,9 @@ conjugate workflow on `foamMultiRun` (Foundation).
 
 - Users on ESI installations wait for v1.5.
 - The model must stay free of dialect vocabulary; code review enforces it.
+
+## Amendment (ADR-0029, proposed 2026-10-28)
+
+The consequence "the model must stay free of dialect vocabulary" is amended for one case type. A
+`foam_case` node is dialect-bound by definition and records `dialect: of14`. The engineer-facing tree
+stays dialect-free. See [ADR-0029](ADR-0029-external-openfoam-cases.md).

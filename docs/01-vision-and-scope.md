@@ -30,7 +30,7 @@ stack as an arm's-length engine so the product itself can be closed and sold.
 3. **The case is an output, never an input.** Stokes compiles the OpenFOAM
    case (or the PyFluent script) from the model, deterministically. Hand
    edits live as recorded *overrides* in the model.
-4. **Named selections are the contract.** Geometry faces → named selections
+4. **Tags are the contract.** Geometry faces → tags
    → mesh patches → boundaries. Rename once, everything follows.
 5. **Never block the UI.** Anything above a few milliseconds runs in a worker
    or in the agent. Progress and cancel are always available.
@@ -68,8 +68,8 @@ you like to make.*
 
 | Area | In v1, free |
 |---|---|
-| Geometry | Import STEP, IGES, BREP, STL, OBJ, 3MF. Units, scaling, placement. Primitives (box, cylinder, sphere) and booleans. Fluid-domain extraction, enclosure boxes, inlet/outlet extension, defeaturing by face deletion and healing, face splitting by feature angle. Named selections by click, box, lasso, feature-angle growth, STEP colour and name, inversion. |
-| Meshing | snappyHexMesh, cfMesh, blockMesh, and Gmsh as an external process, behind one mesh model: base size, per-selection surface refinement, region refinement, feature edges, layers per selection. checkMesh quality tree with histograms and "show the bad cells". Live cell-count estimate. |
+| Geometry | Import STEP, IGES, BREP, STL, OBJ, 3MF. Units, scaling, placement. Primitives (box, cylinder, sphere) and booleans. Fluid-domain extraction, enclosure boxes, inlet/outlet extension, defeaturing by face deletion and healing, face splitting by feature angle. Tags by click, box, lasso, feature-angle growth, STEP colour and name, inversion. |
+| Meshing | snappyHexMesh, cfMesh, blockMesh, and Gmsh as an external process, behind one mesh model: base size, per-tag surface refinement, region refinement, feature edges, layers per tag. checkMesh quality tree with histograms and "show the bad cells". Live cell-count estimate. |
 | Physics | Steady and transient incompressible flow, laminar / RANS (k-ω SST, k-ε, Spalart-Allmaras) / LES; energy as a passive scalar and as compressible or buoyant flow; conjugate heat transfer with fluid and solid regions; porous media; MRF. |
 | Materials | Built-in constant and polynomial catalogue; CoolProp; Cantera for gas mixtures; REFPROP through CoolProp when the user has it installed. |
 | Units | Full unit systems (SI, mm-based, imperial) and unit-checked expressions in every numeric field. |

@@ -16,9 +16,10 @@
 
 **Stokes is a desktop CFD workbench and graphical interface for OpenFOAM®
 Foundation 14.** Import a STEP file or model the part in the app, click faces
-to make them inlets, outlets, walls or symmetry planes, preview the flow on the
-GPU, mesh with snappyHexMesh, cfMesh or Gmsh, run the solver and look at slices,
-streamlines and iso-surfaces, in one window. Every action is
+to make them inlets, outlets, walls or symmetry planes (with values that can
+change in time), preview the flow on the GPU, mesh with snappyHexMesh, cfMesh or
+Gmsh, run the solver steady or transient and look at slices, streamlines and
+iso-surfaces, in one window. Every action is
 also an API call, so scripts and LLM agents can drive a simulation the same way
 you do.
 
@@ -110,6 +111,23 @@ the flow and heat go and does not size an exchanger. The exchanger run shown
 stopped at its 500-iteration limit, not converged, with the two streams' heat
 agreeing to 8.8 %.
 
+### Values that change in time
+
+The ball in the duct again, run transient with the inlet pulsing at
+0.3 ± 0.15 m/s twice a second, meshed with the **Fast** snappyHexMesh profile
+(72,618 cells in 23 s on 8 cores). 1 s simulated in 2,452 adaptive steps, 3 min
+45 s on 8 cores, 50 frames saved.
+
+| | |
+|---|---|
+| ![The inlet's sine profile with its plot](docs/images/pulse-inlet-sine.jpg) **A profile, with a plot.** Constant, table (paste from a spreadsheet), sine or pulse, with units. The setup check says when a run is too short or too coarse in time. | ![The Run card of the transient run](docs/images/pulse-run-card.jpg) **The Run card** suggests how often to save (about 20 frames a period) and says how much time was simulated. |
+| ![Speed at 0.62 s, inlet near its peak](docs/images/pulse-speed-peak.jpg) **t = 0.62 s**, inlet near its peak: up to 0.70 m/s. | ![Speed at 0.88 s, inlet near its trough](docs/images/pulse-speed-trough.jpg) **t = 0.88 s**, near its trough: up to 0.28 m/s, on the same colour scale (the range spans every saved time). |
+
+![The Results card with the time slider, Play and the speed in the middle plane](docs/images/pulse-results-time.jpg)
+
+The time slider and Play drive the picture, the pressure drop, the Monitors
+table and the Streams.
+
 ## What you get
 
 - **A guided path and a full tree.** *Guided* mode walks Geometry → Fluid →
@@ -117,20 +135,25 @@ agreeing to 8.8 %.
   every setting. Both edit the same model.
 - **CAD to mesh.** STEP import (Open CASCADE), face picking and tagging,
   snappyHexMesh, cfMesh (tet, polyhedral, hex-dominant), blockMesh and Gmsh
-  (tetrahedra with prism layers), with 2D and axisymmetric modes.
+  (tetrahedra with prism layers), with 2D and axisymmetric modes. A **Fast**
+  snappyHexMesh profile makes about 17 % fewer cells and meshes quicker.
 - **Model it in the app.** Primitives, sketches pulled into shapes, booleans,
   patterns, offset and shell, and gyroid, Schwarz P and diamond lattices, with
   a section view through the body and through the mesh.
 - **Fast mode.** A GPU lattice-Boltzmann preview drawn live in a plane. A quick
   look, not a sign-off. It needs a GPU and a part modelled in the app.
-- **Real solvers.** OpenFOAM Foundation 14: laminar and RANS (k-ε, k-ω SST),
-  energy equation, conjugate heat transfer across fluids and solids, parallel
+- **Real solvers.** OpenFOAM Foundation 14, steady or transient: laminar and
+  RANS (k-ε, k-ω SST), energy equation, conjugate heat transfer across fluids and solids, parallel
   runs over MPI, stop and resume. coupledSimpleFoam is an optional coupled
   engine.
+- **Values that change in time.** An inlet, outlet or wall value can follow a
+  table pasted from a spreadsheet, a sine or a pulse, with a preview plot and
+  setup checks for a run that is too short or too coarse in time.
 - **Results you can use.** Slices, iso-surfaces and 3-D contours, clips,
   wall-following streamlines, vectors, probes, line plots, a Streams table
   (flow, pressure drop, temperatures and heat per stream), a field calculator,
-  reports and exports.
+  reports and exports. Transient runs get a time slider and Play that drive the
+  view, the pressure drop, the monitors and the Streams.
 - **Quantities everywhere.** Every number carries a unit; type `2 [m/s]` or
   `U_in * 1.5`.
 - **Agent-ready.** One Python API sits behind the window, the `stokes` command
@@ -162,11 +185,11 @@ agreeing to 8.8 %.
 | macOS | Not supported. |
 | Geometry import | STEP (also IGES and BREP from the command line). |
 | Modelling in the app | Primitives, sketches, booleans, patterns, offset and shell, gyroid, Schwarz P and diamond lattices. |
-| Meshers | snappyHexMesh, blockMesh, cfMesh (hex-dominant, tetrahedral, polyhedral), poly-hexcore and Gmsh (tetrahedra with prism layers); 2D planar and axisymmetric modes. |
-| Physics | Incompressible and heat-transfer flows: laminar, k-ε, k-ω SST, energy equation, conjugate heat transfer. |
+| Meshers | snappyHexMesh (balanced or Fast profile), blockMesh, cfMesh (hex-dominant, tetrahedral, polyhedral), poly-hexcore and Gmsh (tetrahedra with prism layers); 2D planar and axisymmetric modes. |
+| Physics | Incompressible and heat-transfer flows, steady or transient: laminar, k-ε, k-ω SST, energy equation, conjugate heat transfer. Boundary values can vary in time (table, sine, pulse). |
 | Fast mode | GPU lattice-Boltzmann preview for parts modelled in the app. A preview, not a validated prediction. |
-| Post-processing | Slices, iso-surfaces, 3-D contours, clips, streamlines, vectors, probes, line plots, Streams table, reports, picture export. |
-| Installer | None yet: run from source. Version 0.0.1.dev0, pre-alpha. |
+| Post-processing | Slices, iso-surfaces, 3-D contours, clips, streamlines, vectors, probes, line plots, Streams table, reports, picture export; a time slider and Play for transient runs. |
+| Installer | None yet: run from source (on Windows, `scripts\setup-windows.ps1` does the setup in one go). Version 0.0.1.dev0, pre-alpha. |
 
 ## Install and run
 
@@ -228,12 +251,17 @@ author.
 It is source-available rather than OSI open source: the code is public, but the
 licence does not allow commercial use.
 
+**Can it run transient cases?**
+Yes. Switch the Run card to transient, and give a boundary a value that
+changes in time if you need one. The results get a time slider and Play.
+
 **Can I import CAD?**
 Yes: STEP files in the window; STEP, IGES and BREP from the command line.
 
 **Which meshers can I use?**
-snappyHexMesh and blockMesh, plus cfMesh's hex-dominant, tetrahedral and
-polyhedral meshers and a poly-hexcore option. cfMesh is included in FoamWin; on
+snappyHexMesh and blockMesh, cfMesh's hex-dominant, tetrahedral and
+polyhedral meshers, a poly-hexcore option, and Gmsh for tetrahedra with prism
+layers. cfMesh is included in FoamWin; on
 Linux you build it once ([how](docs/INSTALL-LINUX.md)).
 
 **Can I use it on a remote machine?**
