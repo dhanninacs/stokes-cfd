@@ -113,7 +113,7 @@ Every warning has the same shape, in `workspace.get` and in command results:
 | `workspace.version` | notice or invalid | version missing or newer (notice), or not a positive integer (invalid); the document is read as version 1 |
 | `workspace.duplicate` | notice | a duplicate list entry, or a second place of one panel or island in one layer, was removed |
 | `workspace.restored` | notice | a built-in panel, island or top-bar item returned to its default place |
-| `workspace.shortcut_conflict` | notice | one chord is bound to several actions |
+| `workspace.shortcut_conflict` | notice | one chord is bound to two or more actions **of the same context**. A chord shared across contexts is a design, not a clash: `tree.menu` (context `tree`) and `context.menu` (context `global`) both take `Shift+F10` and `ContextMenu`, and the tree consumes them while it has focus. An action id this build does not know counts as `global`, so an unfamiliar id cannot hide a real clash. |
 | `workspace.required` | invalid | `palette.open` lost its chord and got its default back |
 | `workspace.no_effect` | notice | a `--cup-*` token in a theme whose base is not Cupertino |
 | `workspace.kept_aside` | notice | an unreadable file was moved to `.bak` before a write |
@@ -157,9 +157,10 @@ read as 1; a newer one is read as 1 with its unknown keys kept.
 ### `theme`
 
 A built-in theme `{"name": N}` with N one of `dark`, `light`, `cupertino`,
-`cupertino-dark`, `auto`, `cupertino-auto` (default `auto`), or a custom theme
+`cupertino-dark`, `ubuntu`, `ubuntu-dark`, `auto`, `cupertino-auto`,
+`ubuntu-auto` (default `auto`), or a custom theme
 `{"base": B, "title": "...", "tokens": {"--token": "value", ...}}` with B one
-of the first four. Token names, kinds and value rules are in
+of the base names above. Token names, kinds and value rules are in
 [theme-tokens.md](theme-tokens.md).
 
 ### `layout`
@@ -184,7 +185,7 @@ A panel entry:
 
 | Key | Type | Required | Meaning |
 |---|---|---|---|
-| `id` | panel id (`[a-z][a-z0-9]*` with `.`, `_` or `-` between parts) | yes | `tree`, `properties`, `output`, `design-table` or `plots` today; registered plug-in panels later. Unknown ids are kept for the front end's registry to resolve. |
+| `id` | panel id (`[a-z][a-z0-9]*` with `.`, `_` or `-` between parts) | yes | `tree`, `properties`, `output`, `design-table`, `plots` or `optimise` (ADR-0038) today; registered plug-in panels later. Unknown ids are kept for the front end's registry to resolve. |
 | `order` | integer, 0 to 1000 | filled from the position | Display order in the slot (lowest first; ties keep list order). |
 | `size` | number, 24 to 4096 | no | In a split, the panel's share in px (height in left and right, width in bottom); panels without one share the rest equally. In float, the card's width. Ignored in tabs. |
 | `collapsed` | boolean | no | In a split, the panel folded to its header. In float, the card folded. |
@@ -240,6 +241,7 @@ lights at the left whatever its position.
 | `stages` | object: stage → list of group paths | see the example | Which groups a stage works in. Stages: `Geometry`, `Mesh`, `Physics`, `Solve`, `Results`, `Explore`. Paths start with `/` and may name sub-groups (`/physics/materials`). It replaces the front end's `STAGE_GROUPS`. |
 | `linkStage` | boolean | `true` | Stage chips and the tree navigate each other: choosing a stage opens its groups and folds the others; selecting a node moves to its stage. |
 | `defaultExpanded` | integer, 0 to 8 | `2` | Tree levels open when a project loads: 0 all folded, 1 the top-level groups open, 2 also the groups inside them (today's behaviour). |
+| `layout` | `outline` or `groups` | `outline` | How the tree is arranged: the outline (sections and rows) or the plain groups. **Optional**, because it was added after documents were already saved - an absent value reads as `outline`. |
 
 ### `shortcuts`
 
@@ -258,7 +260,10 @@ Keys: `A`–`Z`, `0`–`9`, `` ` - = [ ] \ ; ' , . / ``, `Plus` (for `+`), `F1`�
 `Esc`, `Del`, `Up` ...) and stored canonical. Match letters, digits and
 punctuation by `KeyboardEvent.code` (`KeyF`, `Digit1`, `Comma`) so that Shift
 and keyboard layouts do not change them. Global actions do not fire while a
-text field has focus; tree actions fire when the tree has focus.
+text field has focus; tree actions fire when the tree has focus. Build actions have handlers only
+while the build ribbon is open; they come before the global actions of the same letter, and the
+keymap runs the first action of a chord that has a handler, so `S`, `P`, `M` and `C` reach Section,
+Paint, Measure and nothing otherwise.
 
 | Action id | Default | Context | What it does |
 |---|---|---|---|
@@ -269,22 +274,73 @@ text field has focus; tree actions fire when the tree has focus.
 | `stage.5` | `5` | global | Go to the Results stage |
 | `stage.6` | `6` | global | Go to the Explore stage |
 | `view.fit` | `F` | global | Fit the model to the view |
+| `view.fitAll` | `Alt+F` | global | Fit every body, the fluid included |
 | `view.projection` | `O` | global | Switch between perspective and orthographic |
 | `view.mode.cycle` | `V` | global | Cycle shaded, shaded with edges, wireframe |
-| `view.section` | `S` | global | Section view (milestone M1) |
-| `view.measure` | `M` | global | Measure (milestone M1) |
+| `view.nav.cycle` | `Shift N` | global | Cycle the mouse scheme: CAD, ParaView, Blender, Select/Orbit |
+| `build.sketch` | `S` | build | Open the sketcher (only while the build ribbon is open) |
+| `build.pull` | `P` | build | Pull: open the picked sketched body's sketch, where its depth is |
+| `build.move` | `M` | build | Move the picked body |
+| `build.combine` | `C` | build | Combine the picked bodies |
+| `view.section` | `S` | global | Section view (not built yet) |
+| `view.measure` | `M` | global | Measure: click two points on the model for the distance between them (see below) |
 | `selection.isolate` | `I` | global | Isolate the selected patch, or show all again |
+| `selection.name` | `Ctrl+Shift+T` | global | Tag the picked faces or bodies |
+| `mesh.generate` | `Ctrl+G` | global | Generate the mesh |
+| `mesh.task.next` | `Alt+ArrowDown` | global | Move to the next meshing task |
+| `mesh.task.previous` | `Alt+ArrowUp` | global | Move to the previous meshing task |
+| `pick.mode.cycle` | `B` | global | Switch between picking bodies and faces |
+| `selection.grow` | `G` | global | Grow the selection along smooth surfaces |
+| `selection.lasso` | `L` | global | Lasso: draw a box around what to pick |
 | `selection.hide` | `H` | global | Hide or show the selected patch |
 | `selection.clear` | `Escape` | global | Clear the selection and close the palette |
+| `selection.mode` | none | global | Toggle body and face picking |
+| `selection.previous` | none | global | Previous selection |
+| `selection.paint` | `P` | global | Paint select: drag over faces to add them, Ctrl to remove them |
+| `prepare.enclosure` | none | global | Enclose the picked bodies |
+| `prepare.extractFluid` | none | global | Extract the fluid around a seed point |
+| `prepare.boolean` | none | global | Fuse, cut or intersect the picked bodies |
+| `prepare.repair` | none | global | Heal, sew or solidify the picked bodies |
+| `create.sketch` | none | global | Sketch a profile and pull or revolve it |
+| `create.shape` | none | global | Create a shape: box, cylinder, sphere, torus… (ADR-0035) |
+| `create.transform` | none | global | Move, rotate, mirror or scale the picked body |
+| `create.combine` | none | global | Union, subtract, intersect or split the picked bodies |
+| `create.pattern` | none | global | Copy the picked body in a row or around an axis (ADR-0036) |
+| `create.modify` | none | global | Offset or shell the picked body (ADR-0036) |
 | `palette.open` | `Ctrl+K` | global | Open the command palette (always keeps a chord) |
 | `history.undo` | `Ctrl+Z` | global | Undo |
 | `history.redo` | `Ctrl+Y` or `Ctrl+Shift+Z` | global | Redo |
 | `project.save` | `Ctrl+S` | global | Save the project |
 | `project.saveAs` | `Ctrl+Shift+S` | global | Save the project to a new folder |
 | `project.open` | `Ctrl+O` | global | Open a project |
-| `project.importStep` | `Ctrl+I` | global | Import a STEP file into the project |
+| `project.importStep` | `Ctrl+I` | global | Import a geometry file into the project |
+| `project.new` | `Ctrl+N` | global | Create a new project |
+| `project.saveCopy` | none | global | Copy the project without switching to it |
+| `project.close` | `Ctrl+W` | global | Close the project |
+| `project.startScreen` | none | global | Go to the Start screen |
 | `display.settings` | `Ctrl+,` | global | Open Display settings |
 | `workspace.customise` | `Ctrl+Shift+C` | global | Enter or leave Customise mode |
+| `layout.toggleTree` | `Ctrl+B` | global | Show or hide the tree |
+| `layout.toggleDetails` | `Ctrl+Shift+B` | global | Show or hide the Details pane |
+| `layout.reset` | — | global | Reset the panel layout |
+| `app.settings` | `Ctrl+Shift+,` | global | Open Settings |
+| `selection.clearPick` | none | global | Clear the pick |
+| `context.menu` | `Shift+F10` or `ContextMenu` | global | Open the context menu |
+| `view.fitSelection` | none | global | Fit the selection to the view |
+| `view.showAll` | `Shift+F` | global | Show every hidden body again |
+| `view.from.front` | `Alt+1` | global | Look from the front |
+| `view.from.back` | `Alt+2` | global | Look from the back |
+| `view.from.left` | `Alt+3` | global | Look from the left |
+| `view.from.right` | `Alt+4` | global | Look from the right |
+| `view.from.top` | `Alt+5` | global | Look from the top |
+| `view.from.bottom` | `Alt+6` | global | Look from the bottom |
+| `view.from.iso` | `Alt+0` | global | Look from an isometric corner |
+| `selection.siblings` | none | global | Select the parts of the same file |
+| `selection.allFaces` | none | global | Select every face of the body |
+| `edit.rename` | none | global | Rename the selection |
+| `edit.delete` | none | global | Delete the selection (with an Undo toast) |
+| `edit.copyName` | none | global | Copy the selection's name |
+| `edit.copyPath` | none | global | Copy the selection's path |
 | `tree.rename` | `F2` | tree | Rename the selected node |
 | `tree.delete` | `Delete` | tree | Delete the selected node (with an Undo toast) |
 | `tree.menu` | `Shift+F10` or `ContextMenu` | tree | Open the row menu |
@@ -292,6 +348,19 @@ text field has focus; tree actions fire when the tree has focus.
 Tree navigation (arrows, `Home`, `End`, `PageUp`, `PageDown`, `Enter`) and the
 properties keys (`Enter` applies, `Esc` reverts) are field behaviour, not
 actions, and cannot be rebound.
+
+**Measure** (`view.measure`, `M`, the Modes island's Measure button) is view state,
+not a command: it changes no model state and writes no journal record, like the scale
+bar. While the mode is on, the button shows its active state and every click that
+meets a face records the surface point under the pointer — the ray's point, with no
+vertex or edge snapping. The first click sets point A, the second sets point B and
+completes the measurement: a line with a marker at each end, drawn in world space in
+the `--accent` colour so it stays where it was measured while the camera moves, and
+the distance (`formatLength`'s km/m/mm/µm ladder) as a label at the projected
+midpoint, in the same small tabular `--text` language as the scale bar. A third click
+starts a new measurement at the point it picked, so two unrelated distances are never
+chained through a point the user did not click. `Esc` leaves the mode and takes the
+measurement with it.
 
 ### `viewport`
 
@@ -312,6 +381,23 @@ without writing the workspace.
 | `default` | engine id or `null` | `null` | The engine Run uses (ADR-0011). Per project with a user fallback: set it in the project scope for one project. |
 | `runPresets` | object: name → object | `{}` | Named run settings, opaque to the workspace and owned by the engine adapters. Names: a letter, then letters, digits, `_` or `-`. |
 
+### `preferences`
+
+**The user's own settings, and never the project's.** A project file is shared, so a mouse scheme in
+one would decide how the interface behaves for whoever opens it — a choice made by someone else,
+arriving in a file they were sent. `workspace.set` with `scope=project` refuses a path under this
+section (`workspace.user_only`), `sanitise(…, "project")` drops a section it finds on disk with the
+same finding, and **presets never carry it**: `catalog.save` drops it, so applying a preset cannot
+impose the saver's scheme. "Reset workspace" resets it with the rest of the user scope.
+
+Its keys merge one at a time — the section is not atomic, and not part of `ARRANGEMENT`.
+
+| Key | Type | Default | Meaning | Who reads it |
+|---|---|---|---|---|
+| `mouse.scheme` | `cad`, `paraview`, `blender`, `toggle` | `paraview` | The mouse scheme. **The ids are the front end's** (`web/src/app/navModes.ts`), which is what applies them; a name invented here would validate on write and do nothing. | the viewport (T-178 wires the dialog) |
+| `mouse.orbitLeft` | flag | `false` | Left-drag orbits instead of picking, without changing the scheme. | the viewport |
+| `import.units` | `mm`, `cm`, `m`, `in`, `ft` | `mm` | The unit a CAD file is assumed to be drawn in when it declares none — the units dialog's starting answer. | the import flow |
+
 ## Commands
 
 All are free and need no open project (`requires_project` false). The writing
@@ -327,7 +413,9 @@ a folder, otherwise `api.no_project` (no project) or
 | `workspace.reset` | `scope`, `path?` | `{scope, path, removed}`. Without `path` the scope's file is deleted; with it, that key is removed (empty objects are pruned) so the layer below shows. A list is one value: reset the whole list, not an entry. | `{scope, path}` if something was removed |
 | `workspace.presets` | none | `{presets: [{name, title, description, source, sections, path?, warnings?}], warnings}` | none |
 | `workspace.apply_preset` | `name`, `scope?` | `{name, title, scope, sections, overridden, warnings}`. `overridden` lists the sections the project still overrides when the user scope was written. | `{scope, path: null}` |
-| `workspace.save_preset` | `name`, `title?`, `description?` | `{name, path, sections}`: the effective workspace saved as `~/.stokes/presets/<name>.json`. Names are 1–64 of `a-z 0-9 _ -`, not a shipped name; an existing user preset is replaced. | `{scope: "presets", path: name}` |
+| `workspace.save_preset` | `name`, `title?`, `description?` | `{name, path, sections}`: the effective workspace saved as `~/.stokes/presets/<name>.json`. Names are 1–64 of `a-z 0-9 _ -`, not a shipped name; an existing user preset is replaced. **A preset never carries `preferences`** (see below). | `{scope: "presets", path: name}` |
+| `app.info` | none | `{version, python, platform, home, workspace: {user, project}}`. Where Stokes keeps its files and what it runs on: what the Settings → About page reads. **No machine name, no user name, no environment dump** — `platform` is `platform.platform()`, never `platform.node()`. `workspace.project` is `null` when no project is open. Needs no project. | none |
+| `app.notices` | none | `{text, source}`: the Markdown of `THIRD-PARTY-NOTICES.md`, with `source` `"packaged"` (a built wheel) or `"repository"` (a checkout). Capped at 1 MiB; missing in both places raises `app.notices_missing` naming both paths. Needs no project. | none |
 | `workspace.export` | `scope?` (`effective` default, `user`, `project`), `sections?` | `{scope, sections, text}`: a workspace document as JSON text (a scope's document is exported sanitised). | none |
 | `workspace.import` | `text`, `scope?` | `{scope, sections, overridden, warnings}`. Each section the document holds replaces that section in the scope; invalid values are left out and reported. Accepts exports, preset files and theme files. | `{scope, path: null}` |
 
@@ -376,6 +464,7 @@ preset.
 | `tree.groupOrder` | default | default | default | **geometry, physics, regions, mesh, solver, monitors, runs, scenes** | default |
 | `tree.linkStage` | true | true | true | **false** | true |
 | `tree.defaultExpanded` | 2 | 2 | 2 | **1** | 2 |
+| `tree.layout` | outline | outline | outline | outline | outline |
 
 ## Consuming the document (front end)
 
@@ -425,49 +514,169 @@ This is `workspace.get`'s `document` with no user or project file, and what
 ```json
 {
   "version": 1,
-  "theme": {"name": "auto"},
+  "theme": {
+    "name": "auto"
+  },
   "layout": {
-    "left": {"mode": "tabs", "size": 300, "collapsed": false, "panels": [{"id": "tree", "order": 0}]},
-    "right": {"mode": "tabs", "size": 320, "collapsed": false, "panels": [{"id": "properties", "order": 0}, {"id": "plots", "order": 1}]},
+    "left": {
+      "mode": "split",
+      "size": 300,
+      "collapsed": false,
+      "panels": [
+        {
+          "id": "tree",
+          "order": 0
+        },
+        {
+          "id": "details",
+          "order": 1
+        }
+      ]
+    },
+    "right": {
+      "mode": "tabs",
+      "size": 320,
+      "collapsed": true,
+      "panels": []
+    },
     "bottom": {
       "mode": "tabs",
       "size": 240,
       "collapsed": true,
-      "panels": [{"id": "output", "order": 0, "tabs": ["console", "log", "residuals", "reports"]}, {"id": "design-table", "order": 1}]
+      "panels": [
+        {
+          "id": "output",
+          "order": 0,
+          "tabs": [
+            "console",
+            "log",
+            "residuals",
+            "reports"
+          ]
+        },
+        {
+          "id": "design-table",
+          "order": 1
+        }
+      ]
     },
-    "float": {"mode": "tabs", "size": 320, "collapsed": false, "panels": []},
+    "float": {
+      "mode": "tabs",
+      "size": 320,
+      "collapsed": false,
+      "panels": []
+    },
+    "hidden": [
+      "properties",
+      "mesh",
+      "conditions",
+      "solve",
+      "results",
+      "plots",
+      "optimise"
+    ]
+  },
+  "islands": {
+    "bl": [
+      "modes"
+    ],
+    "br": [
+      "view",
+      "gizmo"
+    ],
+    "tl": [],
+    "tr": [],
     "hidden": []
   },
-  "islands": {"bl": ["modes"], "br": ["view", "gizmo"], "tl": [], "tr": [], "hidden": []},
   "topbar": {
     "items": [
-      {"id": "logo", "visible": true},
-      {"id": "project", "visible": true},
-      {"id": "status.connection", "visible": true},
-      {"id": "status.units", "visible": true},
-      {"id": "status.engine", "visible": true},
-      {"id": "status.licence", "visible": true},
-      {"id": "stages", "visible": true},
-      {"id": "commands", "visible": true},
-      {"id": "appearance", "visible": true},
-      {"id": "run", "visible": true},
-      {"id": "window", "visible": true}
+      {
+        "id": "logo",
+        "visible": true
+      },
+      {
+        "id": "project",
+        "visible": true
+      },
+      {
+        "id": "status.connection",
+        "visible": true
+      },
+      {
+        "id": "status.units",
+        "visible": true
+      },
+      {
+        "id": "status.engine",
+        "visible": true
+      },
+      {
+        "id": "status.licence",
+        "visible": true
+      },
+      {
+        "id": "stages",
+        "visible": true
+      },
+      {
+        "id": "commands",
+        "visible": true
+      },
+      {
+        "id": "appearance",
+        "visible": true
+      },
+      {
+        "id": "run",
+        "visible": true
+      },
+      {
+        "id": "window",
+        "visible": true
+      }
     ],
-    "stages": {"style": "chips"}
+    "stages": {
+      "style": "chips"
+    }
   },
   "tree": {
-    "groupOrder": ["geometry", "mesh", "physics", "regions", "solver", "monitors", "scenes", "runs", "studies"],
+    "groupOrder": [
+      "geometry",
+      "mesh",
+      "physics",
+      "regions",
+      "solver",
+      "scenes",
+      "runs",
+      "studies"
+    ],
     "hidden": [],
     "stages": {
-      "Geometry": ["/geometry"],
-      "Mesh": ["/mesh"],
-      "Physics": ["/physics", "/regions"],
-      "Solve": ["/solver", "/monitors", "/runs"],
-      "Results": ["/scenes", "/runs"],
-      "Explore": ["/studies"]
+      "Geometry": [
+        "/geometry"
+      ],
+      "Mesh": [
+        "/mesh"
+      ],
+      "Physics": [
+        "/physics",
+        "/regions"
+      ],
+      "Solve": [
+        "/solver",
+        "/runs"
+      ],
+      "Results": [
+        "/scenes",
+        "/runs"
+      ],
+      "Explore": [
+        "/studies"
+      ]
     },
     "linkStage": true,
-    "defaultExpanded": 2
+    "defaultExpanded": 2,
+    "layout": "outline"
   },
   "shortcuts": {
     "stage.1": "1",
@@ -477,28 +686,120 @@ This is `workspace.get`'s `document` with no user or project file, and what
     "stage.5": "5",
     "stage.6": "6",
     "view.fit": "F",
+    "view.fitAll": "Alt+F",
     "view.projection": "O",
     "view.mode.cycle": "V",
+    "view.nav.cycle": "Shift+N",
+    "build.sketch": "S",
+    "build.pull": "P",
+    "build.move": "M",
+    "build.combine": "C",
     "view.section": "S",
     "view.measure": "M",
+    "selection.name": "Ctrl+Shift+T",
+    "mesh.generate": "Ctrl+G",
+    "mesh.task.next": "Alt+ArrowDown",
+    "mesh.task.previous": "Alt+ArrowUp",
+    "pick.mode.cycle": "B",
+    "selection.grow": "G",
+    "selection.lasso": "L",
     "selection.isolate": "I",
     "selection.hide": "H",
     "selection.clear": "Escape",
+    "selection.mode": [],
+    "selection.previous": [],
+    "selection.paint": "P",
+    "prepare.enclosure": [],
+    "prepare.extractFluid": [],
+    "prepare.boolean": [],
+    "prepare.repair": [],
+    "create.sketch": [],
+    "create.shape": [],
+    "create.transform": [],
+    "create.combine": [],
+    "create.pattern": [],
+    "create.modify": [],
     "palette.open": "Ctrl+K",
     "history.undo": "Ctrl+Z",
-    "history.redo": ["Ctrl+Y", "Ctrl+Shift+Z"],
+    "history.redo": [
+      "Ctrl+Y",
+      "Ctrl+Shift+Z"
+    ],
     "project.save": "Ctrl+S",
     "project.saveAs": "Ctrl+Shift+S",
-    "project.importStep": "Ctrl+I",
     "project.open": "Ctrl+O",
+    "project.importStep": "Ctrl+I",
+    "project.new": "Ctrl+N",
+    "project.saveCopy": [],
+    "project.close": "Ctrl+W",
+    "project.startScreen": [],
     "display.settings": "Ctrl+,",
     "workspace.customise": "Ctrl+Shift+C",
+    "layout.toggleTree": "Ctrl+B",
+    "layout.toggleDetails": "Ctrl+Shift+B",
+    "layout.reset": [],
+    "app.settings": "Ctrl+Shift+,",
+    "selection.clearPick": [],
+    "context.menu": [
+      "Shift+F10",
+      "ContextMenu"
+    ],
+    "view.fitSelection": [],
+    "view.showAll": "Shift+F",
+    "view.from.front": "Alt+1",
+    "view.from.back": "Alt+2",
+    "view.from.left": "Alt+3",
+    "view.from.right": "Alt+4",
+    "view.from.top": "Alt+5",
+    "view.from.bottom": "Alt+6",
+    "view.from.iso": "Alt+0",
+    "selection.siblings": [],
+    "selection.allFaces": [],
+    "edit.rename": [],
+    "edit.delete": [],
+    "edit.copyName": [],
+    "edit.copyPath": [],
     "tree.rename": "F2",
     "tree.delete": "Delete",
-    "tree.menu": ["Shift+F10", "ContextMenu"]
+    "tree.menu": [
+      "Shift+F10",
+      "ContextMenu"
+    ]
   },
-  "viewport": {"projection": "perspective", "viewMode": "shaded", "grid": true, "background": "theme"},
-  "engines": {"default": null, "runPresets": {}}
+  "viewport": {
+    "projection": "perspective",
+    "viewMode": "shaded",
+    "grid": true,
+    "axisLines": true,
+    "shadow": true,
+    "reflections": true,
+    "edges": true,
+    "lowDetail": false,
+    "gizmo": true,
+    "scaleBar": true,
+    "background": "theme"
+  },
+  "engines": {
+    "default": null,
+    "runPresets": {}
+  },
+  "preferences": {
+    "mouse": {
+      "scheme": "paraview",
+      "orbitLeft": false
+    },
+    "import": {
+      "units": "mm"
+    },
+    "compute": {
+      "host": "",
+      "install": "",
+      "auto": true
+    },
+    "mesh": {
+      "stepper": "shown"
+    }
+  }
 }
 ```
 
@@ -514,6 +815,6 @@ and binds Fit to `G`:
     "bottom": {"panels": []},
     "hidden": ["design-table"]
   },
-  "shortcuts": {"view.fit": "G"}
+  "shortcuts": {"view.fit": "Ctrl+Shift+F"}
 }
 ```

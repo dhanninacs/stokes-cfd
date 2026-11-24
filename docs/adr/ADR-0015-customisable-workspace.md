@@ -76,6 +76,12 @@ that the UI, the CLI, MCP and the assistant all read and write.
    accessibility (focus order follows visual order, every control keeps an
    accessible name, shortcuts stay discoverable) and performance (a layout
    change settles within one frame; theme changes do not rebuild the scene).
+10. **Details is the single default editing surface beside the tree.** Pages
+    for Properties, Mesh, Conditions, Solve and Results render in Details for
+    the selected node. A saved right dock that repeats those pages is normalized
+    when read, while a layout that does not place both Tree and Details in the
+    left dock keeps its chosen editor placement. Right remains available for
+    optional help and reference panels; output stays in the bottom drawer.
 
 ## Alternatives considered
 

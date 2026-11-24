@@ -19,6 +19,9 @@ share and the assistant all depend on them.
 | `:root[data-theme="cupertino"]` | `web/src/themes/cupertino.css` | `cupertino` (the light appearance) |
 | `:root[data-theme="cupertino-dark"]` | `web/src/themes/cupertino.css` | `cupertino-dark` |
 | `:root[data-theme^="cupertino"]` | `web/src/themes/cupertino.css` | both Cupertino appearances |
+| `:root[data-theme="ubuntu"]` | `web/src/themes/ubuntu.css` | `ubuntu` (the light Yaru appearance) |
+| `:root[data-theme="ubuntu-dark"]` | `web/src/themes/ubuntu.css` | `ubuntu-dark` |
+| `:root[data-theme^="ubuntu"]` | `web/src/themes/ubuntu.css` | both Ubuntu appearances |
 | `:root` | `web/src/panels/panels.css` | every theme (chart series) |
 
 The "Set in" column below names the blocks that set each token. A token that
@@ -35,9 +38,9 @@ component. They are not tokens and a theme cannot set them.
 ## Applying a theme in the front end
 
 1. Set `data-theme` on `<html>` to the theme's `name`, or to the `base` of a
-   custom theme. `auto` and `cupertino-auto` resolve to the dark or light
-   appearance of their family from the operating system, as `?theme=` does
-   today.
+   custom theme. `auto`, `cupertino-auto` and `ubuntu-auto` resolve to the dark
+   or light appearance of their family from the operating system, as
+   `?theme=` does today.
 2. For a custom theme, call
    `document.documentElement.style.setProperty(token, value)` for each entry of
    `tokens`. Inline properties on the root element win over every stylesheet
@@ -56,59 +59,59 @@ Kinds are explained in the next section.
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
-| `--bg` | colour | `:root`, light, cupertino, cupertino-dark | Window background behind the viewport and every panel. |
-| `--bg-elev` | colour | `:root`, light, cupertino, cupertino-dark | Raised fills inside panels: fields, key caps, value chips. |
-| `--panel` | colour | `:root`, light, cupertino, cupertino-dark | Translucent fill of floating glass panels and islands. |
-| `--panel-solid` | colour | `:root`, light, cupertino, cupertino-dark | Opaque panel fill where translucency would hurt legibility (output drawer). |
-| `--panel-border` | colour | `:root`, light, cupertino, cupertino-dark | Hairline borders and dividers. |
-| `--panel-border-strong` | colour | `:root`, light, cupertino, cupertino-dark | Borders that must read at a glance: menus, popovers, swatches. |
-| `--track` | colour | `:root`, light, cupertino, cupertino-dark | Unfilled track of segmented controls and switches; quiet fills. |
-| `--hover` | colour | `:root`, light, cupertino, cupertino-dark | Fill of a row or button under the pointer. |
-| `--active` | colour | `:root`, light, cupertino, cupertino-dark | Fill of a row or button while pressed or switched on. |
-| `--menu-bg` | colour | `:root`, light, cupertino, cupertino-dark | Menus, popovers and the console's completion list. |
-| `--tooltip-bg` | colour | `:root`, light, cupertino, cupertino-dark | Tooltip background. |
-| `--tooltip-border` | colour | `:root`, light, cupertino, cupertino-dark | Tooltip border. |
-| `--tooltip-kbd-border` | colour | `:root`, cupertino | Outline of a key cap inside a tooltip. |
-| `--scrim` | colour | `:root`, light, cupertino, cupertino-dark | Dimming layer behind modal dialogs and the command palette. |
-| `--scroll-thumb` | colour | `:root`, light, cupertino, cupertino-dark | Scrollbar thumb. |
-| `--scroll-thumb-hover` | colour | `:root`, light, cupertino, cupertino-dark | Scrollbar thumb under the pointer. |
+| `--bg` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Window background behind the viewport and every panel. |
+| `--bg-elev` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Raised fills inside panels: fields, key caps, value chips. |
+| `--panel` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Translucent fill of floating glass panels and islands. |
+| `--panel-solid` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Opaque panel fill where translucency would hurt legibility (output drawer). |
+| `--panel-border` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Hairline borders and dividers. |
+| `--panel-border-strong` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Borders that must read at a glance: menus, popovers, swatches. |
+| `--track` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Unfilled track of segmented controls and switches; quiet fills. |
+| `--hover` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Fill of a row or button under the pointer. |
+| `--active` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Fill of a row or button while pressed or switched on. |
+| `--menu-bg` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Menus, popovers and the console's completion list. |
+| `--tooltip-bg` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Tooltip background. |
+| `--tooltip-border` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Tooltip border. |
+| `--tooltip-kbd-border` | colour | `:root`, cupertino, ubuntu, ubuntu-dark | Outline of a key cap inside a tooltip. |
+| `--scrim` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Dimming layer behind modal dialogs and the command palette. |
+| `--scroll-thumb` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Scrollbar thumb. |
+| `--scroll-thumb-hover` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Scrollbar thumb under the pointer. |
 
 ### Text
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
-| `--text` | colour | `:root`, light, cupertino, cupertino-dark | Primary text and icons. |
-| `--text-muted` | colour | `:root`, light, cupertino, cupertino-dark | Secondary text: labels, values, descriptions, chart axes. |
-| `--text-faint` | colour | `:root`, light, cupertino, cupertino-dark | Tertiary text: placeholders, hints, disabled controls. |
-| `--tooltip-text` | colour | `:root`, light, cupertino, cupertino-dark | Text in tooltips. |
-| `--logo-ink` | colour | `:root`, light, cupertino, cupertino-dark | Strokes of the logo mark on its tile. |
+| `--text` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Primary text and icons. |
+| `--text-muted` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Secondary text: labels, values, descriptions, chart axes. |
+| `--text-faint` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Tertiary text: placeholders, hints, disabled controls. |
+| `--tooltip-text` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Text in tooltips. |
+| `--logo-ink` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Strokes of the logo mark on its tile. |
 
 ### Accent and status
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
-| `--accent` | hex | `:root`, light, cupertino, cupertino-dark | The one accent: selection, active stage, primary button, focus ring, 3D selection tint. |
-| `--accent-strong` | colour | `:root`, light, cupertino, cupertino-dark | Accent under the pointer; first stop of accent gradients. |
-| `--accent-soft` | colour | `:root`, light, cupertino, cupertino-dark | Translucent accent: selected rows, text selection, focus halo. |
-| `--accent-text` | colour | `:root`, light, cupertino, cupertino-dark | Text and icons on an accent fill. |
-| `--accent-ink` | colour | `:root`, light, cupertino, cupertino-dark | The accent as text on a panel. |
-| `--accent-fill` | colour | `:root`, light, cupertino, cupertino-dark | The accent as a solid fill that carries text. |
-| `--accent-glow` | colour | `:root`, light, cupertino, cupertino-dark | Soft glow under the primary button. |
-| `--blue` | colour | `:root`, light, cupertino, cupertino-dark | Information: outlet-type data, info toasts. |
-| `--warn` | colour | `:root`, light, cupertino, cupertino-dark | Stale status (amber). |
-| `--danger` | colour | `:root`, light, cupertino, cupertino-dark | Errors, destructive actions, inlet-type data. |
-| `--ok` | hex | `:root`, light, cupertino, cupertino-dark | Success and up-to-date status; the view helper's Y axis. |
-| `--blue-soft` | colour | `:root`, light, cupertino, cupertino-dark | Translucent background behind --blue. |
-| `--warn-soft` | colour | `:root`, light, cupertino, cupertino-dark | Translucent background behind --warn. |
-| `--danger-soft` | colour | `:root`, light, cupertino, cupertino-dark | Translucent background behind --danger: error cards and lines. |
-| `--ok-soft` | colour | `:root`, light, cupertino, cupertino-dark | Translucent background behind --ok. |
+| `--accent` | hex | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | The one accent: selection, active stage, primary button, focus ring, 3D selection tint. |
+| `--accent-strong` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Accent under the pointer; first stop of accent gradients. |
+| `--accent-soft` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Translucent accent: selected rows, text selection, focus halo. |
+| `--accent-text` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Text and icons on an accent fill. |
+| `--accent-ink` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | The accent as text on a panel. |
+| `--accent-fill` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | The accent as a solid fill that carries text. |
+| `--accent-glow` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Soft glow under the primary button. |
+| `--blue` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Information: outlet-type data, info toasts. |
+| `--warn` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Stale status (amber). |
+| `--danger` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Errors, destructive actions, inlet-type data. |
+| `--ok` | hex | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Success and up-to-date status; the view helper's Y axis. |
+| `--blue-soft` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Translucent background behind --blue. |
+| `--warn-soft` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Translucent background behind --warn. |
+| `--danger-soft` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Translucent background behind --danger: error cards and lines. |
+| `--ok-soft` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Translucent background behind --ok. |
 
 ### Charts
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
 | `--series-1` | colour | `:root` (panels.css) | First residual series (defaults to --accent). |
-| `--series-2` | colour | cupertino, cupertino-dark, `:root` (panels.css) | Second residual series (defaults to --blue). |
+| `--series-2` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark, `:root` (panels.css) | Second residual series (defaults to --blue). |
 | `--series-3` | colour | `:root` (panels.css) | Third residual series (defaults to --ok). |
 | `--series-4` | colour | `:root` (panels.css) | Fourth residual series (defaults to --warn). |
 
@@ -116,22 +119,22 @@ Kinds are explained in the next section.
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
-| `--shadow` | shadow | `:root`, light, cupertino, cupertino-dark | The elevation shadow of floating panels and islands. |
-| `--shadow-pop` | shadow | `:root`, light, cupertino, cupertino-dark | Higher elevation: menus, popovers, dialogs. |
-| `--highlight` | colour | `:root`, light, cupertino, cupertino-dark | 1 px lit top edge on glass. |
-| `--focus-halo` | shadow | `:root`, cupertino, cupertino-dark | Soft ring outside the 2 px accent focus outline. |
+| `--shadow` | shadow | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | The elevation shadow of floating panels and islands. |
+| `--shadow-pop` | shadow | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Higher elevation: menus, popovers, dialogs. |
+| `--highlight` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | 1 px lit top edge on glass. |
+| `--focus-halo` | shadow | `:root`, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Soft ring outside the 2 px accent focus outline. |
 
 ### Viewport
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
-| `--vp-top` | colour | `:root`, light, cupertino, cupertino-dark | Top of the viewport background gradient. |
-| `--vp-bottom` | colour | `:root`, light, cupertino, cupertino-dark | Bottom of the viewport background gradient. |
-| `--vp-grid-minor` | hex | cupertino, cupertino-dark | Minor ground-grid lines (the viewport's own default when unset). |
-| `--vp-grid-major` | hex | cupertino, cupertino-dark | Major ground-grid lines (the viewport's own default when unset). |
-| `--vp-floor` | hex | cupertino, cupertino-dark | Faint floor disc under the part. |
-| `--vp-shadow` | hex | cupertino, cupertino-dark | Contact shadow under the part, at its darkest. |
-| `--vp-edge` | hex | cupertino, cupertino-dark | Feature-edge lines in the shaded-with-edges view mode. |
+| `--vp-top` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Top of the viewport background gradient. |
+| `--vp-bottom` | colour | `:root`, light, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Bottom of the viewport background gradient. |
+| `--vp-grid-minor` | hex | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Minor ground-grid lines (the viewport's own default when unset). |
+| `--vp-grid-major` | hex | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Major ground-grid lines (the viewport's own default when unset). |
+| `--vp-floor` | hex | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Faint floor disc under the part. |
+| `--vp-shadow` | hex | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Contact shadow under the part, at its darkest. |
+| `--vp-edge` | hex | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Feature-edge lines in the shaded-with-edges view mode. |
 
 The workspace's `viewport.background` setting ([workspace-schema.md](workspace-schema.md))
 replaces the `--vp-top`/`--vp-bottom` gradient with one colour when it is not
@@ -141,15 +144,15 @@ replaces the `--vp-top`/`--vp-bottom` gradient with one colour when it is not
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
-| `--radius` | length | `:root`, cupertino, cupertino-dark | Corner radius of panels, cards and popovers. |
-| `--radius-sm` | length | `:root`, cupertino, cupertino-dark | Corner radius of controls: buttons, fields, rows. |
+| `--radius` | length | `:root`, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Corner radius of panels, cards and popovers. |
+| `--radius-sm` | length | `:root`, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Corner radius of controls: buttons, fields, rows. |
 
 ### Fonts
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
-| `--font-sans` | font | `:root`, cupertino, cupertino-dark | Interface text. |
-| `--font-mono` | font | `:root`, cupertino, cupertino-dark | Identifiers, expressions and the console. |
+| `--font-sans` | font | `:root`, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Interface text. |
+| `--font-mono` | font | `:root`, cupertino, cupertino-dark, ubuntu, ubuntu-dark | Identifiers, expressions and the console. |
 
 ### Cupertino family only (`--cup-*`)
 
@@ -157,20 +160,20 @@ Only rules under `:root[data-theme^="cupertino"]` read these tokens.
 
 | Token | Kind | Set in | Meaning |
 |---|---|---|---|
-| `--cup-seg-selected` | colour | cupertino, cupertino-dark | Raised selected segment of segmented controls and stage chips. |
-| `--cup-seg-shadow` | shadow | cupertino, cupertino-dark | Shadow under the selected segment. |
-| `--cup-chip-text` | colour | cupertino, cupertino-dark | Text of an idle segment (darker than --text-muted on the track). |
-| `--cup-chip-hover` | colour | cupertino, cupertino-dark | Idle segment under the pointer. |
-| `--cup-field-bg` | colour | cupertino, cupertino-dark | Text field background. |
-| `--cup-field-border` | colour | cupertino, cupertino-dark | Text field border. |
-| `--cup-kbd-bg` | colour | cupertino, cupertino-dark | Key cap background. |
-| `--cup-kbd-border` | colour | cupertino, cupertino-dark | Key cap border. |
-| `--cup-logo-top` | colour | cupertino, cupertino-dark | Top of the logo tile gradient. |
-| `--cup-logo-bottom` | colour | cupertino, cupertino-dark | Bottom of the logo tile gradient. |
-| `--cup-select-idle` | colour | cupertino, cupertino-dark | Selected tree row while the tree is not focused. |
-| `--cup-dot-ok` | colour | cupertino, cupertino-dark | Status dot of a node that is fine (it says nothing). |
-| `--cup-light-border` | colour | cupertino, cupertino-dark | Outline of the traffic-light window controls. |
-| `--cup-light-idle` | colour | cupertino, cupertino-dark | Traffic lights of a window that is not in front. |
+| `--cup-seg-selected` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Raised selected segment of segmented controls and stage chips. |
+| `--cup-seg-shadow` | shadow | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Shadow under the selected segment. |
+| `--cup-chip-text` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Text of an idle segment (darker than --text-muted on the track). |
+| `--cup-chip-hover` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Idle segment under the pointer. |
+| `--cup-field-bg` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Text field background. |
+| `--cup-field-border` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Text field border. |
+| `--cup-kbd-bg` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Key cap background. |
+| `--cup-kbd-border` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Key cap border. |
+| `--cup-logo-top` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Top of the logo tile gradient. |
+| `--cup-logo-bottom` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Bottom of the logo tile gradient. |
+| `--cup-select-idle` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Selected tree row while the tree is not focused. |
+| `--cup-dot-ok` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Status dot of a node that is fine (it says nothing). |
+| `--cup-light-border` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Outline of the traffic-light window controls. |
+| `--cup-light-idle` | colour | cupertino, cupertino-dark, ubuntu, ubuntu-dark | Traffic lights of a window that is not in front. |
 | `--cup-light-close` | colour | both Cupertino | Close traffic light. |
 | `--cup-light-min` | colour | both Cupertino | Minimise traffic light. |
 | `--cup-light-zoom` | colour | both Cupertino | Zoom traffic light. |
@@ -263,8 +266,9 @@ A custom theme, as `workspace.export sections=["theme"]` writes it:
 Rules:
 
 - A theme has exactly one of `name` (`dark`, `light`, `cupertino`,
-  `cupertino-dark`, `auto`, `cupertino-auto`) and `base` (`dark`, `light`,
-  `cupertino`, `cupertino-dark`). With both, `base` wins and `name` is reported.
+  `cupertino-dark`, `ubuntu`, `ubuntu-dark`, `auto`, `cupertino-auto`,
+  `ubuntu-auto`) and `base` (`dark`, `light`, `cupertino`, `cupertino-dark`,
+  `ubuntu`, `ubuntu-dark`). With both, `base` wins and `name` is reported.
 - `tokens` and `title` (one line, at most 64 characters) belong to a custom
   theme only. `tokens` may be empty or absent; the stored theme then has
   `"tokens": {}`.

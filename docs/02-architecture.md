@@ -17,10 +17,11 @@ Stokes is one API with many clients, one agent, and engines it attaches to.
 |  server    FastAPI: WebSocket JSON-RPC over the API, events, binary geometry, web/dist    |
 |  api       ONE Python API: typed commands, queries, events; tool schemas from node schemas |
 |  model     project tree + JSON schema + units/expressions + commands + dependency graph   |
-|  geometry  OCCT (via OCP): import, tessellate, primitives, booleans, prep, selections     |
+|  geometry  OCCT (via OCP): import, tessellate, primitives, booleans, prep, tags           |
 |  native    C++ (nanobind): id-buffer picking, feature-angle growth, LOD                   |
 |  mesh / physics / compile (dialects + Fluent writer) / engines / post / license / llm     |
-|  run       runners: local-wsl · local-linux · ssh (paid) · scheduler, container (v1.5)   |
+|  run       runners: local-windows · local-wsl · local-linux · ssh (paid) · scheduler,     |
+|            container (v1.5)                                                              |
 +------------------------------------------|-----------------------------------------------+
                                            | agent protocol (socket)
 +------------------------------------------v-----------------------------------------------+
@@ -33,7 +34,7 @@ Stokes is one API with many clients, one agent, and engines it attaches to.
 |  OpenFOAM 14 (Foundation) · snappyHexMesh · cfMesh · blockMesh · Gmsh                     |
 |  coupledSimpleFoam built from source at a pinned tag (+ CUDA variant when available)      |
 |  ANSYS Fluent through PyFluent (paid feature; the user's own Fluent licence)              |
-|  Hosts: WSL2 distro on Windows · native Linux · remote Linux over SSH (paid)              |
+|  Hosts: native Windows (FoamWin, ADR-0025) · WSL2 distro · native Linux · SSH (paid)      |
 +------------------------------------------------------------------------------------------+
 ```
 
@@ -51,7 +52,9 @@ Why this shape:
   user has and builds the in-house solvers from source where needed.
 
 On native Linux with a local engine the agent runs in-process through the
-same API; on Windows it runs inside the WSL distro.
+same API. On Windows the agent runs either natively against a configured
+FoamWin environment (ADR-0025) or inside the WSL distro; both use the same
+protocol and API.
 
 ## 2. Package layout and responsibilities
 
@@ -65,13 +68,13 @@ same API; on Windows it runs inside the WSL distro.
 | `stokes.mcp` | MCP server exposing API commands and queries as tools and resources (paid flag). | api |
 | `stokes.cli` | `stokes` command: every API verb, JSON output, journal replay, project and run management. | api |
 | `stokes.llm` | Assistant: provider abstraction (Anthropic, OpenAI, Gemini, OpenAI-compatible local servers), tool-use loop over the API, conversation storage, key storage in the OS keychain (paid flag). | api |
-| `stokes.geometry` | OCCT import and healing, tessellation, persistent face identity, primitives and booleans, prep operations, named selections, STL export per selection. | model, OCP |
+| `stokes.geometry` | OCCT import and healing, tessellation, persistent face identity, primitives and booleans, prep operations, tags, STL export per tag. | model, OCP |
 | `stokes.native` | C++ via nanobind: id-buffer picking, triangle adjacency, feature-angle growth, connected components, LOD decimation, spatial hashing. | — |
 | `stokes.mesh` | Mesh model nodes, drivers (snappyHexMesh, cfMesh, blockMesh, Gmsh), cell-count estimator, quality mapping from checkMesh. | model, compile |
 | `stokes.physics` | Catalogue of models, materials (built-in, CoolProp, Cantera, REFPROP-via-CoolProp), boundary-condition types with compatibility rules. Declarative tables. | model, units |
 | `stokes.compile` | Dictionary AST, printer, parser; case writers per dialect (`of14`, later `esi`); the Fluent writer that emits PyFluent settings calls; override application; compiled-case preview. | model, physics, mesh |
 | `stokes.engines` | Engine definitions: capability predicate over the model, dictionary additions, log parsers, validation cases, build recipes. | compile |
-| `stokes.run` | Runners (local-wsl, local-linux, ssh; scheduler and container later), job state machine, queue, monitors, agent client. | engines, agent protocol |
+| `stokes.run` | Runners (local-windows, local-wsl, local-linux, ssh; scheduler and container later), job state machine, queue, monitors, agent client. | engines, agent protocol |
 | `stokes.post` | Server-side extraction with VTK (surfaces, slices, iso, streamlines, probes) packed for the viewport; reports (paid), run comparison (paid), exports. | run, VTK |
 | `stokes.app` | The desktop host: frameless Qt window with QtWebEngine, QWebChannel bridge (move, resize, window buttons, native file and folder choosers, text files read or written only at paths the user picked in those choosers this session, 1 MB cap), in-process server start-up in the workspace's theme, screenshot capture for reviews. | server, PySide6 |
 | `stokes.license` | Licence file parsing and Ed25519 verification, feature flags; the free tier runs with no licence file. | cryptography |
@@ -88,7 +91,7 @@ Rules:
 
 ## 3. The API and its clients (ADR-0010)
 
-- Commands are typed objects (`geometry.import`, `selection.grow`,
+- Commands are typed objects (`geometry.import`, `tag.grow`,
   `mesh.generate`, `run.start`, `post.slice`) with JSON schemas derived from
   the node schemas; queries return JSON; events stream progress and state.
 - **Tool generation**: the MCP tool list and the OpenAPI document are
@@ -150,7 +153,7 @@ commands, so undo is uniform and journals are command logs.
 
 ### Dependency graph and staleness
 
-Each node declares what it derives from. Changing a named selection marks
+Each node declares what it derives from. Changing a tag marks
 the mesh, the regions and the runs that used it *stale*; the tree shows a
 status dot. Compile refuses to run with unresolved staleness unless the
 caller acknowledges it.
@@ -170,16 +173,16 @@ and a derivable SQLite index.
 
 | Work | Where | Budget |
 |---|---|---|
-| Painting, input, tree, inspector, QML panels | Qt main thread | 16 ms per frame |
-| Tessellation, STEP parsing, selection growth, LOD | `QThreadPool` workers (OCCT and `native` release the GIL) | cancellable, progress every 100 ms |
-| Rendering | VTK on the main thread, LOD actors during interaction | 60 fps on a discrete GPU; 30 fps in reduced-quality mode on integrated graphics |
+| Painting, input, tree, inspector, web panels | Chromium renderer (QtWebEngine) | 16 ms per frame |
+| Tessellation, STEP parsing, selection growth | worker process / `QThreadPool` (OCCT releases the GIL) | cancellable, progress every 100 ms |
+| Rendering | three.js (WebGL) in the renderer, on demand | 60 fps on a discrete GPU; many parts use ADR-0019's batched path |
 | API server, MCP server, assistant | asyncio loop on a separate thread, marshalled onto the main thread per command | under 200 ms per model edit |
 | Meshing, solving, extraction, builds | agent process (local or remote) | streamed progress, cancel within 1 s |
 | Log parsing, residual streams | agent | 10 Hz, coalesced |
 
-Reduced-quality mode (B6): LOD always on, no edge rendering, one light,
-lower-resolution picking buffer, surface-only mesh display. Chosen
-automatically on integrated GPUs, switchable in the view island.
+Reduced-quality mode (B6) was a VTK-viewport feature (ADR-0004) and is **not**
+carried into the web viewport (ADR-0013); the many-part answer is ADR-0019's
+batched path, which is automatic above 100 parts.
 
 ## 6. The main data flow
 
@@ -219,9 +222,9 @@ VTK reads.
 | STEP import 20 k faces | < 20 s, first parts visible < 2 s | progressive tessellation per body, workers |
 | Face pick at 5 M triangles | < 16 ms | id-buffer picking in `native` |
 | Feature-angle growth over 20 M triangles | < 300 ms | C++ adjacency and BFS, precomputed on import |
-| Orbit at 10 M triangles | 60 fps discrete / 30 fps reduced-quality | LOD actors, one draw call per part |
+| Orbit at 10 M triangles | 60 fps discrete / batched path on integrated | ADR-0019 batched drawing; one draw call per look above 100 parts |
 | Boundary surfaces of a 10 M-cell mesh | < 10 s after meshing | agent extracts on the engine host |
-| Residual plot update | 10 Hz, no stutter | agent coalesces, pyqtgraph ring buffers |
+| Residual plot update | 10 Hz, no stutter | agent coalesces; uPlot ring buffers in the web front end |
 | Compile a case | < 1 s | pure dictionary generation, cached |
 | API command round trip (edit) | < 200 ms | in-process API; marshalled to the main thread |
 
@@ -272,6 +275,13 @@ Enforced by benchmarks in `tests/perf/` in CI on a fixed dataset.
 | 0016 | Studies as nodes: sweeps, DOE, surrogates, sensitivity, optimisation with Pareto fronts in `stokes.explore`; a `function` engine before real runs | accepted |
 | 0017 | Shape optimisation is premium: CAD-parametric with every engine first; adjoint shape and topology optimisation and sensitivity maps through adjoint-capable engines (ESI `adjointOptimisationFoam`, Fluent) | accepted |
 | 0018 | Materials: `material` nodes with `property` children and a Fluent-parity method catalogue; library materials fitted from CoolProp, Cantera and REFPROP (the library is the source of truth, the fit a cited, regenerable artefact); compile to Foundation 14's precompiled thermoTypes, tables or runtime-compiled forms; `material.*` commands and a Materials panel | accepted |
+| 0019 | Many-part rendering: batched drawing per look above a part-count threshold, batched binary mesh transfer with gzip, a tree that scales with the part count (picking is ADR-0020) | accepted |
+| 0020 | Geometry: faces addressed by (part, face id) with fingerprints; named selections as nodes; operations as parametric nodes whose outputs are derived parts with shape history; GPU id-buffer picking; STL per selection | accepted; decisions 2, 3, 4, 5 and 7 amended by 0021 |
+| 0021 | Geometry preparation: six import formats in two families through one reader and `geometry.import`; "named selection" becomes **tag**, with command, node-type and path aliases and a project migration; faces and bodies picked with the CPU raycaster first and a GPU id buffer for box and lasso, tags drawn as overlays; per-body opacity as batch buckets; a repair toolset, fluid extraction and enclosures as operations over a persisted per-part B-rep with history, a basis per part and re-run on change; boundaries reference tags | accepted; decision 2.5 amended by 0022 |
+| 0022 | Analysis set-up: one `boundary` node type with a condition `kind`, a declarative kind catalogue and the union of parameters (no vector kind; conditional fields in the catalogue), referencing a tag; `region` nodes carrying bodies (a region tag) and a material; atomic, replayable `boundary.assign` and `region.assign` with a reference guard on removal; a pure `setup.check` with readiness states and fixable findings; selection additions (mode-preserving switch, click escalation, Alt-wheel cycling, paint, find related, pick history); an in-viewport value panel with select-then-act and act-then-select; one instanced glyph per boundary off the part layer; a Conditions panel; external and internal flow helpers on ADR-0021's operations; a status readout in the drawer strip | accepted |
+| 0023 | Runs, comparison, set-up modules and templates: runs as records (not undoable nodes) with a queue and parallel slots behind one `RunExecutor` protocol so M3 attaches a real solver without a panel change; auto-named sweeps (`U_in=2.0`), study folders and branching a sweep from a finished run; a Compare view with a metrics table and a Pareto plot over any responses; named, versioned set-up modules (conditions, materials, solver, mesh) as snapshots, applied in one undo step, with `.stokesmod` files; a `slip_wall` kind and a `field_map`-driven `thermal: map` wall in the condition catalogue; application templates (cold plate, heat sink, manifold, heat exchanger) as data; shareable material libraries and an organisation folder; catalogue-driven objectives and constraints with weights and explainability (convergence, stop reasons); shape-optimisation ideas designed as later slots | accepted; owner assumptions in docs/00 S3 |
+| 0024 | Mesh jobs, results and hosts | accepted |
+| 0025 | Native Windows engine hosts (FoamWin environment handshake, Job Object supervision) and MPI meshing/solving: `cores` 1–256, decompose–run–reconstruct for snappyHexMesh and foamRun, blockMesh serial | accepted |
 
 ## 11. Reuse candidates from your own code
 
@@ -299,13 +309,13 @@ dataset.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| QML panels beside a native VTK widget (QQuickWidget compositing, focus, HiDPI) | UI jank or platform bugs | Prototype the shell in the first week of M0 on Windows and Linux; fall back to Widgets for any panel that misbehaves |
+| ~~QML panels beside a native VTK widget (QQuickWidget compositing, focus, HiDPI)~~ | ~~UI jank or platform bugs~~ | **Resolved by ADR-0013:** the web front end removed the mixed QML/native-VTK shell; nothing to prototype. |
 | User OpenFOAM installs vary (version, packaging, environment scripts) | Probing fails or compiles wrong dictionaries | v1 supports Foundation 14 only and says so; the probe reports exact findings; the build helper logs everything |
 | cfMesh compatibility with Foundation 14 | A promised mesher does not build | Verify in M2; if it needs the ESI line, ship it with the ESI dialect in v1.5 and say so in the UI |
 | OCCT STEP import on real-world CAD | Users blocked at step one | Healing pipeline, STL fallback, collect ten public STEP files for M1 tests |
 | PyFluent API churn across Fluent releases | Fluent engine breaks | Pin a PyFluent version per Stokes release; support Fluent 2024 R2 SP05 and later as PyFluent states |
 | LLM tool misuse with full control | An agent deletes or launches at scale | Journals make everything replayable and undoable; the off-by-default confirmation setting exists for cautious users |
-| Persistent face identity across re-imports | Named selections break when CAD changes | STEP names, geometric signatures, user-confirmed remap |
+| Persistent face identity across re-imports | Tags break when CAD changes | STEP names, geometric signatures, user-confirmed remap |
 | 9P / UNC bandwidth to WSL (~21 MB/s measured) | Big meshes take minutes to copy | Only STL crosses; mesh and results stay on ext4; the agent sends compact artifacts |
 | snappyHexMesh layers and leaks | Users lose trust | Pre-flight checks, quality tree with "show bad cells", presets tested on the benchmark set |
 | Part-time effort (evenings and weekends) | Calendar time stretches | Demo-first ordering in docs/06; defer Fluent, cfMesh and Gmsh if the demo slips |

@@ -23,12 +23,29 @@
   round-trip through persistence).
 - Golden files change only with a reviewed diff and a sentence in the PR
   saying why the output changed.
-- Fixtures are public or synthetic: generated geometry, OpenFOAM tutorial
-  cases, published benchmark data. The IP gate scans `tests/` too.
+- Fixtures are public or synthetic: generated geometry, published benchmark
+  data, and OpenFOAM dictionaries **written by the test itself**. No new copy
+  of an OpenFOAM tutorial is added (ADR-0029 decision 2): a test that needs a
+  real tutorial reads it from `STOKES_OF14_TUTORIALS` or the local install and
+  skips without one. `tests/fixtures/of14/` predates the rule and its future is
+  an owner decision (E4). The IP gate scans `tests/` too, and
+  `tools/check_no_foam_content.py` fails on the OpenFOAM banner or a copied
+  dictionary under `stokes/`, `agent/`, `web/` and `native/`.
 - Tests are deterministic: fixed seeds, no wall-clock assertions outside
   `perf`, no network.
 - A test that needs OpenFOAM, Fluent, a GPU or a display declares it with a
   marker and skips cleanly when the resource is absent.
+
+## Front end
+
+The helpers of `web/src` are unit tested with Vitest: `npm test` in `web/` runs every
+`src/**/*.test.ts` file (`web/vitest.config.ts`, `environment: "node"`). No DOM and no
+React: the tests cover pure functions, so a helper that needs a document, a store or a
+scene belongs in a screenshot or panel test instead. `tsconfig.json` excludes
+`src/**/*.test.ts`, so the tests are never bundled; `npm run typecheck` does not read
+them. Rules: a reducer or a formatting helper moves into its own module first
+(`src/state/pick.ts`), then gets its test; names do not change on the way out, so the
+imports keep working.
 
 ## Markers
 

@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Stokes, an OpenFOAM GUI for Windows and Linux
-description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Import STEP or model the part in the app, preview the flow on the GPU, mesh with snappyHexMesh, cfMesh or Gmsh, run and view results. Native on Windows without WSL, and on Linux.
+description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Import STEP or model the part in the app, preview the flow on the GPU, mesh with snappyHexMesh, cfMesh or Gmsh, run steady or transient with boundary values that change in time, and view results. Native on Windows without WSL, and on Linux.
 ---
 <section class="hero">
   <div class="wrap">
@@ -62,7 +62,66 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
   </div>
 </section>
 
-<section class="band" id="fast-mode" aria-labelledby="fast-title">
+<section class="band" id="transient" aria-labelledby="transient-title">
+  <div class="wrap">
+    <h2 class="headline" id="transient-title">Values that change in&nbsp;time.</h2>
+    <p class="intro">An inlet, an outlet or a wall can follow a table, a sine or a pulse instead of a
+    constant. Run it transient and the results get a time slider. Here the ball in the duct again, with
+    air pulsing in at 0.3&nbsp;±&nbsp;0.15&nbsp;m/s, twice a second.</p>
+    <div class="tiles">
+      <article class="tile">
+        <div class="copy">
+          <h3>A profile, with a plot.</h3>
+          <p>Pick a form and type its values with their units. The plot shows what the run will see.
+          A table can be pasted from a spreadsheet, and units in its header are read. The setup check
+          says when a run is too short or too coarse in time for the profile.</p>
+        </div>
+        <img class="shot narrow" src="{{ '/images/pulse-inlet-sine.jpg' | relative_url }}" width="560" height="894" alt="The inlet's time profile editor: Sine chosen, mean 0.3 m/s, amplitude 0.15 m/s, frequency 2 Hz, and a plot of two periods from 0.15 to 0.45 m/s over the 1 s run" loading="lazy">
+      </article>
+      <article class="tile">
+        <div class="copy">
+          <h3>How often to save.</h3>
+          <p>The Run card suggests <strong>Save every</strong> from the profile, about 20 frames a period,
+          and says how much time was simulated. This run: 1&nbsp;s in 2,452 adaptive steps, 3&nbsp;min
+          45&nbsp;s on 8 cores, 50 frames saved.</p>
+        </div>
+        <img class="shot narrow" src="{{ '/images/pulse-run-card.jpg' | relative_url }}" width="560" height="905" alt="The Run card set to Transient: end time 1 s, save every 0.02 s, 8 cores, finished with 1 s simulated in 2452 steps, and the residual history over time" loading="lazy">
+      </article>
+    </div>
+    <div class="pair">
+      <figure>
+        <img src="{{ '/images/pulse-speed-peak.jpg' | relative_url }}" width="1100" height="584" alt="Speed in the middle plane at 0.62 s, the inlet near its peak: fast yellow jets above and below the ball and a long wake" loading="lazy">
+        <figcaption><strong>t = 0.62&nbsp;s, inlet near its peak.</strong> Up to 0.70&nbsp;m/s round the ball.</figcaption>
+      </figure>
+      <figure>
+        <img src="{{ '/images/pulse-speed-trough.jpg' | relative_url }}" width="1100" height="584" alt="Speed in the same plane at 0.88 s, the inlet near its trough, drawn on the same colour scale: the flow is much slower everywhere" loading="lazy">
+        <figcaption><strong>t = 0.88&nbsp;s, near its trough.</strong> Up to 0.28&nbsp;m/s. Same colour scale: the range spans every saved time, so frames compare.</figcaption>
+      </figure>
+    </div>
+    <div class="tiles">
+      <article class="tile wide">
+        <div class="copy">
+          <h3>Play it back.</h3>
+          <p>The time slider and Play drive the picture, the pressure drop, the Monitors table and the
+          Streams. History leaves out the start-up spike by default. Full mode's Results panel has its
+          own slider.</p>
+        </div>
+        <img src="{{ '/images/pulse-results-time.jpg' | relative_url }}" width="1600" height="1000" alt="The Results card with the time slider at 0.62 s, Play and Loop, the colour range set over all times, and the speed in the middle plane of the duct with its legend and the pressure drop at that time" loading="lazy">
+      </article>
+      <article class="tile wide">
+        <div class="copy">
+          <h3>Fast meshing.</h3>
+          <p>One switch gives snappyHexMesh two cells between refinement levels and shorter snapping and
+          layer loops: about 17&nbsp;% fewer cells and quicker meshing, at a slightly coarser mesh. This
+          one, with three boundary layers: 72,618 cells in 23&nbsp;s on 8 cores, quality checked.</p>
+        </div>
+        <img src="{{ '/images/ball-mesh-fast.jpg' | relative_url }}" width="1600" height="1000" alt="The Mesh card with Fast meshing switched on, 72,618 cells, quality ok, built in 23 s, beside a section through the hex mesh showing the refined cells and boundary layers round the ball" loading="lazy">
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="fast-mode" aria-labelledby="fast-title">
   <div class="wrap">
     <h2 class="headline" id="fast-title">See the flow before you&nbsp;mesh.</h2>
     <p class="intro">Fast mode is a lattice-Boltzmann preview that runs on your graphics card. It draws
@@ -93,7 +152,7 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
   </div>
 </section>
 
-<section class="band alt" id="two-solvers" aria-labelledby="compare-title">
+<section class="band" id="two-solvers" aria-labelledby="compare-title">
   <div class="wrap">
     <h2 class="headline" id="compare-title">Same case, two solvers.</h2>
     <p class="intro">The ball in the duct, air in at 0.05&nbsp;m/s. Speed in the middle plane, with the same
@@ -116,7 +175,7 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
   </div>
 </section>
 
-<section class="band" id="modelling" aria-labelledby="cad-title">
+<section class="band alt" id="modelling" aria-labelledby="cad-title">
   <div class="wrap">
     <h2 class="headline" id="cad-title">Model it in the&nbsp;app.</h2>
     <p class="intro">No CAD file? Build the part here. Start from a box, a cylinder or a sphere, or sketch
@@ -143,7 +202,7 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
   </div>
 </section>
 
-<section class="band alt" id="heat-exchangers" aria-labelledby="hx-title">
+<section class="band" id="heat-exchangers" aria-labelledby="hx-title">
   <div class="wrap">
     <h2 class="headline" id="hx-title">Heat exchangers: two streams and a&nbsp;solid.</h2>
     <p class="intro">An example gyroid plate heat exchanger, set up as conjugate heat transfer: a hot
@@ -188,7 +247,7 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
   </div>
 </section>
 
-<section class="band" aria-labelledby="model-title">
+<section class="band alt" aria-labelledby="model-title">
   <div class="wrap">
     <h2 class="headline" id="model-title">Change a value.<br>The case follows.</h2>
     <p class="intro">Stokes writes the OpenFOAM case from the model you build. <strong>Raise an inlet
@@ -231,7 +290,7 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
   </div>
 </section>
 
-<section class="band alt" aria-labelledby="specs-title">
+<section class="band" aria-labelledby="specs-title">
   <div class="wrap">
     <h2 class="headline" id="specs-title">Tech specs.</h2>
     <dl class="specs">
@@ -240,20 +299,21 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
       <div><dt>Linux</dt><dd><span class="yes">Yes</span>, with the official OpenFOAM&nbsp;14 packages. Less tested than Windows so far.</dd></div>
       <div><dt>macOS</dt><dd><span class="no">Not supported.</span></dd></div>
       <div><dt>Geometry</dt><dd>STEP import through Open CASCADE. IGES and BREP from the command line. Or model in the app: primitives, sketches, booleans, patterns, offset and shell, and gyroid, Schwarz&nbsp;P and diamond lattices.</dd></div>
-      <div><dt>Meshing</dt><dd>snappyHexMesh, blockMesh, cfMesh hex-dominant, tetrahedral, polyhedral and poly-hexcore, and Gmsh tetrahedra with prism layers. 2D planar and axisymmetric. A section view through the cells.</dd></div>
-      <div><dt>Physics</dt><dd>Laminar, k-ε and k-ω SST, with the energy equation. Conjugate heat transfer across fluids and solids. Parallel runs over MPI.</dd></div>
+      <div><dt>Meshing</dt><dd>snappyHexMesh, with a Fast profile for about 17&nbsp;% fewer cells, blockMesh, cfMesh hex-dominant, tetrahedral, polyhedral and poly-hexcore, and Gmsh tetrahedra with prism layers. 2D planar and axisymmetric. A section view through the cells.</dd></div>
+      <div><dt>Physics</dt><dd>Steady or transient. Laminar, k-ε and k-ω SST, with the energy equation. Conjugate heat transfer across fluids and solids. Parallel runs over MPI.</dd></div>
+      <div><dt>Boundaries</dt><dd>Inlets, outlets, walls and symmetry planes. A value can be constant or follow a table, a sine or a pulse in time, written as an OpenFOAM&nbsp;14 time function.</dd></div>
       <div><dt>Solvers</dt><dd>OpenFOAM’s <code>foamRun</code> and <code>foamMultiRun</code>, and coupledSimpleFoam as an optional coupled engine. Under-relaxation factors can be set for steady runs.</dd></div>
-      <div><dt>Fast mode</dt><dd>A lattice-Boltzmann preview on the GPU, drawn live in a plane. A quick look, not a sign-off. Needs a graphics card, and a part modelled in the app.</dd></div>
-      <div><dt>Results</dt><dd>Slices, clips, iso-surfaces and 3-D contours, wall-following streamlines, vectors, probes, line plots, a Streams table for flow, pressure drop and heat, reports and picture export.</dd></div>
+      <div><dt>Fast mode</dt><dd>A lattice-Boltzmann preview on the GPU, drawn live in a plane, with WALE and Vreman closures, a warm start from a coarser lattice and 16-bit storage for large lattices. A quick look, not a sign-off. Needs a graphics card, and a part modelled in the app.</dd></div>
+      <div><dt>Results</dt><dd>Slices, clips, iso-surfaces and 3-D contours, wall-following streamlines, vectors, probes, line plots, a Streams table for flow, pressure drop and heat, reports and picture export. A time slider and Play for transient runs.</dd></div>
       <div><dt>Units</dt><dd>Every value carries a unit. Type <code>2 [m/s]</code> or <code>U_in * 1.5</code>.</dd></div>
       <div><dt>Automation</dt><dd>The window, the <code>stokes</code> command and a local server share one API, so scripts and LLM agents can drive a case.</dd></div>
-      <div><dt>Installer</dt><dd><span class="no">Not yet.</span> Stokes runs from source with Python 3.13 or 3.14. Version 0.0.1.dev0, pre-alpha.</dd></div>
+      <div><dt>Installer</dt><dd><span class="no">Not yet.</span> Stokes runs from source with Python 3.13 or 3.14; on Windows one setup script does it. Version 0.0.1.dev0, pre-alpha.</dd></div>
       <div><dt>Licence</dt><dd>Free for noncommercial use under PolyForm Noncommercial. Source-available, not open source. Commercial licences on request.</dd></div>
     </dl>
   </div>
 </section>
 
-<section class="band" id="install" aria-labelledby="install-title">
+<section class="band alt" id="install" aria-labelledby="install-title">
   <div class="wrap center">
     <h2 class="headline" id="install-title">Run it from source.</h2>
     <p class="intro">You need Python 3.13 or 3.14, Node.js 22.12 or newer, Git, and OpenFOAM&nbsp;14.
@@ -265,13 +325,12 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
     <div class="panels">
       <div class="panel" id="pane-win" role="tabpanel" aria-labelledby="tab-win">
         <h3>Windows</h3>
-        <p>OpenFOAM through FoamWin v14.0.0-win.5 or newer. MS-MPI if you want more than one core.</p>
+        <p>One script installs Stokes, builds the front end and, if this computer has no OpenFOAM, offers to
+        download FoamWin and checks it against its published SHA-256. MS-MPI if you want more than one core.</p>
 <pre><code>git clone -b windows https://github.com/dhanninacs/stokes-cfd.git
 cd stokes-cfd
-py -3.14 -m venv .venv
-.venv\Scripts\pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
-cd web; npm install; npm run build; cd ..
-.venv\Scripts\python -m stokes.app</code></pre>
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1 -Shortcut</code></pre>
+        <p>It leaves a <strong>Stokes</strong> shortcut on the desktop. The guide has the same steps by hand.</p>
         <p class="more"><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-WINDOWS.md" data-track="out_guide_windows" data-track-label="Full Windows guide">Read the full Windows guide</a></p>
       </div>
       <div class="panel" id="pane-linux" role="tabpanel" aria-labelledby="tab-linux">
@@ -281,7 +340,7 @@ cd web; npm install; npm run build; cd ..
 cd stokes-cfd
 python3.13 -m venv .venv
 .venv/bin/pip install -e ".[agent,server,ui,cad,extract,explore,materials]"
-cd web &amp;&amp; npm install &amp;&amp; npm run build &amp;&amp; cd ..
+cd web &amp;&amp; npm ci &amp;&amp; npm run build &amp;&amp; cd ..
 source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</code></pre>
         <p class="more"><a href="https://github.com/dhanninacs/stokes-cfd/blob/main/docs/INSTALL-LINUX.md" data-track="out_guide_linux" data-track-label="Full Linux guide">Read the full Linux guide</a></p>
       </div>
@@ -289,7 +348,7 @@ source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</cod
   </div>
 </section>
 
-<section class="band alt" id="guides" aria-labelledby="guides-title">
+<section class="band" id="guides" aria-labelledby="guides-title">
   <div class="wrap">
     <h2 class="headline" id="guides-title">Guides.</h2>
     <ul class="guides">
@@ -301,7 +360,7 @@ source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</cod
   </div>
 </section>
 
-<section class="band" aria-labelledby="faq-title">
+<section class="band alt" aria-labelledby="faq-title">
   <div class="wrap">
     <h2 class="headline" id="faq-title">Questions.</h2>
     <div class="faq">
@@ -309,6 +368,8 @@ source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</cod
         <p>No. It drives <a href="https://dhanninacs.github.io/foamWin/" data-track="out_foamwin_faq" data-track-label="FoamWin (FAQ)">FoamWin</a>, a native Windows build of OpenFOAM&nbsp;14, directly. There is no WSL, virtual machine or Docker layer.</p></details>
       <details><summary>Can I trust Fast mode’s numbers?</summary>
         <p>Treat it as a preview. On a ball in a duct its pressure drop was 4&nbsp;% from OpenFOAM’s. On a fine gyroid core, where the passages are only a few cells wide, it read about 2 to 3 times the solved pressure drop and heat. Run the case in OpenFOAM before you rely on a number.</p></details>
+      <details><summary>Can it run transient cases?</summary>
+        <p>Yes. Switch the Run card to transient, and give an inlet, outlet or wall a value that changes in time if the case needs one: a table pasted from a spreadsheet, a sine or a pulse. The results get a time slider and Play.</p></details>
       <details><summary>Does it replace OpenFOAM?</summary>
         <p>No. You install OpenFOAM separately. Stokes writes the case, runs your OpenFOAM tools as separate processes and reads the results back. It never bundles or links OpenFOAM.</p></details>
       <details><summary>Can I use my own OpenFOAM cases?</summary>
@@ -321,7 +382,7 @@ source /opt/openfoam14/etc/bashrc &amp;&amp; .venv/bin/python -m stokes.app</cod
   </div>
 </section>
 
-<section class="band alt center" id="get-in-touch" aria-labelledby="contact-band-title">
+<section class="band center" id="get-in-touch" aria-labelledby="contact-band-title">
   <div class="wrap">
     <h2 class="headline" id="contact-band-title">Need a hand with CFD?</h2>
     <p class="intro">Questions about Stokes, a commercial licence, or OpenFOAM consultancy for a
