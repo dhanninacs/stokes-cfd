@@ -152,7 +152,7 @@ describe("settings presentation taxonomy", () => {
       "mesher", "domain", "domain_part", "box", "margin", "two_d", "plane", "thickness", "wedge_angle",
       "base_size", "surface_size", "max_cells", "feature_angle",
       "layers", "layer_mode", "expansion_ratio", "final_ratio", "first_layer_height", "min_thickness_ratio", "layer_feature_angle",
-      "max_non_ortho", "max_skewness", "accept_unassigned", "host", "cores",
+      "max_non_ortho", "max_skewness", "accept_unassigned", "host", "cores", "speed",
     ]);
     expect(fields).toHaveLength(new Set(fields).size);
     // Every mesh setting the user can edit is in a section (the mesh node's other params are not settings).
@@ -167,6 +167,7 @@ describe("settings presentation taxonomy", () => {
     expect(meshSettingIncluded("surface_size", snappyBox)).toBe(true);
     expect(meshSettingIncluded("final_ratio", snappyBox)).toBe(false);
     expect(meshSettingIncluded("first_layer_height", snappyBox)).toBe(true);
+    expect(meshSettingIncluded("speed", snappyBox)).toBe(true);
     expect(meshSettingIncluded("extension_field", snappyBox)).toBe(true);
 
     const blockPart = { mesher: "blockmesh", domain: "part", layerMode: "final_ratio" } as const;
@@ -174,5 +175,6 @@ describe("settings presentation taxonomy", () => {
     expect(meshSettingIncluded("box", blockPart)).toBe(false);
     expect(meshSettingIncluded("margin", blockPart)).toBe(true);
     expect(meshSettingIncluded("layers", blockPart)).toBe(false);
+    expect(meshSettingIncluded("speed", blockPart)).toBe(false);
   });
 });

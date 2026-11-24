@@ -53,6 +53,12 @@ MESHERS: tuple[str, ...] = (
     "gmsh",
 )
 
+#: How snappyHexMesh spends time against resolution. ``fast`` keeps the same topology rules but
+#: puts two cells between refinement levels (instead of three) and shortens the snapping and
+#: layer loops. It is a quality trade, not a different mesher, so the result keeps the same
+#: patch names and readers.
+MESH_SPEEDS: tuple[str, ...] = ("balanced", "fast")
+
 #: The meshers served by the cfMesh driver (ADR-0032): one joined surface, `system/meshDict`.
 CFMESH_MESHERS: tuple[str, ...] = ("cfmesh", "cfmesh_tet", "cfmesh_poly", "polyhex")
 
@@ -243,6 +249,16 @@ def mesh_specs() -> tuple[NodeSpec, ...]:
                 validate=validate_core_count,
                 doc="Processes for the mesher: MPI ranks (1 to 256) for snappyHexMesh, OpenMP "
                 "threads for cfMesh. blockMesh runs serially.",
+            ),
+            ParamSpec(
+                "speed",
+                "enum",
+                label="Speed",
+                default="balanced",
+                choices=MESH_SPEEDS,
+                doc="Mesh speed against resolution: fast uses two cells between refinement "
+                "levels and fewer snapping and layer iterations, so it makes fewer cells and "
+                "runs quicker at a slightly coarser result. Applies to snappyHexMesh.",
             ),
             ParamSpec(
                 "max_non_ortho",

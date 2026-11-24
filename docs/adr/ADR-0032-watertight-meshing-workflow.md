@@ -106,7 +106,9 @@ logical core (24 here).
 
 - The Mesh panel's mesher list offers six built types; sizing, surface and layer pages apply to
   every shape-following mesher (`SURFACE_MESHERS`), and the Cores line says MPI, threads or
-  serial from the catalogue.
+  serial from the catalogue. A **speed** profile (ADR-0048) is a setting on snappyHexMesh, not
+  another type: it changes the refinement gap and snap/layer loops, so it needs no new driver
+  entry.
 - The basis of a cfMesh result hashes the same parts as snappy's, so editing a size or a layer
   count marks it stale and Generate reruns it.
 - To do next: external (`enclosure`) domains for cfMesh (a box surface around the part), an

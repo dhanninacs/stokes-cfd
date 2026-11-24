@@ -345,3 +345,22 @@ def test_a_domain_part_left_out_of_the_simulation_refuses_to_mesh(home: Path) ->
     with pytest.raises(MeshInvalid) as after:
         snapshot_for(session, settings)
     assert "left out of the simulation" not in str(after.value)
+
+
+def test_the_speed_profile_reaches_the_snappy_snapshot(home: Path) -> None:
+    """A box-domain case is enough to test the wiring: `fast` must change the gap and the snap
+    controls on the record the writer reads, not just the settings node."""
+    from stokes.mesh.drivers.snappy import FAST_CELLS_BETWEEN_LEVELS, FAST_SNAP_CONTROLS
+
+    session = Session()
+    session.execute("project.new", name="demo")
+    session.execute(
+        "mesh.configure",
+        values={"domain": "box", "box": [0, 0, 0, 1, 1, 1], "speed": "fast"},
+    )
+    settings = session.require_project().find(SETTINGS_PATH)
+    assert settings is not None
+    snap = snapshot_for(session, settings)
+    assert snap.speed == "fast"
+    assert snap.cells_between_levels == FAST_CELLS_BETWEEN_LEVELS
+    assert snap.snap_controls == FAST_SNAP_CONTROLS

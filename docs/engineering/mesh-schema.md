@@ -38,7 +38,8 @@ arrays are SI numbers.
 | `box` | array, length | `[]` | six numbers `xmin ymin zmin xmax ymax zmax`, SI |
 | `margin` | quantity, length | `0.0` m | added on every side of the domain |
 | `max_cells` | int | `5000000` | |
-| `cores` | int | `1` | |
+| `cores` | int | `1` | MPI ranks for snappy, OpenMP threads for the cfMesh types, serial for blockMesh |
+| `speed` | enum `balanced, fast` | `balanced` | snappy only: fast uses two cells between levels and shorter snap/layer loops (ADR-0048) |
 | `max_non_ortho` | number | `70.0` | checkMesh threshold, degrees (T-146) |
 | `max_skewness` | number | `4.0` | checkMesh threshold (T-146) |
 | `accept_unassigned` | bool | `false` | faces without a boundary become a wall instead of refusing |
@@ -329,9 +330,10 @@ mirror plane.
 the engine (`"org-14"`), the mesher, the base size, the box, the side-to-tag map, the **side kinds**, the
 cell limit, the part's basis, and the members of the tags that reached a side.
 
-Deliberately **not** in it: `host` (the same inputs give the same mesh anywhere), `cores` (blockMesh is
-serial), and the quality thresholds (`max_non_ortho`, `max_skewness`) — those decide whether a mesh
-**passes**, not what it is, and a basis that changes for no reason is one users learn to ignore.
+Deliberately **not** in it: `host` (the same inputs give the same mesh anywhere) and, for blockMesh,
+`cores` (it is serial) and the quality thresholds (`max_non_ortho`, `max_skewness`) — those decide
+whether a mesh **passes**, not what it is. For a surface-following mesh the quality limits and the
+snappy `speed` profile are in the `snap` part, because they change the cells the writer asks for.
 
 ### Error codes
 

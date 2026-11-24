@@ -73,7 +73,7 @@ from stokes.mesh.two_d import FRONT as TWO_D_FRONT
 #:
 #: **`snappy/4`**: optional MPI meshing, with a generated `decomposeParDict`, decomposed background
 #: mesh, parallel snappy run and reconstructed serial polyMesh for the normal readers.
-DRIVER_VERSION = "snappy/5"
+DRIVER_VERSION = "snappy/6"
 
 #: Where OF14 reads surfaces and feature-edge meshes from. **Measured, not assumed**: the motorBike
 #: case has `constant/geometry/` and no `constant/triSurface/`, and its `snappyHexMeshDict` says
@@ -132,6 +132,25 @@ LAYER_FIXED: tuple[tuple[str, Any], ...] = (
     ("nLayerIter", 50),
 )
 
+#: The fast profile's layer loop: the same required keys, with two normal-smoothing iterations and
+#: a 30-iteration budget instead of three and 50. Layer counts and thickness are unchanged.
+FAST_LAYER_FIXED: tuple[tuple[str, Any], ...] = (
+    ("nGrow", 0),
+    ("nRelaxIter", 3),
+    ("nSmoothSurfaceNormals", 1),
+    ("nSmoothNormals", 2),
+    ("nSmoothThickness", 2),
+    ("maxFaceThicknessRatio", 0.5),
+    ("maxThicknessToMedialRatio", 0.3),
+    ("minMedianAxisAngle", 90),
+    ("nBufferCellsNoExtrude", 0),
+    ("nLayerIter", 30),
+)
+
+#: Layer iterations under the ordinary rules before the relaxed ones start, in the fast profile.
+#: A shorter run can afford fewer ordinary iterations; the last 25 still use the relaxed rules.
+FAST_LAYER_N_RELAXED_ITER = 5
+
 #: `slipFeatureAngle`: where extrusion may slip along a wall instead of stopping. Written as
 #: **half the feature angle**, which is the source's own default
 #: (`medialAxisMeshMover.C:378-387`, `lookupOrDefault("slipFeatureAngle", featureAngle/2)`) -
@@ -178,6 +197,25 @@ SNAP_CONTROLS: tuple[tuple[str, Any], ...] = (
     ("implicitFeatureSnap", True),
     ("explicitFeatureSnap", True),
 )
+
+#: The fast profile's snap loop. `nSolveIter` stays at 50 because the measured gain came from the
+#: patch smoothing and feature iterations, not from cutting the solve short; the other three drop
+#: one or two iterations each. Measured on the Ahmed body: 34.6 s against 40.4 s on two ranks,
+#: with checkMesh still reporting only the tutorial's two known findings.
+FAST_SNAP_CONTROLS: tuple[tuple[str, Any], ...] = (
+    ("nSmoothPatch", 2),
+    ("tolerance", 2.0),
+    ("nSolveIter", 50),
+    ("nRelaxIter", 4),
+    ("nFeatureSnapIter", 8),
+    ("implicitFeatureSnap", True),
+    ("explicitFeatureSnap", True),
+)
+
+#: Cells between refinement levels in the fast profile. Three is the tutorial value and keeps the
+#: size jump gentle; two removes one buffer layer and is where most of the cell-count saving comes
+#: from. It is the one change that lowers resolution rather than only iterations.
+FAST_CELLS_BETWEEN_LEVELS = 2
 
 
 @dataclass(frozen=True)
@@ -334,6 +372,10 @@ class SnappySnapshot:
     #: Surface name -> the sizing inputs its target was resolved from (boundary size, body size,
     #: patch type), so the estimate re-resolves under tried sizes through the same precedence.
     surface_targets: dict[str, tuple[float | None, float | None, str]] = field(default_factory=dict)
+    #: ``balanced`` or ``fast`` (MESH_SPEEDS). The writer selects the snap/layer constants and the
+    #: cells-between-levels count from it; the snapshot builder also carries the selected controls
+    #: so the basis sees the difference.
+    speed: str = "balanced"
     #: The 2D mode (ADR-0031) as `stokes.mesh.two_d.TwoD.record` gives it, with the extrusion's
     #: `thickness` resolved in metres; **empty in 3D**, so a 3D case is byte-identical. Planar
     #: only: the surfaces `front` and `back` are the slab's faces across the plane, and the case
@@ -568,6 +610,11 @@ def _validate(snap: SnappySnapshot) -> None:
     except (TypeError, ValueError) as exc:
         raise MeshInvalid(str(exc), details={"code": "mesh.invalid", "cores": snap.cores}) from exc
     _validate_layers(snap)
+    if snap.speed not in ("balanced", "fast"):
+        raise MeshInvalid(
+            f"the mesh speed {snap.speed!r} is not one of balanced, fast",
+            details={"code": "mesh.invalid", "speed": snap.speed},
+        )
     if not snap.surfaces:
         raise MeshInvalid(
             "no surfaces to mesh: a snappyHexMesh case needs at least one",
@@ -822,6 +869,9 @@ def _add_layers_controls(snap: SnappySnapshot, layers_on: bool) -> Dict:
         if relative
         else Raw(_num(min_ratio * float(settings.get("first_layer_height", 0.0))))
     )
+    fast = snap.speed == "fast"
+    fixed = FAST_LAYER_FIXED if fast else LAYER_FIXED
+    n_relaxed = FAST_LAYER_N_RELAXED_ITER if fast else LAYER_N_RELAXED_ITER
     # **The angle keys keep the tutorial's integer spelling** (`featureAngle 100;`), so a golden
     # diff against a hand-written dictionary shows values, not formatting.
     half = feature_angle / 2.0
@@ -856,10 +906,10 @@ def _add_layers_controls(snap: SnappySnapshot, layers_on: bool) -> Dict:
             Entry("expansionRatio", Raw(_num(expansion))),
             thickness,
             Entry("minThickness", min_thickness),
-            *(Entry(key, value) for key, value in LAYER_FIXED),
+            *(Entry(key, value) for key, value in fixed),
             Entry("featureAngle", Raw(_num(whole_angle))),
             Entry("slipFeatureAngle", Raw(_num(whole_slip))),
-            Entry("nRelaxedIter", LAYER_N_RELAXED_ITER),
+            Entry("nRelaxedIter", n_relaxed),
         )
     )
 
@@ -889,7 +939,18 @@ def _snappy_dict(snap: SnappySnapshot) -> str:
             Entry("addLayers", Word("true" if layers_on else "false")),
             Entry("geometry", geometry),
             Entry("castellatedMeshControls", controls),
-            Entry("snapControls", Dict(tuple(Entry(k, _value(v)) for k, v in SNAP_CONTROLS))),
+            Entry(
+                "snapControls",
+                Dict(
+                    tuple(
+                        Entry(k, _value(v))
+                        for k, v in (
+                            snap.snap_controls
+                            or (FAST_SNAP_CONTROLS if snap.speed == "fast" else SNAP_CONTROLS)
+                        )
+                    )
+                ),
+            ),
             Entry("addLayersControls", _add_layers_controls(snap, layers_on)),
             Entry("meshQualityControls", mesh_quality),
             Entry("debug", 0),

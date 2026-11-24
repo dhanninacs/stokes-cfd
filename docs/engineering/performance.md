@@ -674,3 +674,24 @@ sent back.
 
 The test is `tests/perf/test_streamlines_perf.py`. The case reader that loads the solved mesh is the same
 read the slices and iso-surfaces pay for and is not in the figure.
+
+### Fast snappyHexMesh profile (2026-11-10)
+
+The Mesh settings' `speed: "fast"` profile changes the dictionary the app writes, not the engine:
+two cells between refinement levels instead of three, and shorter patch, feature-snap and layer
+loops (ADR-0048). On the Ahmed body tutorial (238,131 cells balanced), with the same 2 MPI ranks:
+
+| profile | wall time | cells | max aspect | severely non-orthogonal faces |
+|---|---:|---:|---:|---:|
+| balanced | 40.4 s | 238,131 | 11.52 | 4 |
+| fast | **34.6 s** | **198,268** | 19.28 | 6 |
+
+`checkMesh` reported only the tutorial's known concave-cell finding for both. The profile saves
+about 17 % of the cells and 1.17x of the wall time at the same rank count; against the same stock
+mesh serial it is 1.40x. The pipe measured through the app went from 15,025 to 12,425 cells with
+`checkMesh` still `Mesh OK`; its whole `mesh.generate` wall time (including the geometry worker)
+moved only 164.6 s to 161.0 s, which is why the Ahmed body is the timing case.
+
+The profile is deliberately not auto-parallel: `cores` stays the user's setting. Auto-ranks,
+feature caching and concurrent `blockMesh`/`surfaceFeatures` are the next candidates; each needs
+its own measurement before it becomes a default.

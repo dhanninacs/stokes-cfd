@@ -70,7 +70,7 @@ export function groupSettingsFields(
  * as Coarse / Medium / Fine and `layers` as the Boundary layers switch; the exact fields stay in Advanced.
  * Solver: the flow model (`turbulence`), `iterations` and the residual target are the real fields (the Run card writes the last two).
  */
-export const BASIC_MESH: readonly string[] = ["base_size", "layers"];
+export const BASIC_MESH: readonly string[] = ["base_size", "layers", "speed"];
 export const BASIC_SOLVER: readonly string[] = ["turbulence", "iterations", "residual_target"];
 
 /** The section the Solve tree's Initialisation row opens (it exists only for a turbulent run). */
@@ -146,7 +146,7 @@ export const MESH_SETTINGS_SECTIONS: readonly SettingsSectionSpec[] = [
     defaultOpen: false,
   },
   { id: "mesh-quality", title: "Quality", description: "Advanced cell-quality limits and boundary assignment checks.", fields: ["max_non_ortho", "max_skewness", "accept_unassigned"], defaultOpen: false },
-  { id: "mesh-execution", title: "Execution", fields: ["host", "cores"], defaultOpen: false },
+  { id: "mesh-execution", title: "Execution", fields: ["host", "cores", "speed"], defaultOpen: false },
 ];
 
 /** What the solver settings say that decides which of their own fields apply (`readSetupContext` gives the same three). */
@@ -196,6 +196,8 @@ export function meshSettingIncluded(name: string, context: MeshSettingsContext):
   // The feature angle reaches snappy's dictionaries, the poly-hexcore dual's argument and Gmsh's surface
   // classification (ADR-0043); the other cfMesh fills ignore it.
   if (name === "feature_angle") return context.mesher === "snappy" || context.mesher === "polyhex" || context.mesher === "gmsh";
+  // The speed profile is snappy's: it changes snappy's refinement gap and snap/layer loops.
+  if (name === "speed") return context.mesher === "snappy";
   // snappy-only layer controls: cfMesh sizes its layers from the local cell and has no equivalent.
   if (["min_thickness_ratio", "layer_feature_angle"].includes(name)) return context.mesher === "snappy";
   // Gmsh sizes its last layer from the wall cell size, as snappy's relative sizes do.

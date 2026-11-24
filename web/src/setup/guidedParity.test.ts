@@ -75,7 +75,7 @@ describe("Fluid card ⊂ region Basic", () => {
   });
 });
 
-const MESH_NAMES = ["mesher", "base_size", "surface_size", "max_cells", "layers", "layer_mode", "cores", "host"];
+const MESH_NAMES = ["mesher", "base_size", "surface_size", "max_cells", "layers", "layer_mode", "cores", "host", "speed"];
 const SOLVER_NAMES = ["engine", "turbulence", "energy", "transient", "delta_t", "end_time", "iterations", "residual_target", "cores"];
 
 describe("Mesh card ⊂ mesh settings Basic", () => {
@@ -84,7 +84,7 @@ describe("Mesh card ⊂ mesh settings Basic", () => {
 
   it("every setting the card writes (the fineness chips, the layers switch) is a Basic field of the mesh settings", () => {
     const written = [...card.matchAll(/configureMesh\(\{ (\w+):/g)].map((m) => m[1]);
-    expect([...new Set(written)].sort()).toEqual(["base_size", "layers"]);
+    expect([...new Set(written)].sort()).toEqual(["base_size", "layers", "speed"]);
     for (const name of written) {
       expect(BASIC.mesh_settings).toContain(name);
       expect(namesAt(snappy, "basic", MESH_NAMES)).toContain(name);

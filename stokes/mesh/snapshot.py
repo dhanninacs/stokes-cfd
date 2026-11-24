@@ -406,7 +406,14 @@ def build_snappy_snapshot(  # noqa: PLR0915 - one read, in order
     """
     from stokes.geometry.inside import inside_point_or_coarse
     from stokes.geometry.store import GeometryStore
-    from stokes.mesh.drivers.snappy import SNAP_CONTROLS, Feature, SnappySnapshot
+    from stokes.mesh.drivers.snappy import (
+        CELLS_BETWEEN_LEVELS,
+        FAST_CELLS_BETWEEN_LEVELS,
+        FAST_SNAP_CONTROLS,
+        SNAP_CONTROLS,
+        Feature,
+        SnappySnapshot,
+    )
     from stokes.model import registry
 
     project = project if project is not None else session.require_project()
@@ -415,6 +422,10 @@ def build_snappy_snapshot(  # noqa: PLR0915 - one read, in order
     margin = float(own["margin"])
     domain = str(own["domain"])
     max_cells = int(own["max_cells"])
+    speed = str(own.get("speed", "balanced"))
+    fast = speed == "fast"
+    snap_controls = FAST_SNAP_CONTROLS if fast else SNAP_CONTROLS
+    cells_between = FAST_CELLS_BETWEEN_LEVELS if fast else CELLS_BETWEEN_LEVELS
     two = from_settings(own)
     if two is not None:
         _refuse_snappy_two_d(two, domain)
@@ -451,7 +462,9 @@ def build_snappy_snapshot(  # noqa: PLR0915 - one read, in order
             settings_id=str(settings.id),
             domain_part=None,
             domain="box",
-            snap_controls=SNAP_CONTROLS,
+            speed=speed,
+            snap_controls=snap_controls,
+            cells_between_levels=cells_between,
         )
 
     part_node = _part(project, own["domain_part"])
@@ -596,7 +609,9 @@ def build_snappy_snapshot(  # noqa: PLR0915 - one read, in order
         domain_bbox=part_bbox,
         surface_areas=surface_areas,
         surface_targets=surface_targets,
-        snap_controls=SNAP_CONTROLS,
+        speed=speed,
+        snap_controls=snap_controls,
+        cells_between_levels=cells_between,
         surface_triangles=surface_triangles,
         surface_faces=surface_faces,
         two_d=two_d,
