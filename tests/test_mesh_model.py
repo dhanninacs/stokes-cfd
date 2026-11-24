@@ -61,6 +61,7 @@ def test_the_settings_parameters_are_the_briefs() -> None:
         "margin": "quantity",
         "max_cells": "int",
         "cores": "int",
+        "speed": "enum",
         "max_non_ortho": "number",
         "max_skewness": "number",
         # **"Keep unassigned faces as a wall"** (brief M-501): a stored acceptance, so the

@@ -390,7 +390,48 @@ def test_the_driver_version_is_named_so_a_cached_mesh_is_not_confused() -> None:
     `snappy/2` (which wrote the empty layers block whatever anyone asked) must be regenerated
     once rather than mistaken for current.
     """
-    assert snappy.DRIVER_VERSION == "snappy/5"
+    assert snappy.DRIVER_VERSION == "snappy/6"
+
+
+def test_the_fast_profile_shortens_the_loops_and_the_refinement_gap() -> None:
+    """The fast profile is a quality trade, so its values are pinned here rather than left to
+    drift: two cells between levels (instead of three), a shorter patch/feature loop, and the
+    layer loop at 30 iterations with the relaxed rules after 5."""
+    text = squashed(
+        snappy.write(a_snapshot(speed="fast", cells_between_levels=2, layer_counts={"walls": 3}))[
+            "system/snappyHexMeshDict"
+        ]
+    )
+    assert "nCellsBetweenLevels 2;" in text
+    assert "nSmoothPatch 2;" in text
+    assert "nFeatureSnapIter 8;" in text
+    assert "nSmoothNormals 2;" in text
+    assert "nLayerIter 30;" in text
+    assert "nRelaxedIter 5;" in text
+    # The solve loop is deliberately not cut short: the measured gain was elsewhere.
+    assert "nSolveIter 50;" in text
+
+
+def test_the_balanced_profile_keeps_the_original_values() -> None:
+    text = squashed(snappy.write(a_snapshot())["system/snappyHexMeshDict"])
+    assert "nCellsBetweenLevels 3;" in text
+    assert "nSmoothPatch 3;" in text
+    assert "nFeatureSnapIter 10;" in text
+
+
+def test_fast_changes_the_basis_so_a_balanced_mesh_is_not_reused() -> None:
+    from stokes.mesh.basis import mesh_basis
+
+    balanced = a_snapshot()
+    fast = a_snapshot(speed="fast", cells_between_levels=2)
+    assert mesh_basis(balanced, snappy.DRIVER_VERSION, "org-14") != mesh_basis(
+        fast, snappy.DRIVER_VERSION, "org-14"
+    )
+
+
+def test_an_unknown_speed_is_refused_by_name() -> None:
+    with pytest.raises(MeshInvalid, match="speed"):
+        snappy.write(a_snapshot(speed="warp"))
 
 
 def test_the_geometry_dir_is_constant_geometry_not_triSurface() -> None:

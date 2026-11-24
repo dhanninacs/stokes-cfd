@@ -208,13 +208,17 @@ def mesh_basis_parts(snap: MeshSnapshot, driver_version: str, engine: str) -> di
 
     controls = tuple(getattr(snap, "snap_controls", ()) or ())
     if controls:
-        parts["snap"] = _hash(
-            {
-                "snap_controls": {str(name): value for name, value in controls},
-                "max_non_ortho": float(snap.max_non_ortho),
-                "max_skewness": float(snap.max_skewness),
-            }
-        )
+        snap_inputs: dict[str, Any] = {
+            "snap_controls": {str(name): value for name, value in controls},
+            "max_non_ortho": float(snap.max_non_ortho),
+            "max_skewness": float(snap.max_skewness),
+        }
+        # **The speed profile is snappy's only.** A cfMesh record carries the field because it is
+        # built from the snappy record, but the cfMesh writer never reads it; hashing it there
+        # would mark a cfMesh mesh stale for a setting that cannot change it.
+        if str(getattr(snap, "mesher", "")) == "snappy":
+            snap_inputs["speed"] = str(getattr(snap, "speed", "balanced"))
+        parts["snap"] = _hash(snap_inputs)
 
     mesher: dict[str, Any] = {
         "driver": driver_version,

@@ -193,7 +193,7 @@ const SOLVER_NAMES = [
   "iterations", "write_interval", "residual_target", "cores", "slice_origin", "slice_normal",
 ];
 const MESH_NAMES = [
-  "mesher", "host", "base_size", "surface_size", "domain", "domain_part", "box", "margin", "max_cells", "cores", "max_non_ortho",
+  "mesher", "host", "base_size", "surface_size", "domain", "domain_part", "box", "margin", "max_cells", "cores", "speed", "max_non_ortho",
   "max_skewness", "accept_unassigned", "layers", "layer_mode", "expansion_ratio", "final_ratio", "first_layer_height",
   "min_thickness_ratio", "layer_feature_angle", "feature_angle",
 ];
@@ -254,14 +254,14 @@ describe("the solver page: Basic is the flow model and the iterations", () => {
 describe("the mesh page: Basic is the fineness and the layers switch", () => {
   it("has a Basic set: the base size (as Coarse / Medium / Fine) and the layers (as a switch)", () => {
     expect(hasBasicSet("mesh_settings")).toBe(true);
-    expect(BASIC.mesh_settings).toEqual(["base_size", "layers"]);
+    expect(BASIC.mesh_settings).toEqual(["base_size", "layers", "speed"]);
   });
 
   it("with snappyHexMesh both are Basic, and the exact fields stay in Advanced too", () => {
     const m = mesh({ mesher: "snappy" });
-    expect(m.at("basic")).toEqual(["base_size", "layers"]);
+    expect(m.at("basic")).toEqual(["base_size", "speed", "layers"]);
     const advanced = advancedNames("mesh_settings", m.levels, MESH_NAMES);
-    expect(advanced).toEqual(expect.arrayContaining(["base_size", "layers", "mesher", "surface_size", "max_cells", "feature_angle", "max_non_ortho", "cores"]));
+    expect(advanced).toEqual(expect.arrayContaining(["base_size", "layers", "speed", "mesher", "surface_size", "max_cells", "feature_angle", "max_non_ortho", "cores"]));
   });
 
   it("with blockMesh the layers switch is hidden (the mesher has no layers)", () => {

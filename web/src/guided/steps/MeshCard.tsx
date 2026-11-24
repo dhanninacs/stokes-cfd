@@ -88,6 +88,7 @@ export default function MeshCard({ step }: { step: GuidedStep }) {
   }, [settings, fluidId, connected, active, execute]);
   const layers = layersOf(settings);
   const cores = coresOf(settings);
+  const fast = settings?.params.speed === "fast";
   const meshers = useMeshContext((c) => c.meshers);
   const mesherId = mesherOf(settings) ?? "blockmesh";
   const mesherInfo = meshers.find((m) => m.id === mesherId) ?? null;
@@ -201,6 +202,16 @@ export default function MeshCard({ step }: { step: GuidedStep }) {
           data-ws="guided-mesh-cores"
         />
       </label>
+      {mesherId === "snappy" && (
+        <Switch
+          checked={fast}
+          label="Fast meshing"
+          description={fast ? "Fewer cells between levels and shorter snap/layer loops" : "Balanced: three cells between levels, full snap/layer loops"}
+          disabled={action.busy || active}
+          onChange={(on) => void action.run(() => configureMesh({ speed: on ? "fast" : "balanced" }))}
+        />
+      )}
+      {fast && (cores ?? 1) === 1 && <Note tip="snappyHexMesh runs on one process unless Cores is changed.">Fast meshing is quicker with Cores above 1.</Note>}
       <div className="guided-actions">
         <Button
           variant="primary"
