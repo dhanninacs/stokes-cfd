@@ -11,7 +11,7 @@ import { Button } from "../../components/ui";
 import ResidualPlot from "../../panels/ResidualPlot";
 import { isRunActive } from "../../panels/runApi";
 import { configureSolve, pressRun, resumeRun, useRunButton, useRunContext } from "../../panels/runControl";
-import { canResume, findSolverSettings, iterationLimit, progressFraction, residualTarget, type Tone } from "../../panels/runPanelModel";
+import { canResume, findSolverSettings, progressFraction, residualTarget, stepLimit, type Tone } from "../../panels/runPanelModel";
 import { useStore } from "../../state/store";
 import GuidedCard from "../GuidedCard";
 import { ErrorLine, Note } from "../controls";
@@ -20,11 +20,13 @@ import { runLine, type GuidedStep } from "../guidedModel";
 import { readCase } from "../guidedTree";
 import { CASE_PICKS, CaseQuickSettings } from "./CaseSettingsCard";
 import { useAction } from "../useAction";
+import RunTime from "./RunTime";
 
 const TONE_ICON: Record<Tone, typeof CircleCheck> = { neutral: CircleHelp, busy: LoaderCircle, ok: CircleCheck, warn: CircleAlert, bad: CircleX };
 
 export default function RunCard({ step }: { step: GuidedStep }) {
   const tree = useStore((s) => s.tree);
+  const setup = useStore((s) => s.setup);
   const run = useStore((s) => s.run.runs[0] ?? null);
   const residuals = useStore((s) => s.run.residuals);
   const residualRun = useStore((s) => s.run.residualRun);
@@ -41,7 +43,9 @@ export default function RunCard({ step }: { step: GuidedStep }) {
   // runs; its end time is in the case's own settings above. Cores is the solve's for both.
   const caseId = useMemo(() => readCase(tree)?.id ?? null, [tree]);
   const isCase = caseId !== null;
-  const limit = isCase ? null : iterationLimit(settings);
+  // A transient run's steps are its end time over its time step; a steady run's, its iteration limit.
+  const limit = isCase ? null : stepLimit(settings);
+  const transient = !isCase && settings?.params.transient === true;
   const target = residualTarget(settings);
   const line = runLine(run, limit);
   const fraction = progressFraction(run, limit);
@@ -100,7 +104,9 @@ export default function RunCard({ step }: { step: GuidedStep }) {
   return (
     <GuidedCard step={step}>
       {isCase && caseId !== null && <CaseQuickSettings caseId={caseId} picks={CASE_PICKS.run} />}
-      {!isCase && <>
+      {/* Steady or transient, shown once a value varies in time (ADR-0022 addendum 2026-11-24). */}
+      {!isCase && <RunTime settings={settings} setup={setup} active={active} action={action} />}
+      {!isCase && settings?.params.transient !== true && <>
       <label className="guided-field">
         <span>Iterations</span>
         <input
@@ -202,7 +208,7 @@ export default function RunCard({ step }: { step: GuidedStep }) {
       )}
       {hasSeries && residuals !== null && (
         <div className="guided-spark" data-ws="guided-residuals">
-          <ResidualPlot series={residuals} target={target} fill />
+          <ResidualPlot series={residuals} target={target} transient={transient} fill />
         </div>
       )}
       <ErrorLine text={runError !== "" ? runError : action.error} />

@@ -42,7 +42,7 @@ runs.
 | `basis` | string | what makes reuse and staleness decidable |
 | `settings_id` | string | the settings node it was built from |
 | `iterations`, `converged`, `last_residuals` | int, bool, object | the report's answer |
-| `monitors` | object | `{patch: {flow_rate, p_mean}}`, plus `T_mean` with the energy equation (`patchAverage(...,fields=(pT))`), the last value of each function object |
+| `monitors` | object | `{patch: {flow_rate, p_mean}}`, plus `T_area` (area-averaged, `patchAverage(...,fields=(pT))`) and `T_bulk` (mass-flow-weighted, `patchAverage(funcName=bulkT_<patch>, ..., operation=average, weightField=phi)`; the one a duty is computed from) with the energy equation, the last value of each function object |
 | `fields` | array of string | **which fields the run has** (T-216) |
 | `slice` | bool | **whether a slice was cut** (T-216) |
 | `timings` | object | `{"seconds": …}`, the job's own wall time |
@@ -86,9 +86,11 @@ reproducing the same project state.
 | `run.list` | — | no | `{runs: [...]}`, newest first |
 | `run.log` | `run?`, `lines?` (1..5000) | no | `{step, lines, truncated}` |
 | `run.residuals` | `run?`, `since?` | no | `{iterations, time, fields, continuity, loading}` |
-| `run.fields` | `run?` | no | `{run, time, times, fields, slice, surfaces}` |
+| `run.fields` | `run?` | no | `{run, time, times, time_ranges, fields, slice, surfaces}` |
 | `run.time` | `run?`, `time?` (s) | no | `{run, time, fetching}`; `run.changed` follows |
-| `run.monitors` | `run?` | no | `{run, monitors: [{name, size}]}`: the `.dat`, `.xy` and `.csv` tables under the job's `postProcessing/` |
+| `run.monitors` | `run?` | no | `{run, monitors: [{name, size, patch, opening, sign}]}`: the `.dat`, `.xy` and `.csv` tables under the job's `postProcessing/`; `sign` is -1 for an inlet's flow rate (times it, the flow into the domain) |
+| `run.monitors_at` | `run?`, `time` (s) | no | `{run, time, sampled, monitors: {patch: {flow_rate, flow, opening, p_mean, T_mean?}}}`: each opening at the rows written nearest `time`; `flow` in the opening's own direction (ADR-0022 16.9) |
+| `run.time_ranges` | `run?` | no | `{run, state}`: `ready`, `computing` (`run.ranges` or `run.ranges_failed` follows) or `none`; `run.fields` then gives each field `all_times: {min, max, p01?, p99?, times}` |
 | `run.monitor` | `run?`, `name` | no | `{run, name, columns, values: {column: [floats]}, truncated}` |
 | `run.clear` | `run` | yes | `{removed}` |
 

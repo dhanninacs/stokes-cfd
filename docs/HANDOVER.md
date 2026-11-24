@@ -1,6 +1,6 @@
 # Stokes Handover
 
-**Updated:** 18 November 2026 (Sydney)
+**Updated:** 24 November 2026 (Sydney)
 **Working copy:** `D:\WSL\OF14_windows\stokes-windows` (branch `windows`)
 
 Read `CLAUDE.md` first, then `docs/00-open-questions.md` and the ADR for the area you change.
@@ -52,11 +52,10 @@ Linux/WSL, and to keep both branches level.
   removed.
 - **Packaging:** the local FoamWin installer and zip under `D:\WSL\OF14_windows\pkg\windows` are the
   20 Oct build with the 31 Oct cfMesh programs copied in by hand; not rebuilt.
-- **FoamWin:** GitHub `main` is `a7bccdc5` (release v14.0.0-win.5 and the project site). Branch
-  `fix/windows-libs-and-stop` (`4ee2e242`, pushed 2026-11-18) has four fixes in no release: generic
-  patch fields in `decomposePar`/`reconstructPar` on Windows, bare words in `-libs` and `FOAM_LIBS`,
-  the stop handler for `stopAtWriteNowSignal`, and symlinks replaced by copies. Merging it is a
-  release decision, not taken.
+- **FoamWin:** GitHub `main` is `ff964c48`: the fix branch is merged, plus coupledSimpleFoam (serial
+  and PETSc), native speed fixes and Gmsh in the portable ZIP, all under Unreleased in its
+  `CHANGELOG.md`. The latest release is still v14.0.0-win.5; v14.0.0-win.6 is to be built and
+  uploaded from the machine that has those binaries (none are on this host).
 - **M0 orbit gate** and the other milestone states are in `docs/06-roadmap.md` and `CLAUDE.md` §11.
 
 ## Immediate next steps

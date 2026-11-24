@@ -20,6 +20,18 @@ export interface ResidualField {
 export interface ResidualSeries {
   iterations: number[];
   fields: ResidualField[];
+  /**
+   * The physical time of each iteration (a transient run's step), `NaN` where a block carried none; one per
+   * iteration. Absent from a series built before it existed: read it through `seriesTimes`.
+   */
+  times?: number[];
+}
+
+/** The series' times, one per iteration (`NaN` where unknown), or null when no block carried a time. */
+export function seriesTimes(series: ResidualSeries): number[] | null {
+  const times = series.times;
+  if (times === undefined || times.length !== series.iterations.length || !times.some((t) => Number.isFinite(t))) return null;
+  return times;
 }
 
 export const EMPTY_SERIES: ResidualSeries = { iterations: [], fields: [] };
@@ -48,9 +60,12 @@ export function appendResidual(series: ResidualSeries, blocks: readonly Residual
   const names = series.fields.map((f) => f.name);
   const columns = series.fields.map((f) => f.values.slice());
   const iterations = series.iterations.slice();
+  const held = series.times;
+  const times = held !== undefined && held.length === iterations.length ? held.slice() : iterations.map(() => Number.NaN);
   for (const block of fresh) {
     const row = iterations.length;
     iterations.push(block.iteration);
+    times.push(block.time !== null && Number.isFinite(block.time) ? block.time : Number.NaN);
     for (const { name, value } of block.values) {
       let at = names.indexOf(name);
       if (at < 0) {
@@ -69,6 +84,7 @@ export function appendResidual(series: ResidualSeries, blocks: readonly Residual
   return {
     iterations: drop > 0 ? iterations.slice(drop) : iterations,
     fields: names.map((name, i) => ({ name, values: drop > 0 ? columns[i].slice(drop) : columns[i] })),
+    times: drop > 0 ? times.slice(drop) : times,
   };
 }
 

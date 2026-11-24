@@ -89,6 +89,29 @@ below, in this order; it does not say which kind uses which.
 | `heat_transfer_coefficient` | quantity | heat_transfer_coefficient | 10 W/(m²·K) | positive | wall, `thermal` convection |
 | `ambient_temperature` | quantity | temperature | 300 K | positive | wall, `thermal` convection |
 | `partner` | ref `boundary`, optional | | null | required by its kinds | cyclic, interface |
+| `profiles` | json, hidden | | null | each a profile (below) | velocity and mass-flow inlets, pressure outlet |
+
+**Values that vary in time** (ADR-0022 addendum 16). `profiles` maps a value's parameter name to
+its profile: `velocity` (a velocity inlet with `direction` normal or vector), `mass_flow`,
+`pressure` (a pressure outlet) and `temperature` (the inlets). No entry, or null, is the constant
+value, which stays stored. Every number is a stored quantity `{value, unit, expr?}` in SI:
+
+```
+{"form": "sine",   "mean": Q, "amplitude": Q, "frequency": Q[Hz], "phase": Q[rad]}
+{"form": "square", "low": Q, "high": Q, "period": Q[s], "duty": Q[1]}
+{"form": "table",  "rows": [{"time": Q[s], "value": Q}, ...]}     two rows or more, times increasing
+```
+
+`Q` is in the value's own dimension, except a sine's `amplitude`, which is a difference of it:
+for a temperature, `temperature_difference`, where an offset unit is the size of its degree
+(`"5 [degC]"` is a swing of 5 K and `"9 [degF]"` one of 5 K, not 278.15 K or 260.37 K). The SI
+unit is K either way, so the stored form is unchanged. A pulse's `low` and `high` and a table's values
+are levels (`"20 [degC]"` is 293.15 K). In an expression temperatures combine in kelvin, so a swing
+written there is a difference of two levels (`T_hot - T_in`) or in K. A sine is `mean + amplitude sin(2 pi frequency t + phase)`; a
+square (Pulse) is `high` for the first `duty` of each `period`, `low` for the rest; a table is linear
+between rows and held after the last. The time-mean of a flow must be positive, a temperature must
+stay above 0 K, a pressure may take any value. Set it with `boundary.set_profile`; `parameter.set`
+on `profiles` is checked against the same rules.
 
 The turbulence group is `turbulence`, `intensity`, `viscosity_ratio` and `length_scale`. The
 dimensions all exist in `stokes.units`; none was added. Vectors have no parameter kind of their own
@@ -315,6 +338,35 @@ change adds no step (`changed: false`). `parameter.set` still sets any one param
 named it become null in the same step. With `delete_tag` its tag goes too, refused
 (`model.referenced`) while anything else uses the tag.
 
+### `boundary.set_profile`, `boundary.profile_preview` (ADR-0022 addendum 16)
+
+`boundary.set_profile(boundary, parameter, profile | null)` gives one value a profile, or makes it
+constant again (null), in one undo step and one journal record. `profile` is `{form, ...}` as above,
+each number as quantity text (`"2 [m/s]"`, `"40 [Hz]"`, `"90 [deg]"`), an SI number or an
+expression (`"U_in * 1.5"`; kept as `expr`); a table's rows may be `[time, value]` pairs. Result:
+the boundary as `boundary.list` lists it, plus `parameter` and `profile` (its SI numbers with `mean`,
+`cycle`, `min`, `max`). Refused: a value the kind does not vary or does not use with its switches
+(`boundary.invalid_value`), and a profile that breaks a rule (`boundary.invalid_profile`, with
+`details.parameter` and `details.field`: `frequency`, `duty`, `rows`, `rows.2.time`, `value`; the
+message says "row 3 time", rows counted from one). A change of kind or of a switch takes away,
+in the same undo step, the profiles the boundary can no longer vary or no longer uses (a velocity
+inlet's speed once `direction` is `components`), whichever command makes it: `boundary.set`,
+`boundary.assign` (the Full mode Condition picker) and `parameter.set` on `kind` or `direction`.
+Each returns `profiles_dropped`, the names taken away (`parameter.set` only when it took one).
+
+`boundary.profile_preview(parameter, profile, end_time?, points = 200)` changes nothing and needs no
+project: `{ok: true, profile, stored, times, values, end_time, run_end_time, notes}` (samples from
+0 to `end_time`, else the run's end time when the run is transient, else two cycles; `notes` lists
+`{field, message}` for what is allowed but likely not meant: a pulse whose `high` is below its
+`low`), or `{ok: false, field, message}`. `boundary.list` entries carry `varies`: the values that
+vary and are in use (a temperature only while the energy equation is solved: on in the settings,
+or a multi-region case, which is snappyHexMesh with a part domain and more than one body, the
+mesh's own rule `stokes.mesh.conjugate.is_multi_region`). A boundary's node summary (`node.get`,
+`node.tree`, node events) carries the same `varies` when it has profiles, and a client renders it as
+it is. A node event on the solver or mesh settings, a region, a tag or a part (or any removal)
+carries in `also` the summaries of the boundaries with a temperature profile, whose `varies` may
+have changed with it.
+
 ### `boundary.list`
 
 ```
@@ -488,6 +540,16 @@ Added since the table: `setup.kind_unsupported` (error: a boundary's kind is one
 `/solver/settings` cannot write, e.g. `mass_flow_inlet`; the same condition `solve.unsupported_kind`
 refuses at run time).
 
+Added with values that vary in time (ADR-0022 addendum 16, `profile_checks.py`):
+
+| Code | Severity | Condition | Fix |
+|---|---|---|---|
+| `setup.profile_steady` | warning | a value varies in time and the run is steady: the run uses the time-mean; on a multi-region case (snappyHexMesh, part domain, more than one body; steady only for now) whether steady or transient | `solve.configure values={transient: true}`; conjugate: the value panel when steady, `solve.configure values={transient: false}` when transient |
+| `setup.profile_steady_only` | error | a value varies and the solver is `coupled.simple` (steady only; the solve refuses with `solve.profile_steady_only`) | the value panel |
+| `setup.profile_short` | info | a transient run ends before one period (sine, square) or the table's last time | — |
+| `setup.profile_reverses` | warning | an inflow's speed or mass flow goes to zero or below for part of its profile (the message gives the lowest value with its SI unit, "-0.5 m/s") | the value panel |
+| `setup.profile_invalid` | error | a stored profile no longer resolves (an expression naming a parameter that is gone) | the value panel |
+
 Codes are stable strings; messages are sentences; `fix` carries an executable command when there
 is one, so an agent can repair the set-up from the result.
 
@@ -510,6 +572,7 @@ nothing; undo and redo emit `history.changed`, as everywhere. `boundary.kinds`, 
 |---|---|
 | `boundary.invalid_kind` | a kind the catalogue lacks, or one not available yet (`interface`, `details.arrives`) |
 | `boundary.invalid_value` | a value for a parameter the kind does not use with these values, `kind` or `tag` given as a value, or a value that breaks its rule once evaluated; the message names the parameter and the rule, `details.parameter` the parameter |
+| `boundary.invalid_profile` | a time profile that breaks a rule; `details.parameter` the value and `details.field` the part of the profile |
 | `boundary.error` | the base code (`ConditionError`): a malformed catalogue definition, refused when the catalogue loads |
 | `materials.kind_mismatch` | a fluid material on a solid region or the reverse (`region.create`, `region.assign`, `region.set`) |
 | `model.referenced` | `node.remove` of a node something outside its subtree refers to; `tag.delete` of a used tag without `force`; `delete_tag` of a tag something else uses |

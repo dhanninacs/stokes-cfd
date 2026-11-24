@@ -1126,6 +1126,15 @@ select.field {
   border-top: 1px solid var(--panel-border);
   padding-top: 4px;
 }
+/* A finding's message takes the row's width and wraps, with its Fix at the end (a 55% cap left a narrow
+   column of text and a gap before the button in a 280 px card). */
+.conditions-findings .conditions-name {
+  flex: 1 1 auto;
+  max-width: none;
+}
+.conditions-findings .conditions-row > .btn {
+  flex: none;
+}
 .conditions-unassigned {
   cursor: pointer;
 }
@@ -1850,4 +1859,28 @@ select.field {
 .residuals-final td:last-child {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* What an Auto colour range spans in a run with several written times (TimeScopeChoice). */
+.time-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.time-scope-note {
+  font-size: 11px;
+}
+/* The time the Monitors table and the Streams are at, for a transient run. */
+.monitors-when,
+.streams-when {
+  font-size: 11px;
+  font-weight: 400;
+}
+.monitors-when {
+  margin: 4px 0 0;
+}
+.time-scope .segmented button {
+  white-space: nowrap;
 }

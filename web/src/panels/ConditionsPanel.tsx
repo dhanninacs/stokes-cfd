@@ -311,7 +311,7 @@ export default function ConditionsPanel() {
                 {row.name}
               </button>
               <span className="muted">{row.value === "" ? "no material" : row.value}</span>
-              <span className="muted">{row.detail.match(/\d+ bod/)?.[0] ?? ""}</span>
+              <span className="muted">{row.detail.match(/\d+ bod(?:y|ies)/)?.[0] ?? ""}</span>
               {tagRow(row) && (
                 <button
                   type="button"

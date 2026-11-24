@@ -547,6 +547,13 @@ def _region_spec() -> NodeSpec:
     )
 
 
+def _check_profiles(node: Any, value: Any) -> Any:  # Any: Node and JSON
+    """The boundary's ``profiles``: checked by the profiles module, imported here on use."""
+    from stokes.physics.conditions.profiles import check_stored
+
+    return check_stored(node, value)
+
+
 def _boundary_spec() -> NodeSpec:
     """ADR-0022 decision 2.4's parameters, in its order; each doc names the kinds that use it."""
     from stokes.model.schema import NodeSpec, ParamSpec, validate_layer_count
@@ -757,6 +764,21 @@ def _boundary_spec() -> NodeSpec:
                 doc="Surface size on this boundary's faces: empty inherits (the body's size, "
                 "else the mesh settings', else the wall/other rule). A negative size is refused "
                 "at the snapshot.",
+            ),
+            ParamSpec(
+                "profiles",
+                # **Values that vary in time** (ADR-0022 addendum, 2026-11-24): the value's
+                # parameter name to its profile (`stokes.physics.conditions.profiles`); a value
+                # with no entry is its constant. `boundary.set_profile` writes it; hidden from the
+                # property grid, which shows the profile editor instead.
+                "json",
+                label="Time profiles",
+                default=None,
+                hidden=True,
+                validate=_check_profiles,
+                doc="Inlet speed or mass flow, outlet pressure and inlet temperature that vary "
+                "in time: the parameter name to its profile (table, sine or square); null or no "
+                "entry is the constant value. Set with boundary.set_profile.",
             ),
         ),
         doc="A boundary condition on the faces of a tag: one type for every "

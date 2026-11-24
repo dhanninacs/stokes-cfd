@@ -9,10 +9,12 @@ written by Stokes itself, but it is checked like any input: an unknown operation
 node not yet defined or a non-finite constant is refused, so a WGSL compile error can only be ours.
 
 **The shaders** are generated with every direction of the lattice unrolled, so the GPU sees
-straight-line code and constant offsets. Populations are stored as ``f - w`` in f32 (the rest state
-is all zeros, and round-off at density 1 is much smaller), in two buffers read and written in
-turn (pull streaming). Cell flags hold the cell's type in the low byte (0 fluid, 1 solid) and, for a
-fluid cell next to a port, the port's index plus one in the next byte.
+straight-line code and constant offsets. Populations are stored as ``f - w`` (the rest state
+is all zeros, and round-off at density 1 is much smaller), in f32 or in 16 bits (``STORAGES``), in
+one buffer that every step reads and writes in place (``stokes.fast.inplace``). Cell flags hold the cell's type in the low byte (0 fluid, 1 solid) and, for a
+fluid cell next to a port, the port's index plus one in the next byte. The step itself is
+``stokes.fast.kernel``; this module has the parts every shader shares, the classification, the
+temperature's step, the prolongation and the samples (long, as generated shader text is).
 
 Units in the shaders: positions and lengths in the field's millimetres; velocities and densities in
 lattice units. The equilibrium is the incompressible one (He and Luo 1997): the velocity is the
@@ -24,8 +26,11 @@ from __future__ import annotations
 import math
 import re
 
+import numpy as np
+from numpy.typing import NDArray
+
 from stokes.fast.errors import FastInvalid
-from stokes.fast.lattice import CX, CY, CZ, OPP, W
+from stokes.fast.lattice import CX, CY, CZ, W
 from stokes.fast.ports import PORT_STRIDE
 
 #: How far off a port's plane (in cells) a wall crossing may lie and still be the port's. A whole
@@ -138,9 +143,14 @@ def _f32(value: float) -> str:
 #: The uniform block every shader binds, 24 four-byte words (96 bytes). The order is the order
 #: ``stokes.fast.device.params_bytes`` packs. ``ramp`` (0 to 1) scales every inlet's velocity: a flow
 #: started at full speed from rest sends a pressure wave that a low-viscosity lattice does not damp.
-#: ``smag`` is ``18 sqrt(2) Cs^2`` with the Smagorinsky model on, 0 with it off (``stokes.fast.lattice``).
+#: ``smag`` is the closure's constant with a turbulent preview on (``stokes.fast.lattice.closure_constant``:
+#: ``18 sqrt(2) Cs^2`` for the Smagorinsky model), 0 with it off; ``closure`` its number.
 #: ``zbase`` is the row of the port table where the zones' rows start, ``thermal`` 1 with the
-#: temperature solved.
+#: temperature solved. ``init_flag`` is 1 for a classification that starts every cell at rest and
+#: 2 for a step that starts the populations from the cells' velocities (``stokes.fast.kernel``).
+#: ``base`` is the number of lattice steps taken before block 0 of the clock in this pass (a pass
+#: of steps reads this block from a buffer written before it, so nothing here can change from
+#: step to step: the step's own number within the pass is ``CLOCK``'s).
 PARAMS = """
 struct Params {
   nx: u32, ny: u32, nz: u32, n: u32,
@@ -148,12 +158,127 @@ struct Params {
   ox: f32, oy: f32, oz: f32, dx: f32,
   init_flag: u32, axis: u32, plane: u32, guard: u32,
   ramp: f32, smag: f32, closure: u32, ema: f32,
-  zbase: u32, nzones: u32, thermal: u32, pad: u32,
+  zbase: u32, nzones: u32, thermal: u32, base: u32,
 };
 """
 
 #: Words in the uniform block.
 PARAM_WORDS = 24
+
+#: **The lattice's clock**: which step of its pass a step is. A run of steps is one compute
+#: pass, so what changes with every step cannot be written by the host between two of them. The
+#: device keeps a table of ``CLOCK_STEPS`` such blocks, block ``k`` holding ``k``, and binds the
+#: step's block at a dynamic offset: the step reads ``clock.step == k``. A pass starts at block 0
+#: or 1, whichever has the parity of the steps taken so far, so ``clock.step``'s lowest bit is the
+#: step's parity (which slot of a pair a link uses, ``stokes.fast.inplace``), and ``P.base +
+#: clock.step`` is the number of steps the lattice has taken: a counter that does not repeat in
+#: 2^32 steps, which seeds a 16-bit store's rounding.
+CLOCK = "struct Clock { step: u32 };"
+#: Blocks in the clock's table: the most steps one pass takes (less one when it starts at block
+#: 1); ``Lattice.step`` splits a longer run into passes.
+CLOCK_STEPS = 2048
+
+#: **How the populations are stored** (ADR-0047 addendum 4, decision 23). ``f32`` as they are
+#: computed. ``f16`` in half precision scaled by 2^15 (Lehmann et al. 2022, their ``FP16S``): the
+#: shifted populations never leave +-2, so the scale moves half precision's best range down to
+#: where they are, at no cost; arithmetic stays in f32. It needs the adapter's ``shader-f16``
+#: feature: two halves packed in a word would be written by two cells at once under in-place
+#: streaming.
+STORAGES = ("f32", "f16")
+_HALF_SCALE = 32768.0
+#: The largest half-precision number: a stored value is held inside it.
+_HALF_MAX = 65504.0
+#: Half precision's smallest step (its subnormal spacing, 2^-24).
+_HALF_STEP = 2.0**-24
+
+
+def population_bytes(storage: str) -> int:
+    """Bytes one population takes on the device."""
+    return 2 if storage == "f16" else 4
+
+
+#: **How a 16-bit store rounds.** ``dither``: up or down at random, in proportion to where the
+#: value lies between its two 16-bit neighbours; the draw is a hash of the place and of the number
+#: of steps the lattice has taken (``P.base + clock.step``, see ``CLOCK``). That number is
+#: multiplied by an odd constant, which maps the 2^32 step numbers one to one, before it meets the
+#: place: no two of 2^32 steps draw the same field.
+#: ``nearest``: to the nearer neighbour. A steady flow stores the same
+#: value at the same place every step, so rounding to nearest makes the same error every step and
+#: the errors add up to a bias (measured 2026-11-23: a square duct's friction 2.5 % low, its
+#: outflow 1 % over its inflow); dithered, the stored value is right on average. Either way the
+#: rounding is done in f32 arithmetic, so it does not depend on how a GPU converts f32 to f16.
+ROUNDINGS = ("dither", "nearest")
+ROUNDING = "dither"
+
+
+def storage_header(storage: str, rounding: str | None = None) -> str:
+    """What a shader that binds the populations starts with: for 16-bit storage the feature and
+    the two conversions, as functions (inside the step ``f16`` is a population's name).
+    ``toHalf(v, at)`` stores ``v`` at place ``at``: scaled, then moved onto half precision's grid
+    (2^(e - 11) apart for a number in [2^(e - 1), 2^e), never finer than its smallest step)."""
+    if storage != "f16":
+        return ""
+    edge = "dither(at)" if (rounding or ROUNDING) == "dither" else "0.5"
+    return "\n".join(
+        [
+            "enable f16;",
+            # A number in (0, 1] from the place and the lattice's step count: a small integer
+            # hash. The count times an odd constant is one to one over 2^32 counts.
+            "fn dither(at: u32) -> f32 {",
+            "  var h = (at ^ ((P.base + clock.step) * 2654435769u)) * 2654435761u;",
+            "  h ^= h >> 15u; h *= 2246822519u; h ^= h >> 13u;",
+            "  return (f32(h >> 8u) + 1.0) * 5.9604645e-08;",
+            "}",
+            "fn toHalf(v: f32, at: u32) -> f16 {",
+            f"  let x = clamp(v * {_f32(_HALF_SCALE)}, {_f32(-_HALF_MAX)}, {_f32(_HALF_MAX)});",
+            "  let size = abs(x);",
+            # Half precision's step at this size, 2^(e - 10) for a number in [2^e, 2^(e + 1)) and
+            # 2^-24 below 2^-14, built from the exponent's bits; and one over it likewise.
+            "  let bits = max(bitcast<u32>(size) & 0x7f800000u, 0x38800000u) - 0x05000000u;",
+            "  let q = size * bitcast<f32>(0x7f000000u - bits);",
+            "  let low = floor(q);",
+            f"  return f16(sign(x) * (low + step({edge}, q - low)) * bitcast<f32>(bits));",
+            "}",
+            f"fn fromHalf(v: f16) -> f32 {{ return f32(v) * {_f32(1.0 / _HALF_SCALE)}; }}",
+        ]
+    )
+
+
+def half_rounded(
+    values: NDArray[np.float32], draws: NDArray[np.float32] | None = None
+) -> NDArray[np.float32]:
+    """What a 16-bit store keeps of ``values``: ``toHalf`` and ``fromHalf`` in numpy, bit for bit,
+    so the rounding is tested without a GPU. ``draws`` are the numbers in (0, 1] the shader's
+    hash gives (one a value); without them the value goes to the nearer neighbour."""
+    x = np.clip(np.asarray(values, np.float32) * np.float32(_HALF_SCALE), -_HALF_MAX, _HALF_MAX)
+    size = np.abs(x).astype(np.float32)
+    exponent = np.maximum(size.view(np.uint32) & np.uint32(0x7F800000), np.uint32(0x38800000))
+    bits = (exponent - np.uint32(0x05000000)).astype(np.uint32)
+    q = size * (np.uint32(0x7F000000) - bits).astype(np.uint32).view(np.float32)
+    low = np.floor(q)
+    edge = np.float32(0.5) if draws is None else np.asarray(draws, np.float32)
+    kept = np.sign(x) * (low + (q - low >= edge)) * bits.view(np.float32)
+    out: NDArray[np.float32] = kept.astype(np.float16).astype(np.float32)
+    return out / np.float32(_HALF_SCALE)
+
+
+def rest(storage: str, index: str) -> str:
+    """The WGSL statement putting the population at ``index`` of the buffer ``f`` at rest (the
+    stored value is the population less its weight, so rest is zero: nothing to round)."""
+    return f"f[{index}] = {storage}(0.0);"
+
+
+def load(storage: str, index: str) -> str:
+    """The WGSL expression of the population at ``index`` of the buffer ``f``, as f32."""
+    return f"fromHalf(f[{index}])" if storage == "f16" else f"f[{index}]"
+
+
+def store(storage: str, index: str, value: str) -> str:
+    """The WGSL statement storing ``value`` (f32) at ``index`` of the buffer ``f``."""
+    if storage == "f16":
+        return f"f[{index}] = toHalf({value}, {index});"
+    return f"f[{index}] = {value};"
+
 
 #: **A cell's code** (the low byte of its flags): 1 is outside every body; a fluid zone ``z`` is 0
 #: for the first and ``z + 1`` after it; a solid zone is its fluid code with the top bit set. A
@@ -244,16 +369,51 @@ def _equilibrium(d: int, rho: str, u: str) -> str:
     return f"{w} * {rho} + {w} * (3.0 * {cu} + 4.5 * {cu} * {cu} - 1.5 * dot({u}, {u}))"
 
 
+#: **A seam inside a body is not a wall** (ADR-0047 addendum 5, decision 31). A union of parts that share a face
+#: exactly (a core box ending at x = 9 mm, a plenum starting there) has a field of exactly zero, or
+#: of round-off, on the shared face, inside the fluid. A cell whose centre falls on that face was
+#: classified solid, and a layer of them cut the fluid in pieces (measured 2026-11-23: a gyroid
+#: block with its plenums in four pieces, no outflow, a pressure past 3.6 MPa). A cell whose field
+#: is within ``SEAM_TOLERANCE`` cells of zero is looked at ``SEAM_STEP`` cells to either side,
+#: along each axis and one oblique direction: inside on both sides of some direction, it is inside
+#: (the larger of the two values). A true wall through the centre has the outside on one side and
+#: stays as it was.
+SEAM_TOLERANCE = 1e-3
+SEAM_STEP = 1e-2
+_SEAM_DIRECTIONS = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.618034, 0.381966))
+
+
+def _seam_resolved(zone: int) -> str:
+    """``phi{zone}``: the zone's raw field ``phiRaw{zone}`` with its interior seams taken out."""
+    lines = [
+        f"fn phi{zone}(p: vec3f) -> f32 {{",
+        f"  let v = phiRaw{zone}(p);",
+        f"  if (v < 0.0 || v > {_f32(SEAM_TOLERANCE)} * P.dx) {{ return v; }}",
+        f"  let e = {_f32(SEAM_STEP)} * P.dx;",
+        "  var best = v;",
+    ]
+    for x, y, z in _SEAM_DIRECTIONS:
+        step = f"vec3f({_f32(x)}, {_f32(y)}, {_f32(z)}) * e"
+        lines.append(
+            f"  {{ let s = max(phiRaw{zone}(p + {step}), phiRaw{zone}(p - {step}));"
+            " if (s < 0.0) { best = min(best, s); } }"
+        )
+    lines += ["  return best;", "}"]
+    return "\n".join(lines) + "\n"
+
+
 def zone_fields(fields: list[tuple[str, bool]]) -> str:
     """The zones' fields as WGSL: ``phi0``, ``phi1``... (one per zone, each from ``compile_field``'s
-    body) and ``phiOf(code, p)``, the field of the zone a cell code names.
+    body with its interior seams taken out, ``SEAM_TOLERANCE``) and ``phiOf(code, p)``, the field
+    of the zone a cell code names. The shader binds the params ``P`` (the cell size).
 
     ``fields`` holds each zone's compiled ``fn phi`` text and whether the zone is a solid.
     """
     parts = []
     cases = []
     for zone, (text, solid) in enumerate(fields):
-        parts.append(text.replace("fn phi(", f"fn phi{zone}(", 1))
+        parts.append(text.replace("fn phi(", f"fn phiRaw{zone}(", 1))
+        parts.append(_seam_resolved(zone))
         cases.append(f"  if (code == {zone_code(zone, solid)}u) {{ return phi{zone}(p); }}")
     parts.append(
         "fn phiOf(code: u32, p: vec3f) -> f32 {\n" + "\n".join(cases) + "\n  return 1.0;\n}\n"
@@ -264,17 +424,20 @@ def zone_fields(fields: list[tuple[str, bool]]) -> str:
 # ----------------------------------------------------------------------------------- the shaders
 
 
-def classify_shader(fields: list[tuple[str, bool]], nx: int, ny: int) -> str:
+def classify_shader(fields: list[tuple[str, bool]], nx: int, ny: int, storage: str = "f32") -> str:
     """Cell codes and port adjacency from the zones' fields; cells that changed zone start at rest
     and at their zone's starting temperature."""
     lines = [
+        "enable f16;" if storage == "f16" else "",
         PARAMS,
-        "@group(0) @binding(0) var<storage, read_write> fcur: array<f32>;",
+        f"@group(0) @binding(0) var<storage, read_write> f: array<{storage}>;",
         "@group(0) @binding(1) var<storage, read_write> flags: array<u32>;",
         "@group(0) @binding(2) var<uniform> P: Params;",
         "@group(0) @binding(3) var<storage, read> ports: array<f32>;",
         "@group(0) @binding(4) var<storage, read> masks: array<u32>;",
         "@group(0) @binding(5) var<storage, read_write> tcur: array<f32>;",
+        "@group(0) @binding(6) var<storage, read_write> vel: array<vec4f>;",
+        "@group(0) @binding(7) var<storage, read_write> mean: array<f32>;",
         _CELL,
         _PORTS,
         zone_fields(fields),
@@ -313,193 +476,13 @@ def classify_shader(fields: list[tuple[str, bool]], nx: int, ny: int) -> str:
         "  let old = flags[id] & 0xffu;",
         "  flags[id] = code | (adj << 8u) | (shape << 16u);",
         "  if (isFluid(code) && (P.init_flag == 1u || old != code)) {",
-        *(f"    fcur[{d}u * P.n + id] = 0.0;" for d in range(19)),
+        # The cell's own nineteen places (some are a neighbour's links: they start at rest too).
+        *("    " + rest(storage, f"{d}u * P.n + id") for d in range(19)),
+        "    vel[id] = vec4f(0.0); mean[id] = 0.0;",
         "  }",
         "  if (code != 1u && (P.init_flag == 1u || old != code)) { tcur[id] = zoneF(zoneOf(code), 7u); }",
         "}",
     ]
-    return "\n".join(lines)
-
-
-def step_shader(fields: list[tuple[str, bool]], nx: int, ny: int) -> str:
-    """One lattice step: pull streaming with the boundary links, then the collision."""
-    lines = [
-        PARAMS,
-        "struct Counters { guard: atomic<u32>, nan: atomic<u32> };",
-        "@group(0) @binding(0) var<storage, read> src: array<f32>;",
-        "@group(0) @binding(1) var<storage, read_write> dst: array<f32>;",
-        "@group(0) @binding(2) var<storage, read> flags: array<u32>;",
-        "@group(0) @binding(3) var<uniform> P: Params;",
-        "@group(0) @binding(4) var<storage, read> ports: array<f32>;",
-        "@group(0) @binding(5) var<storage, read> masks: array<u32>;",
-        "@group(0) @binding(6) var<storage, read_write> counters: Counters;",
-        # Each fluid cell's velocity, for the temperature's step, and (in w) the running mean of its
-        # own stress, for the shear-improved closure: written by the cell's own invocation only.
-        "@group(0) @binding(7) var<storage, read_write> vel: array<vec4f>;",
-        _CELL,
-        _PORTS,
-        zone_fields(fields),
-        "@compute @workgroup_size(64) fn main(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u32) {",
-        "  let id = cellId(wg, li); if (id >= P.n) { return; }",
-        "  let code = flags[id] & 0xffu;",
-        "  if (!isFluid(code)) { return; }",
-        "  let zone = zoneOf(code);",
-        "  let N = P.n;",
-        "  let i = id % P.nx; let j = (id / P.nx) % P.ny; let k = id / (P.nx * P.ny);",
-        "  let pos = posOf(i, j, k);",
-        "  var phx = 0.0; var havePhx = false;",
-        "  var ux = vec3f(0.0); var haveU = false;",
-        "  var f0 = src[id];",
-        # **What the interpolated walls return less what was sent to them**, taken off the rest
-        # population below so the cell keeps its mass: interpolated bounce-back alone is not
-        # conservative, and lost a tenth of the flow in channels eight cells wide (a gyroid plate
-        # exchanger, measured 2026-11-22). The rest population carries no momentum, so the wall's
-        # position is as the interpolation has it.
-        "  var leak = 0.0;",
-        # An inlet's velocity at this cell: the ramp, the profile's share and the port's gain.
-        "  let adj = (flags[id] >> 8u) & 0xffu;",
-        "  var inflow = 0.0;",
-        "  if (adj > 0u) { inflow = P.ramp * f32(flags[id] >> 16u) / 65535.0 * portF(adj - 1u, 23u); }",
-    ]
-    for d in range(1, 19):
-        o, off = OPP[d], _offset(d, nx, ny)
-        w = _f32(W[d])
-        lines += [
-            f"  var f{d}: f32;",
-            f"  {{ let s = u32(i32(id) - ({off})); if ((flags[s] & 0xffu) == code) {{ f{d} = src[{d}u * N + s]; }} else {{",
-            f"    let fo = src[{o}u * N + id];",
-            "    if (!havePhx) { phx = phiOf(code, pos); havePhx = true; }",
-            f"    let phs = phiOf(code, pos - {_c(d)} * P.dx);",
-            "    let den = phx - phs; var q = 0.5; if (abs(den) > 1e-20) { q = clamp(phx / den, 0.0, 1.0); }",
-            f"    let port = portAt(pos - {_c(d)} * (P.dx * q));",
-            "    if (port < 0) {",
-            f"      if (P.mode == 0u) {{ f{d} = fo; }}",
-            f"      else if (q < 0.5) {{ let nb = u32(i32(id) + ({off})); if ((flags[nb] & 0xffu) == code) {{ f{d} = 2.0 * q * fo + (1.0 - 2.0 * q) * src[{o}u * N + nb]; }} else {{ f{d} = fo; }} }}",
-            f"      else {{ f{d} = fo / (2.0 * q) + (2.0 * q - 1.0) / (2.0 * q) * src[{d}u * N + id]; }}",
-            f"      leak += f{d} - fo;",
-            "    } else if (portF(u32(port), 3u) < 0.5) {",
-            f"      f{d} = fo + 6.0 * {w} * inflow * dot({_c(d)}, portV(u32(port), 20u));",
-            "    } else {",
-            "      if (!haveU) {",
-            *("      " + line for line in _moments("src[{d}u * N + id]", "rl", "jl")),
-            "        ux = jl; haveU = true;",
-            "      }",
-            f"      let cu = dot({_c(d)}, ux);",
-            f"      f{d} = -fo + 2.0 * {w} * (portF(u32(port), 19u) + 4.5 * cu * cu - 1.5 * dot(ux, ux));",
-            "    }",
-            "  } }",
-        ]
-    lines.append("  f0 -= leak;")
-    lines += _moments("f{d}", "rho0", "mom")
-    # **The cells next to an inlet are an equilibrium layer**: the inlet's velocity at the density the
-    # streaming brought. Bounce-back with a wall velocity alone gave the first layer twice the inlet
-    # speed near tau's limit (measured with the LES, 2026-11-21); this layer holds the inflow at any
-    # tau, as the prototype's inlet planes did.
-    lines += [
-        "  let mean = vel[id].w;",
-        "  if (adj > 0u && portF(adj - 1u, 3u) < 0.5 && rho0 == rho0) {",
-        "    let rin = rho0;",
-        "    let uin = portV(adj - 1u, 20u) * inflow;",
-        *(f"    dst[{d}u * N + id] = {_equilibrium(d, 'rin', 'uin')};" for d in range(19)),
-        "    vel[id] = vec4f(uin, mean);",
-        "    return;",
-        "  }",
-        # **The cells next to an outlet are an equilibrium layer too**: the outlet's density with the
-        # momentum the streaming brought. Anti-bounce-back alone let the eddies of a turbulent
-        # preview pile up at the outlet (measured 2026-11-22: 14 times the inlet speed in the last
-        # layer at a cell Reynolds number of 62); the layer absorbs them.
-        "  if (adj > 0u && portF(adj - 1u, 3u) >= 0.5 && rho0 == rho0) {",
-        "    var uout = mom; let sout = length(uout);",
-        "    if (sout > 0.3) { uout = uout * (0.3 / sout); atomicAdd(&counters.guard, 1u); }",
-        "    let rout = portF(adj - 1u, 19u);",
-        *(f"    dst[{d}u * N + id] = {_equilibrium(d, 'rout', 'uout')};" for d in range(19)),
-        "    vel[id] = vec4f(uout, mean);",
-        "    return;",
-        "  }",
-    ]
-    lines += [
-        "  if (rho0 != rho0) {",
-        "    atomicAdd(&counters.nan, 1u);",
-        *(f"    dst[{d}u * N + id] = 0.0;" for d in range(19)),
-        "    vel[id] = vec4f(0.0);",
-        "    return;",
-        "  }",
-        # **The guard holds the speed only.** With the incompressible equilibrium the density is the
-        # pressure and nothing else: a core whose pressure drop is hundreds of inlet dynamic heads
-        # has a density deviation above 1 and is none the worse for it, where a cap on the density
-        # held a quarter of its flow back (a gyroid plate exchanger, measured 2026-11-22).
-        "  let rho = rho0; var u = mom;",
-        "  if (P.guard == 1u) {",
-        "    let speed = length(u);",
-        "    if (speed > 0.3) {",
-        "      atomicAdd(&counters.guard, 1u);",
-        "      u = u * (0.3 / speed);",
-        "    }",
-        "  }",
-    ]
-    for d in range(19):
-        lines.append(f"  let e{d} = {_equilibrium(d, 'rho', 'u')};")
-    # The Smagorinsky model (Hou et al. 1996): the non-equilibrium momentum flux gives the strain, and
-    # the strain an eddy viscosity added to the molecular one through an effective relaxation time.
-    # **With it the collision is the regularised one** (Latt and Chopard 2006): the populations are
-    # rebuilt from the equilibrium and that flux alone, which drops the modes the lattice carries
-    # but the flow does not. Two relaxation times near tau's limit left cell-to-cell noise of the
-    # inlet speed's size behind an inlet (measured 2026-11-22 at a cell Reynolds number of 62).
-    lines += ["  let wp = zoneF(zone, 0u); let wm = zoneF(zone, 1u);", "  if (P.smag > 0.0) {"]
-    for name, (a, b) in {
-        "xx": (0, 0),
-        "yy": (1, 1),
-        "zz": (2, 2),
-        "xy": (0, 1),
-        "xz": (0, 2),
-        "yz": (1, 2),
-    }.items():
-        terms = [
-            f"{_comp(d, a) * _comp(d, b)}.0 * (f{d} - e{d})"
-            for d in range(1, 19)
-            if _comp(d, a) * _comp(d, b)
-        ]
-        lines.append(f"    let p{name} = " + " + ".join(terms) + ";")
-    lines += [
-        "    let q = sqrt(pxx * pxx + pyy * pyy + pzz * pzz + 2.0 * (pxy * pxy + pxz * pxz + pyz * pyz));",
-        "    let t0 = 1.0 / wp;",
-        # **The shear-improved closure** (Leveque et al. 2007) takes the stress's running mean off
-        # before the eddy viscosity: a steady, laminar shear then has none, where the plain
-        # Smagorinsky model read a laminar duct's friction 5 to 7 % high.
-        "    var qe = q; var kept = mean;",
-        "    if (P.closure == 1u) { qe = max(q - mean, 0.0); kept = mean + P.ema * (q - mean); }",
-        "    let te = 0.5 * (t0 + sqrt(t0 * t0 + P.smag * qe));",
-        "    let keep = 1.0 - 1.0 / te;",
-    ]
-    for d in range(19):
-        c = (CX[d], CY[d], CZ[d])
-        parts = [
-            f"{_f32(c[a] * c[a] - 1.0 / 3.0)} * p{name}"
-            for a, name in enumerate(("xx", "yy", "zz"))
-        ]
-        parts += [
-            f"{_f32(2.0 * c[a] * c[b])} * p{name}"
-            for (a, b), name in (((0, 1), "xy"), ((0, 2), "xz"), ((1, 2), "yz"))
-            if c[a] * c[b]
-        ]
-        target = "dst[id]" if d == 0 else f"dst[{d}u * N + id]"
-        lines.append(
-            f"    {target} = e{d} + keep * {_f32(4.5 * W[d])} * (" + " + ".join(parts) + ");"
-        )
-    lines += ["    vel[id] = vec4f(u, kept);", "    return;", "  }"]
-    lines.append("  vel[id] = vec4f(u, mean);")
-    lines.append("  dst[id] = f0 - wp * (f0 - e0);")
-    for d in range(1, 19):
-        o = OPP[d]
-        if o < d:
-            continue
-        lines += [
-            f"  {{ let fp = 0.5 * (f{d} + f{o}); let fm = 0.5 * (f{d} - f{o});",
-            f"    let ep = 0.5 * (e{d} + e{o}); let em = 0.5 * (e{d} - e{o});",
-            f"    dst[{d}u * N + id] = f{d} - wp * (fp - ep) - wm * (fm - em);",
-            f"    dst[{o}u * N + id] = f{o} - wp * (fp - ep) + wm * (fm - em); }}",
-        ]
-    lines.append("}")
     return "\n".join(lines)
 
 
@@ -580,13 +563,65 @@ def thermal_shader(nx: int, ny: int) -> str:
     return "\n".join(lines)
 
 
+def prolong_shader() -> str:
+    """A lattice's velocity, density and temperature from another lattice of the same case (ADR-0047
+    addendum 4, the warm start): trilinear between the other lattice's cell centres, among those
+    of its eight cells round the point that belong to the same body, so nothing is taken across a
+    wall. A cell with none of them keeps what the classification gave it (rest, the starting
+    temperature). ``From`` has the other lattice's size and placement (mm) and what its lattice
+    velocity and its density's deviation are worth in this lattice's units.
+    """
+    lines = [
+        PARAMS,
+        "struct From { nx: u32, ny: u32, nz: u32, pad: u32, ox: f32, oy: f32, oz: f32, dx: f32, velocity: f32, density: f32, pad1: f32, pad2: f32 };",
+        "@group(0) @binding(0) var<storage, read> cvel: array<vec4f>;",
+        "@group(0) @binding(1) var<storage, read> cflags: array<u32>;",
+        "@group(0) @binding(2) var<storage, read> ctemp: array<f32>;",
+        "@group(0) @binding(3) var<storage, read> flags: array<u32>;",
+        "@group(0) @binding(4) var<storage, read_write> vel: array<vec4f>;",
+        "@group(0) @binding(5) var<storage, read_write> temp: array<f32>;",
+        "@group(0) @binding(6) var<uniform> P: Params;",
+        "@group(0) @binding(7) var<uniform> C: From;",
+        _CELL,
+        "@compute @workgroup_size(64) fn main(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u32) {",
+        "  let id = cellId(wg, li); if (id >= P.n) { return; }",
+        "  let code = flags[id] & 0xffu;",
+        "  if (code == 1u) { return; }",
+        "  let i = id % P.nx; let j = (id / P.nx) % P.ny; let k = id / (P.nx * P.ny);",
+        "  let at = (posOf(i, j, k) - vec3f(C.ox, C.oy, C.oz)) / C.dx - vec3f(0.5);",
+        "  let base = floor(at); let t = at - base;",
+        "  let bi = i32(base.x); let bj = i32(base.y); let bk = i32(base.z);",
+        "  var sum = 0.0; var v = vec4f(0.0); var warm = 0.0;",
+    ]
+    for corner in range(8):
+        a, b, c = corner & 1, (corner >> 1) & 1, (corner >> 2) & 1
+        weight = " * ".join(
+            f"t.{axis}" if bit else f"(1.0 - t.{axis})"
+            for axis, bit in zip("xyz", (a, b, c), strict=True)
+        )
+        lines += [
+            f"  {{ let ci = bi + {a}; let cj = bj + {b}; let ck = bk + {c};",
+            "    if (ci >= 0 && cj >= 0 && ck >= 0 && ci < i32(C.nx) && cj < i32(C.ny) && ck < i32(C.nz)) {",
+            "      let cid = u32(ci) + C.nx * (u32(cj) + C.ny * u32(ck));",
+            f"      if ((cflags[cid] & 0xffu) == code) {{ let w = {weight}; sum += w; v += w * cvel[cid]; warm += w * ctemp[cid]; }}",
+            "    } }",
+        ]
+    lines += [
+        "  if (sum <= 1e-6) { return; }",
+        "  temp[id] = warm / sum;",
+        "  if (isFluid(code)) { vel[id] = vec4f(v.xyz * (C.velocity / sum), v.w * (C.density / sum)); }",
+        "}",
+    ]
+    return "\n".join(lines)
+
+
 def slice_shader() -> str:
     """The velocity and the density's deviation from 1 of every cell of an axis-aligned plane (the
     deviation is 1e30 for a cell that is not a fluid), then the plane again with each cell's
     temperature (less the reference) and its code."""
     lines = [
         PARAMS,
-        "@group(0) @binding(0) var<storage, read> src: array<f32>;",
+        "@group(0) @binding(0) var<storage, read> vel: array<vec4f>;",
         "@group(0) @binding(1) var<storage, read> flags: array<u32>;",
         "@group(0) @binding(2) var<uniform> P: Params;",
         "@group(0) @binding(3) var<storage, read_write> out: array<vec4f>;",
@@ -603,9 +638,7 @@ def slice_shader() -> str:
         "  let code = flags[id] & 0xffu;",
         "  out[n1 * n2 + at] = vec4f(tsrc[id], f32(code), 0.0, 0.0);",
         "  if (!isFluid(code)) { out[at] = vec4f(0.0, 0.0, 0.0, 1e30); return; }",
-        "  let N = P.n;",
-        *_moments("src[{d}u * N + id]", "r", "m"),
-        "  out[at] = vec4f(m, r);",
+        "  out[at] = vel[id];",
         "}",
     ]
     return "\n".join(lines)
@@ -615,18 +648,15 @@ def gather_shader() -> str:
     """The velocity and the density's deviation from 1 of a list of cells (those next to a port),
     then each cell's temperature (less the reference)."""
     lines = [
-        PARAMS,
-        "@group(0) @binding(0) var<storage, read> src: array<f32>;",
+        "@group(0) @binding(0) var<storage, read> vel: array<vec4f>;",
         "@group(0) @binding(1) var<storage, read> cells: array<u32>;",
-        "@group(0) @binding(2) var<uniform> P: Params;",
-        "@group(0) @binding(3) var<storage, read_write> out: array<vec4f>;",
-        "@group(0) @binding(4) var<storage, read> tsrc: array<f32>;",
+        "@group(0) @binding(2) var<storage, read_write> out: array<vec4f>;",
+        "@group(0) @binding(3) var<storage, read> tsrc: array<f32>;",
         "@compute @workgroup_size(64) fn main(@builtin(global_invocation_id) g: vec3u) {",
         "  let count = arrayLength(&cells);",
         "  if (g.x >= count) { return; }",
-        "  let id = cells[g.x]; let N = P.n;",
-        *_moments("src[{d}u * N + id]", "r", "m"),
-        "  out[g.x] = vec4f(m, r);",
+        "  let id = cells[g.x];",
+        "  out[g.x] = vel[id];",
         "  out[count + g.x] = vec4f(tsrc[id], 0.0, 0.0, 0.0);",
         "}",
     ]

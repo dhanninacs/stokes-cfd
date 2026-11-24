@@ -51,6 +51,8 @@ ADR_PARAMS: list[Row] = [  # ADR-0022 decision 2.4, in its order
     ("layers", "int", None, None),
     # The per-boundary surface size (brief M-503): the same empty = inherit shape, in SI metres.
     ("mesh_size", "quantity", "length", None),
+    # Values that vary in time (ADR-0022 addendum 2026-11-24): hidden JSON, null for none.
+    ("profiles", "json", None, None),
 ]
 
 

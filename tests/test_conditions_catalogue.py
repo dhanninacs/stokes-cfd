@@ -94,8 +94,10 @@ def test_every_parameter_a_kind_uses_exists_on_boundary() -> None:
     every = {name for spec in KINDS for name in spec.param_names}
     # `layers` and `mesh_size` are overrides no condition kind uses (briefs M-504 and M-503):
     # neither is part of any kind's parameter list, so both are exempt here like the type's own
-    # keys are.
-    assert every == set(params) - {"kind", "tag", "layers", "mesh_size"}  # no unused parameter
+    # keys are. `profiles` holds the time profiles of the values (ADR-0022 addendum 2026-11-24),
+    # which `PROFILED` names per kind rather than a `ParamUse`.
+    unused = {"kind", "tag", "layers", "mesh_size", "profiles"}
+    assert every == set(params) - unused  # no unused parameter
 
 
 def test_every_when_names_an_enum_parameter_and_valid_choices() -> None:

@@ -28,6 +28,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from stokes.fast.case import FastCase, Zone
+from stokes.fast.errors import FastInvalid
 from stokes.fast.lattice import DIFFUSIVITY_LATTICE_MAX, Scaling
 from stokes.fast.ports import INLET, OUTLET, PORT_STRIDE, Port, layer_thickness
 
@@ -196,3 +197,142 @@ def cells_across(codes: NDArray[np.integer[Any]], zones: tuple[Zone, ...]) -> li
         across = 4.0 * cells / faces if faces else 0.0
         found.append({"name": zone.name, "cells": cells, "cells_across": across})
     return found
+
+
+def disconnected(
+    codes: NDArray[np.integer[Any]],
+    cells_of_port: list[NDArray[np.uint32]],
+    case: FastCase,
+    fidelity: int,
+) -> FastInvalid | None:
+    """The refusal of a lattice on which a fluid's inlets and outlets are not joined through its
+    own cells (ADR-0047 addendum 5), or None when every fluid's are.
+
+    ``codes`` is the cells' codes as ``(nz, ny, nx)``, ``cells_of_port`` each port's cells (flat
+    indices). Cells are joined as the lattice's links join them (faces and edges). A fluid in
+    pieces runs with no outflow and a pressure that climbs without end, and says nothing: measured
+    2026-11-23 on a union whose parts shared a face (``stokes.fast.wgsl.SEAM_TOLERANCE``), and it
+    is what a passage narrower than a cell does too. Every inlet must reach an outlet and every
+    outlet an inlet; a port with no cells is not judged here.
+    """
+    from stokes.fast.wgsl import zone_code
+
+    for index, zone in enumerate(case.all_zones):
+        if zone.kind == SOLID:
+            continue
+        ports = [
+            (port, cells)
+            for port, cells in zip(case.ports, cells_of_port, strict=False)
+            if port.zone == index and port.kind in (INLET, OUTLET) and cells.size
+        ]
+        if not any(p.kind == INLET for p, _ in ports) or not any(
+            p.kind == OUTLET for p, _ in ports
+        ):
+            continue
+        labels, pieces = connected(codes == zone_code(index, False))
+        flat = labels.reshape(-1)
+        touched = {p.name: set(np.unique(flat[cells]).tolist()) - {0} for p, cells in ports}
+        reach = {
+            kind: set().union(*(touched[p.name] for p, _ in ports if p.kind == kind))
+            for kind in (INLET, OUTLET)
+        }
+        cut = [
+            p.name
+            for p, _ in ports
+            if not touched[p.name] & reach[OUTLET if p.kind == INLET else INLET]
+        ]
+        if cut:
+            return FastInvalid(
+                f"the fluid {zone.name!r} is in {pieces} pieces on the lattice at fidelity "
+                f"{fidelity}: {_cut_off(ports, cut)} through its cells, so nothing would flow. "
+                "A passage is narrower than a cell or the parts do not touch: raise the fidelity "
+                "or check the geometry",
+                details={
+                    "reason": "fast.disconnected",
+                    "fluid": zone.name,
+                    "pieces": pieces,
+                    "ports": cut,
+                    "fidelity": fidelity,
+                },
+            )
+    return None
+
+
+def _cut_off(ports: list[tuple[Port, NDArray[np.uint32]]], cut: list[str]) -> str:
+    """What the cut ports miss, for the message: "'in' reaches no outlet and 'out' no inlet"."""
+    parts: list[str] = []
+    for kind, other in ((INLET, "outlet"), (OUTLET, "inlet")):
+        names = [n for n in cut if _kind(ports, n) == kind]
+        if names:
+            verb = "" if parts else ("reaches " if len(names) == 1 else "reach ")
+            parts.append(f"{', '.join(repr(n) for n in names)} {verb}no {other}")
+    return " and ".join(parts)
+
+
+def _kind(ports: list[tuple[Port, NDArray[np.uint32]]], name: str) -> str:
+    return next(p.kind for p, _ in ports if p.name == name)
+
+
+#: Half of the lattice's links between rows of cells along x (the other half are their
+#: opposites), as (dz, dy, dx).
+_ROW_LINKS = (
+    (0, 1, -1),
+    (0, 1, 0),
+    (0, 1, 1),
+    (1, 0, -1),
+    (1, 0, 0),
+    (1, 0, 1),
+    (1, 1, 0),
+    (1, -1, 0),
+)
+
+
+def connected(mask: NDArray[np.bool_]) -> tuple[NDArray[np.int64], int]:
+    """The pieces of ``mask`` (``(nz, ny, nx)``) as the lattice's links join cells (faces and
+    edges): each cell's piece label (0 outside the mask) and how many pieces.
+
+    numpy only (scipy is the explore package's): the runs of cells along x are the nodes, the links
+    between runs of neighbouring rows the edges, and the labels settle by hooking and pointer
+    jumping in a few passes. About 0.5 s on 7 million cells.
+    """
+    m = np.pad(np.asarray(mask, dtype=bool), 1)
+    nz, ny, nx = m.shape
+    start = m.copy()
+    start[:, :, 1:] &= ~m[:, :, :-1]
+    run = np.cumsum(start.reshape(-1), dtype=np.int64).reshape(m.shape)
+    runs = int(run[-1, -1, -1])
+    centre = (slice(1, -1), slice(1, -1), slice(1, -1))
+    us: list[NDArray[np.int64]] = []
+    vs: list[NDArray[np.int64]] = []
+    for dz, dy, dx in _ROW_LINKS:
+        other = (
+            slice(1 + dz, nz - 1 + dz),
+            slice(1 + dy, ny - 1 + dy),
+            slice(1 + dx, nx - 1 + dx),
+        )
+        both = m[centre] & m[other]
+        # One link per pair of runs: where either run starts, or the pair's overlap does.
+        fresh = start[centre] | start[other]
+        fresh[:, :, 1:] |= ~both[:, :, :-1]
+        fresh[:, :, 0] = True
+        chosen = both & fresh
+        us.append(run[centre][chosen])
+        vs.append(run[other][chosen])
+    u, v = np.concatenate(us), np.concatenate(vs)
+    label = np.arange(runs + 1, dtype=np.int64)
+    while True:
+        lu, lv = label[u], label[v]
+        apart = lu != lv
+        if not apart.any():
+            break
+        lu, lv = lu[apart], lv[apart]
+        np.minimum.at(label, np.maximum(lu, lv), np.minimum(lu, lv))
+        while True:
+            jumped = label[label]
+            if np.array_equal(jumped, label):
+                break
+            label = jumped
+    roots, dense = np.unique(label[1:], return_inverse=True)
+    numbered = np.concatenate(([0], dense + 1))
+    cells = np.where(m, numbered[run], 0)[centre]
+    return cells, int(roots.size)

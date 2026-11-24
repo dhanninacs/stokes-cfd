@@ -3,7 +3,9 @@
 A summary is a node without its children: id, type, name, status, params in JSON form, ``meta``
 when there is any, path, ``children_count``, ``structural`` (the server refuses to rename or delete
 the skeleton groups) and, for the quantity parameters, ``displays`` (the value as text in the
-project's display unit). ``node.tree`` nests them under ``children``.
+project's display unit), and for a boundary with time profiles ``varies`` (the values that vary,
+by the server's rule ``varying_in``: kind, switches and whether the run solves energy).
+``node.tree`` nests them under ``children``.
 
 Three things are built here and nowhere else:
 
@@ -124,6 +126,14 @@ def _head(project: Project, node: Node, path: str, seen: TypeQuantities) -> dict
             displays[name] = _display(stored.value, dim.si_unit, unit)
         if not displays:
             del data["displays"]
+    if node.type == "boundary" and node.params.get("profiles"):
+        # The values that vary in time (ADR-0022 addendum 2026-11-24) by the server's one rule,
+        # `varying_in`: the kind, its switches and whether the run solves energy (the switch, or a
+        # multi-region case). A client reads it as it is. A temperature profile depends on nodes
+        # other than the boundary, so `node_event` re-sends such boundaries (`_energy_readers`).
+        from stokes.physics.conditions.profiles import varying_in
+
+        data["varies"] = list(varying_in(project, node))
     return data
 
 
@@ -252,6 +262,25 @@ def announce(project: Project, event: str, data: dict[str, Any]) -> dict[str, An
     return data
 
 
+ENERGY_TYPES = ("solver_settings", "mesh_settings", "region", "tag", "part")
+"""The node types whose change can change whether the run solves energy (the energy switch, the
+mesher and domain, the bodies the regions hold), and so whether a temperature profile varies."""
+
+
+def _energy_readers(project: Project, event: str, node: Node | None) -> list[str]:
+    """The boundaries whose summary's ``varies`` may follow from this event: those with a
+    temperature profile, when the node changed (or removed) is one :data:`ENERGY_TYPES` names."""
+    if event != "node.removed" and (node is None or node.type not in ENERGY_TYPES):
+        return []
+    return [
+        other.id
+        for other in project.root.walk()
+        if other.type == "boundary"
+        and isinstance(other.params.get("profiles"), dict)
+        and "temperature" in other.params["profiles"]
+    ]
+
+
 def node_event(project: Project, event: str, data: dict[str, Any]) -> dict[str, Any]:
     """``data`` of a node event with what a client needs to patch its tree.
 
@@ -284,6 +313,7 @@ def node_event(project: Project, event: str, data: dict[str, Any]) -> dict[str, 
             if siblings and siblings[-1] is not node:
                 out["index"] = siblings.index(node)
     others = [other for other in reached if other != node_id]
+    others += [b for b in _energy_readers(project, event, node) if b != node_id and b not in others]
     if lost or len(others) > ALSO_LIMIT:
         out["resync"] = True
     else:

@@ -96,6 +96,44 @@ def test_a_boundary_kind_fast_mode_does_not_model_is_refused_by_name(tmp_path: P
     GeometryStore.of(session).close()
 
 
+def test_a_storage_the_lattice_does_not_have_is_refused_before_anything_starts(
+    tmp_path: Path,
+) -> None:
+    session = new_session(tmp_path)
+    _duct(session)
+    with pytest.raises(StokesError) as caught:
+        session.execute("fast.start", storage="f8")
+    assert caught.value.code == "fast.invalid" and "storage" in caught.value.message
+    assert session.execute("fast.status") == {"state": "off"}
+    GeometryStore.of(session).close()
+
+
+@pytest.mark.gpu
+def test_the_start_takes_the_storage_the_closure_and_the_warm_start(tmp_path: Path) -> None:
+    """Round 4's options through the command (ADR-0047 addendum 4): 16-bit storage where the GPU
+    has it, a closure by name, and a start from rest when the warm start is switched off."""
+    session = new_session(tmp_path)
+    _duct(session)
+    started = session.execute(
+        "fast.start", fidelity=4, storage="f16", turbulence="wale", warm_start=False
+    )
+    assert started["started"]
+    status = _wait(session, lambda s: s["frame"]["step"] > 500)
+    half = session.execute("fast.check")["adapter"]["f16"]
+    assert status["storage"] == ("f16" if half else "f32")
+    assert status["turbulence"] == "wale" and status["warm_start"] is False
+    assert status["warming"] is False and status["grid"]["fidelity"] == 4  # no coarse pass
+    assert session.execute("fast.stop") == {"stopped": True}
+
+    # With the warm start (the default) the same run settles a coarse lattice first.
+    session.execute("fast.start", fidelity=4)
+    coarse = _wait(session, lambda s: s.get("grid", {}).get("fidelity") == 2)
+    assert coarse["warming"] and coarse["fidelity"] == 4 and coarse["storage"] == "f32"
+    _wait(session, lambda s: s.get("grid", {}).get("fidelity") == 4 and not s["warming"])
+    assert session.execute("fast.stop") == {"stopped": True}
+    GeometryStore.of(session).close()
+
+
 def test_the_commands_answer_when_nothing_runs() -> None:
     session = Session()
     assert session.execute("fast.status") == {"state": "off"}

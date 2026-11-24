@@ -21,7 +21,7 @@ import { useStore } from "../state/store";
 import { lastIteration } from "../state/residualSeries";
 import { readCase } from "../guided/guidedTree";
 import { RUN_COMMANDS, readResidualReply, residualsLoading, readRunList, readRunRecord, readRunStart, readSolveCheck, readSolveEngines, type SolveEngine } from "./runApi";
-import { POLL_MS, findSolverSettings, iterationLimit, markCancelling, markStopped, mergeRecord, noteStart, noticeToast, reduceRunEvent, runButton, seedJobLog, setRuns, shouldPoll, type LogView, type RunButtonState, type RunLive } from "./runPanelModel";
+import { POLL_MS, findSolverSettings, stepLimit, markCancelling, markStopped, mergeRecord, noteStart, noticeToast, reduceRunEvent, runButton, seedJobLog, setRuns, shouldPoll, type LogView, type RunButtonState, type RunLive } from "./runPanelModel";
 
 /** How long `solve.check` waits after the last change: the window `setup.check` uses (`store.ts`, `SETUP_CHECK_DEBOUNCE_MS`). */
 const SOLVE_CHECK_DEBOUNCE_MS = 250;
@@ -346,10 +346,10 @@ export async function configureSolve(params: Record<string, unknown>): Promise<u
   return useStore.getState().execute(RUN_COMMANDS.configure, params, { silent: true });
 }
 
-/** The iteration limit of the project's settings, for the state line. */
+/** The steps the run takes (iterations, or a transient run's end time over its step), for the state line. */
 export function useIterationLimit(): number | null {
   const tree = useStore((s) => s.tree);
-  return useMemo(() => iterationLimit(findSolverSettings(tree)), [tree]);
+  return useMemo(() => stepLimit(findSolverSettings(tree)), [tree]);
 }
 
 // ---------------------------------------------------------------------------------------------- the wiring

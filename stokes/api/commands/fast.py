@@ -42,7 +42,24 @@ TURBULENCE = ParamDef(
     "string",
     required=False,
     description="The closure of a turbulent preview: auto (the default: shear_improved up to a "
-    "cell Reynolds number of 30, smagorinsky above), smagorinsky or shear_improved.",
+    "cell Reynolds number of 30, smagorinsky above), smagorinsky, shear_improved, wale or vreman "
+    "(the last two give a laminar shear no eddy viscosity).",
+)
+WARM_START = ParamDef(
+    "warm_start",
+    "boolean",
+    required=False,
+    description="Start a fine lattice from a coarser one's solution (default true): a run at "
+    "fidelity 4 or 5 first settles at fidelity 2, and a fidelity raised while running keeps the "
+    "flow. False starts every lattice from rest.",
+)
+STORAGE = ParamDef(
+    "storage",
+    "string",
+    required=False,
+    description="How the lattice keeps its populations: f32 (the default) or f16, half precision "
+    "scaled for the lattice, which halves their memory so a finer lattice fits (arithmetic stays "
+    "32-bit). A GPU without 16-bit shader storage runs f32 and says so.",
 )
 
 _PROBE = threading.Lock()
@@ -68,20 +85,31 @@ def fast_check(ctx: CommandContext) -> dict[str, Any]:  # Any: JSON
         return dict(_available)
 
 
-@command("fast.start", params=(FIDELITY, AXIS, OFFSET, TURBULENCE), mutates=False)
+@command(
+    "fast.start",
+    params=(FIDELITY, AXIS, OFFSET, TURBULENCE, WARM_START, STORAGE),
+    mutates=False,
+)
 def fast_start(
     ctx: CommandContext,
     fidelity: int | None = None,
     axis: int | None = None,
     offset: Any = None,  # Any: a number of metres or a length's text
     turbulence: str | None = None,
+    warm_start: bool | None = None,
+    storage: str | None = None,
 ) -> dict[str, Any]:  # Any: JSON
     """Start the GPU preview of the project's case: one per session; a second one restarts."""
     from stokes.api.fast_inputs import offset_metres
     from stokes.api.fast_state import fast_of
 
     return fast_of(ctx.session).start(
-        fidelity or FIDELITY_DEFAULT, axis, offset_metres(offset), turbulence
+        fidelity or FIDELITY_DEFAULT,
+        axis,
+        offset_metres(offset),
+        turbulence,
+        warm_start=warm_start is not False,
+        storage=storage or "f32",
     )
 
 

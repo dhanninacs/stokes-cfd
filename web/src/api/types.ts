@@ -21,6 +21,11 @@ export interface NodeSummary {
   displays?: Record<string, string>;
   /** The root or a skeleton group: the server refuses to rename or delete it. */
   structural?: boolean;
+  /**
+   * A boundary with time profiles (ADR-0022 addendum 2026-11-24): the values that vary, by the server's rule
+   * (`varying_in`: the kind, its switches and whether the run solves energy). The client renders it as it is.
+   */
+  varies?: string[];
   children?: NodeSummary[];
 }
 
@@ -410,7 +415,8 @@ export interface SetupFinding {
   message: string;
   suggestion?: string;
   nodes?: string[];
-  fix?: { action?: string; [key: string]: unknown };
+  /** `null` from the server for a finding with no fix (`setup.needs_physics`). */
+  fix?: { action?: string; [key: string]: unknown } | null;
 }
 
 export interface SetupCounts {
@@ -488,5 +494,7 @@ export interface ConditionKind {
   /** Why it cannot, in a few words, for a tooltip. */
   unsupported_reason?: string | null;
   note: string;
+  /** The values that may vary in time (ADR-0022 addendum 2026-11-24); absent from an older server. */
+  profiled?: string[];
   params: ConditionParam[];
 }

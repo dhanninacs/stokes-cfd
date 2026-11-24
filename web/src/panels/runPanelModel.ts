@@ -54,6 +54,27 @@ function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/** Physical seconds as the run's words write them: "0.4 s", "1.25 s", "2e-4 s". */
+export function simSeconds(t: number): string {
+  if (!Number.isFinite(t)) return "-";
+  const a = Math.abs(t);
+  if (a !== 0 && (a < 1e-3 || a >= 1e5)) return `${t.toExponential(1).replace(/\.0e/, "e").replace("e+", "e")} s`;
+  return `${Number(t.toPrecision(4))} s`;
+}
+
+/**
+ * A transient run's end in words (ADR-0022 addendum 2026-11-24): "0.4 s simulated in 400 steps". A time-accurate
+ * run has no convergence to reach, so its iterations are time steps and its result is the time it simulated.
+ * Null for a steady run.
+ */
+export function transientEnd(run: Pick<RunSummary, "transient" | "endTime" | "simTime" | "iterations" | "state">): string | null {
+  if (run.transient !== true) return null;
+  const sim = run.simTime ?? 0;
+  const reached = sim > 0 ? sim : run.state === "done" ? (run.endTime ?? 0) : 0;
+  const steps = plural(run.iterations, "step");
+  return reached > 0 ? `${simSeconds(reached)} simulated in ${steps}` : `${steps} taken`;
+}
+
 // ---------------------------------------------------------------------------------------------- the live state
 /** What a run's end tells the user, once: a `seq` that grows with every end, so a subscriber toasts each exactly once. */
 export interface RunNotice {
@@ -66,6 +87,10 @@ export interface RunNotice {
   message: string;
   /** `mesh` for an imported case's mesh-only run, whose end is "the mesh is built", not a solve. */
   kind?: string;
+  /** A transient run, with its end time and the time it reached (seconds; 0 when unknown). */
+  transient?: boolean;
+  endTime?: number;
+  simTime?: number;
 }
 
 export type LogView = "events" | "job";
@@ -184,7 +209,17 @@ export function reduceRunEvent(live: RunLive, event: RunEvent): RunLive {
 /** The notice for a run's end; `message` null reads the record's own error. */
 function noticeOf(now: RunLive, before: RunLive, runId: string, state: RunState, seconds: number, converged: boolean, message: string | null): RunNotice {
   const run = now.runs.find((r) => r.id === runId);
-  return { seq: (before.notice?.seq ?? 0) + 1, runId, state, iterations: run?.iterations ?? 0, seconds, converged, message: message ?? run?.error ?? "", kind: run?.kind };
+  return {
+    seq: (before.notice?.seq ?? 0) + 1,
+    runId,
+    state,
+    iterations: run?.iterations ?? 0,
+    seconds,
+    converged,
+    message: message ?? run?.error ?? "",
+    kind: run?.kind,
+    ...(run?.transient === true ? { transient: true, endTime: run.endTime ?? 0, simTime: run.simTime ?? 0 } : {}),
+  };
 }
 
 /** `run.list` answered: the records replace ours, and the chart follows the newest. A chart of another run is dropped (its blocks come from `run.residuals`). */
@@ -354,6 +389,12 @@ export function runReadout(run: RunSummary | null, check: SolveCheck | null, lat
     case "done":
     case "done_unconverged": {
       if (run.stale) return { text: "Run · stale", state: "stale", detail: "The case changed since this run; its result no longer matches it." };
+      const timed = run.stopped === true ? null : transientEnd(run);
+      if (timed !== null) {
+        return run.state === "done"
+          ? { text: `Run · ${simSeconds(run.simTime || run.endTime || 0)} · finished`, state: "done", detail: `Finished: ${timed}.` }
+          : { text: `Run · ${simSeconds(run.simTime ?? 0)} of ${simSeconds(run.endTime ?? 0)}`, state: "unconverged", detail: `Ended before its end time: ${timed}.` };
+      }
       if (run.state === "done") return { text: `Run · ${it} · converged`, state: "done", detail: `Converged in ${plural(run.iterations, "iteration")}.` };
       return run.stopped === true
         ? { text: `Run · ${it} · stopped`, state: "unconverged", detail: `Stopped at ${plural(run.iterations, "iteration")}; that iteration was saved, so its fields can be shown and the run resumed.` }
@@ -389,16 +430,19 @@ export function stateLine(run: RunSummary | null, limit: number | null): { text:
     case "queued":
       return { text: "Waiting to start", tone: "busy" };
     case "running": {
-      if (run.stopped === true) return { text: `Stopping at iteration ${run.iterations}: saving it`, tone: "busy" };
+      const unit = run.transient === true ? "step" : "iteration";
+      if (run.stopped === true) return { text: `Stopping at ${unit} ${run.iterations}: saving it`, tone: "busy" };
       const of = limit !== null && limit > 0 ? ` of ${limit}` : "";
-      return { text: `Running: iteration ${run.iterations}${of}${run.step !== "" ? ` (${run.step})` : ""}`, tone: "busy" };
+      return { text: `Running: ${unit} ${run.iterations}${of}${run.step !== "" ? ` (${run.step})` : ""}`, tone: "busy" };
     }
     case "cancelling":
       return { text: "Stopping", tone: "busy" };
     case "done":
+      if (run.transient === true) return { text: `Finished: ${transientEnd(run)}${inTime}${run.stale ? ". Out of date" : ""}`, tone: run.stale ? "warn" : "ok" };
       return run.stale ? { text: `Finished: converged in ${plural(run.iterations, "iteration")}${inTime}. Out of date`, tone: "warn" } : { text: `Finished: converged in ${plural(run.iterations, "iteration")}${inTime}`, tone: "ok" };
     case "done_unconverged":
-      if (run.stopped === true) return { text: `Stopped and saved at iteration ${run.iterations}: results can be shown, or Resume${run.stale ? ". Out of date" : ""}`, tone: "warn" };
+      if (run.stopped === true) return { text: `Stopped and saved at ${run.transient === true ? "step" : "iteration"} ${run.iterations}: results can be shown, or Resume${run.stale ? ". Out of date" : ""}`, tone: "warn" };
+      if (run.transient === true) return { text: `Ended before its end time (${simSeconds(run.endTime ?? 0)}): ${transientEnd(run)}${inTime}${run.stale ? ". Out of date" : ""}`, tone: "warn" };
       return { text: `Finished, not converged: ${plural(run.iterations, "iteration")}${inTime}${run.stale ? ". Out of date" : ""}`, tone: "warn" };
     case "failed":
       return { text: `Failed${run.error !== "" ? `: ${run.error}` : ""}`, tone: "bad" };
@@ -429,6 +473,9 @@ export function noticeToast(note: RunNotice): { kind: "info" | "error" | "ok"; t
     if (note.state === "done") return { kind: "ok", text: `Mesh built${took !== "" ? ` · ${took}` : ""}` };
     if (note.state === "failed") return { kind: "error", text: note.message !== "" ? `Mesh failed: ${note.message}` : "Mesh failed" };
   }
+  const timed = note.transient === true ? transientEnd({ ...note, transient: true }) : null;
+  if (timed !== null && note.state === "done") return { kind: "ok", text: `Run finished: ${timed}${took !== "" ? ` · ${took}` : ""}` };
+  if (timed !== null && note.state === "done_unconverged") return { kind: "info", text: `Run ended before its end time: ${timed}` };
   switch (note.state) {
     case "done":
       return { kind: "ok", text: `Run converged in ${plural(note.iterations, "iteration")}${took !== "" ? ` · ${took}` : ""}` };
@@ -464,6 +511,23 @@ export function residualTarget(settings: NodeSummary | null): number | null {
 /** The iteration limit, from `iterations`; null when unset. */
 export function iterationLimit(settings: NodeSummary | null): number | null {
   return positive((settings?.params as Record<string, unknown> | undefined)?.iterations);
+}
+
+function seconds(raw: unknown): number | null {
+  if (typeof raw === "object" && raw !== null) return positive((raw as { value?: unknown }).value);
+  return positive(raw);
+}
+
+/**
+ * How many steps the run takes, for its progress: the iteration limit of a steady run, the end time over the time
+ * step of a transient one (whose `iterations` setting it does not use). Null when unknown.
+ */
+export function stepLimit(settings: NodeSummary | null): number | null {
+  const params = settings?.params as Record<string, unknown> | undefined;
+  if (params?.transient !== true) return iterationLimit(settings);
+  const end = seconds(params.end_time);
+  const step = seconds(params.delta_t);
+  return end === null || step === null ? null : Math.max(1, Math.round(end / step));
 }
 
 /**

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
+import { toastChange } from "./droppedProfiles";
 import { kindState, unsupportedNote } from "./kindAvailability";
 
 /**
@@ -115,7 +116,6 @@ interface ConditionKind {
 /** The condition picker for a boundary: what it means physically, which is what a mesh needs. */
 export function ConditionPicker({ boundaryId, current }: { boundaryId: string; current: string | null }) {
   const execute = useStore((s) => s.execute);
-  const pushToast = useStore((s) => s.pushToast);
   const [busy, setBusy] = useState(false);
   const [kinds, setKinds] = useState<ConditionKind[]>([]);
 
@@ -135,8 +135,8 @@ export function ConditionPicker({ boundaryId, current }: { boundaryId: string; c
   const change = async (kind: string) => {
     setBusy(true);
     try {
-      await execute("boundary.assign", { target: boundaryId, kind });
-      pushToast("ok", "Condition assigned");
+      // A kind that does not use a value drops its time profile: the toast says which, with Undo.
+      await toastChange(await execute("boundary.assign", { target: boundaryId, kind }), "Condition assigned");
     } catch {
       /* execute logged and toasted it */
     } finally {

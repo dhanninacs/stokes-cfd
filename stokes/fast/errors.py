@@ -51,3 +51,10 @@ class FastNotRunning(FastError):
     """A request that needs a Fast run when there is none."""
 
     code = "fast.not_running"
+
+
+class FastUnstable(FastError):
+    """The lattice ran away (ADR-0047 addendum 5): its frames stopped being valid and lowering
+    the lattice speed did not bring it back. The run fails rather than report such numbers."""
+
+    code = "fast.unstable"

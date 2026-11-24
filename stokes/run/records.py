@@ -118,6 +118,12 @@ class RunRecord:
     stopped: bool = False
     #: The run this one resumed from (``run.resume``), or "" for a run that started at zero.
     resumed_from: str = ""
+    #: A transient run (ADR-0022 addendum 2026-11-24): its iterations are time steps, its end is
+    #: ``end_time`` seconds of physical time, and ``sim_time`` is the time it reached (the last
+    #: residual block's). A steady run keeps the three at their defaults.
+    transient: bool = False
+    end_time: float = 0.0
+    sim_time: float = 0.0
 
     #: **Where this record was read from, and NOT part of its JSON.** The store writes a record to
     #: the folder it came from, which matters when the session has already moved to another

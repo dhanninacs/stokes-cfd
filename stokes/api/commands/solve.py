@@ -143,6 +143,87 @@ def _refuse_energy_on_another_engine(wanted: dict[str, Any], current: dict[str, 
         )
 
 
+#: The settings whose change can move a transient run's write interval or break its time rules.
+_TIME_SETTINGS: tuple[str, ...] = ("transient", "delta_t", "end_time", "write_time")
+
+
+def _time_value(project: Any, value: Any) -> float | None:  # Any: Project, a wanted value
+    """A wanted time in seconds: a number, or quantity text or an expression read as a time; None
+    for what does not read (the model's own refusal then names it)."""
+    from stokes.errors import StokesError
+    from stokes.run.write_cadence import seconds
+
+    found = seconds(value)
+    if found is not None or not isinstance(value, str):
+        return found
+    from stokes.api.commands.boundary_profile import evaluator
+
+    try:
+        return evaluator(project)(value, "time")[0]
+    except (StokesError, ValueError, ArithmeticError):
+        return None
+
+
+def _run_times(project: Any, wanted: dict[str, Any], current: Any) -> None:  # Any: params
+    """A transient run's time rules and its write interval (`stokes.run.write_cadence`).
+
+    Refused here, so a client shows the message under the field: a time step longer than the end
+    time, and a write interval shorter than one step or longer than the run. And while the write
+    interval is still the suggestion (or unset), a change of the run's times moves it to the new
+    suggestion; a value the user typed is theirs and is kept.
+    """
+    from stokes.run.write_cadence import profile_periods, same, seconds, suggest_write_time
+
+    if not any(name in wanted for name in _TIME_SETTINGS):
+        return
+    transient = bool(wanted.get("transient", current.get("transient", False)))
+    if not transient:
+        return
+
+    def effective(name: str, default: float) -> float | None:
+        if name in wanted:
+            return _time_value(project, wanted[name])
+        held = seconds(current.get(name))
+        return default if held is None else held
+
+    delta_t = effective("delta_t", 0.001)
+    end_time = effective("end_time", 1.0)
+    if delta_t is None or end_time is None or delta_t <= 0 or end_time <= 0:
+        return
+    if delta_t > end_time * (1 + 1e-9):
+        raise SolveInvalid(
+            f"the time step ({delta_t:g} s) is longer than the end time ({end_time:g} s): "
+            "shorten the step or run for longer",
+            details={"code": "solve.invalid", "delta_t": delta_t, "end_time": end_time},
+        )
+    if "write_time" in wanted:
+        write = _time_value(project, wanted["write_time"])
+        if write is not None and write > 0:
+            if write < delta_t * (1 - 1e-9):
+                raise SolveInvalid(
+                    f"save every {write:g} s is shorter than one time step ({delta_t:g} s)",
+                    details={"code": "solve.invalid", "write_time": write},
+                )
+            if write > end_time * (1 + 1e-9):
+                raise SolveInvalid(
+                    f"save every {write:g} s is longer than the run ({end_time:g} s)",
+                    details={"code": "solve.invalid", "write_time": write},
+                )
+        return
+    if "write_interval" in wanted:
+        return
+    periods = profile_periods(project)
+    held = seconds(current.get("write_time")) or 0.0
+    old_delta = seconds(current.get("delta_t")) or 0.001
+    old_end = seconds(current.get("end_time")) or 1.0
+    before = suggest_write_time(old_end, old_delta, periods)
+    if held > 0 and not same(held, before):
+        return  # the user's own interval
+    suggestion = suggest_write_time(end_time, delta_t, periods)
+    if suggestion > 0 and not same(suggestion, held):
+        wanted["write_time"] = suggestion
+
+
 @command(
     "solve.configure",
     params=(
@@ -176,6 +257,7 @@ def solve_configure(
     current = existing.params if existing is not None else {}
     _refuse_energy_on_another_engine(wanted, current)
     _refuse_thermal_without_energy(wanted, current)
+    _run_times(project, wanted, current)
     target_id = existing.id if existing is not None else stable_id("n", SETTINGS_PATH)
     commands: list[Any] = []
     if existing is None:
@@ -218,6 +300,35 @@ def solve_configure(
         raise SolveInvalid("the settings node was not created")
     ctx.session.emit("node.changed", node_id=node.id, path=SETTINGS_PATH, param="engine")
     return {"settings": node.id, "path": SETTINGS_PATH, "created": existing is None}
+
+
+@command("solve.write_suggestion", params=(), mutates=False)
+def solve_write_suggestion(ctx: CommandContext) -> dict[str, Any]:
+    """How often a transient run should write its fields (`stokes.run.write_cadence`).
+
+    `{write_time, frames, period, current: {write_time, frames}}`: the suggested interval in
+    seconds and the frames it gives, the shortest profile period (null without a periodic
+    profile), and what the settings write now (`write_time`, or `write_interval` steps of
+    `delta_t` when that is zero).
+    """
+    from stokes.run.write_cadence import frames, profile_periods, seconds, suggest_write_time
+
+    project = ctx.session.require_project()
+    settings = project.find(SETTINGS_PATH)
+    params = settings.params if settings is not None else {}
+    delta_t = seconds(params.get("delta_t")) or 0.001
+    end_time = seconds(params.get("end_time")) or 1.0
+    periods = [p for p in profile_periods(project) if p > 0]
+    suggestion = suggest_write_time(end_time, delta_t, periods)
+    held = seconds(params.get("write_time")) or 0.0
+    steps = int(params.get("write_interval") or 50)
+    now = held if held > 0 else steps * delta_t
+    return {
+        "write_time": suggestion,
+        "frames": frames(end_time, suggestion),
+        "period": min(periods) if periods else None,
+        "current": {"write_time": now, "frames": frames(end_time, now), "steps": held <= 0},
+    }
 
 
 @command("solve.check", params=(), mutates=False)

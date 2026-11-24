@@ -1,0 +1,36 @@
+FoamFile
+{
+    format          ascii;
+    class           volScalarField;
+    location        "0";
+    object          T;
+}
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform 300.0;
+
+boundaryField
+{
+    inlet
+    {
+        type            uniformFixedValue;
+        uniformValue
+        {
+            type            table;
+            values          ((0.0 300.0) (1.0 350.0));
+        }
+        value           uniform 300.0;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 300.0;
+        value           uniform 300.0;
+    }
+    fluid_to_wall
+    {
+        type            coupledTemperature;
+        value           uniform 300.0;
+    }
+}

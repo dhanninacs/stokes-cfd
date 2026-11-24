@@ -14,6 +14,9 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+import numpy as np
+from numpy.typing import NDArray
+
 from stokes.fast.errors import FastInvalid, FastTooFast
 
 Q = 19
@@ -56,7 +59,23 @@ RE_CELL_MAX = 200.0
 SMAGORINSKY = 0.17
 SMAGORINSKY_FACTOR = 18.0 * math.sqrt(2.0) * SMAGORINSKY * SMAGORINSKY
 #: The turbulent preview's closures, as the shader numbers them.
-CLOSURES = {"smagorinsky": 0, "shear_improved": 1}
+CLOSURES = {"smagorinsky": 0, "shear_improved": 1, "wale": 2, "vreman": 3}
+#: **The WALE constant**, for the model in the form used here, ``nu_t = (Cw D)^2 Dw(u)`` with
+#: ``Dw`` the operator of Nicoud and Ducros (1999, their equation 13) and ``D`` the cell: 0.5.
+#: Read in Baya Toda, Cabrit, Balarac, Bose, Lee, Choi and Nicoud, "A subgrid-scale model based
+#: on singular values for LES in complex geometries", Center for Turbulence Research, Summer
+#: Program 2010, table 1, which gives ``Cw ~ 0.50`` beside ``Cs ~ 0.18`` and ``Cv ~ 0.28`` as the
+#: values Nicoud and Ducros and Vreman recommend, in this same form (Nicoud is an author of
+#: both). The 1999 paper itself could not be opened, so its calibration (often quoted as
+#: ``Cw^2 ~ 10.6 Cs^2``, which would give 0.55 to 0.59) is not what this rests on; the same table's
+#: own estimate from random velocity gradients is 0.63. Other codes' constants are for other
+#: forms (OpenFOAM's 0.325 sits in a k-equation form) and do not transfer. Measured here
+#: (ADR-0047 addendum 4): between 0.5 and 0.6 a turbulent duct's pressure drop moves 3 %, and
+#: a laminar one's friction not at all.
+WALE = 0.5
+#: **Vreman's constant** (Vreman 2004): 2.5 times the square of the Smagorinsky constant, 0.072
+#: here; the table above has ``Cv ~ 0.28`` in the form ``(Cv D)^2``, which is 0.078.
+VREMAN = 2.5 * SMAGORINSKY * SMAGORINSKY
 #: Lattice steps the shear-improved closure's running mean of the stress spans.
 MEAN_STEPS = 2000.0
 #: **Which closure a turbulent preview takes by itself.** Up to this cell Reynolds number the
@@ -184,6 +203,59 @@ def scaling_for(
         closure=closure,
         reynolds=reynolds,
     )
+
+
+def closure_constant(closure: str) -> float:
+    """What the step shader takes as ``smag`` for a closure: ``18 sqrt(2) Cs^2`` for the two that
+    read the stress from the populations, the model's own constant for WALE and Vreman."""
+    if closure == "wale":
+        return WALE * WALE
+    if closure == "vreman":
+        return VREMAN
+    return SMAGORINSKY_FACTOR
+
+
+def eddy_viscosity(closure: str, gradient: NDArray[np.float64]) -> float:
+    """The lattice eddy viscosity WALE or Vreman gives a velocity gradient (``gradient[i, j]`` is
+    the derivative of velocity component ``i`` along axis ``j``, per cell and step).
+
+    The arithmetic of ``stokes.fast.kernel``'s ``nutOf`` in numpy, so the formulas are tested
+    without a GPU: the gradient is scaled to unit size first, as there.
+
+    WALE: ``(Cw)^2 (Sd:Sd)^(3/2) / ((S:S)^(5/2) + (Sd:Sd)^(5/4))`` with ``S`` the strain rate and
+    ``Sd`` the traceless symmetric part of the gradient's square. Vreman: ``c sqrt(B / (a:a))``
+    with ``a`` the gradient's transpose, ``b = a^T a`` and ``B`` the sum of ``b``'s three principal
+    2 x 2 minors. Both vanish in a pure shear.
+    """
+    if closure not in ("wale", "vreman"):
+        raise FastInvalid(
+            f"only wale and vreman take a velocity gradient; got {closure!r}",
+            details={"closure": closure},
+        )
+    g = np.asarray(gradient, dtype=np.float64)
+    size = float(np.sum(g * g))
+    if size < 1e-30:
+        return 0.0
+    norm = math.sqrt(size)
+    h = g / norm
+    if closure == "wale":
+        square = h @ h
+        deviator = 0.5 * (square + square.T) - np.trace(square) / 3.0 * np.eye(3)
+        strain = 0.5 * (h + h.T)
+        a = float(np.sum(deviator * deviator))
+        b = float(np.sum(strain * strain))
+        den = b**2.5 + a**1.25
+        return 0.0 if den < 1e-30 else closure_constant(closure) * norm * a**1.5 / den
+    b_ = h @ h.T
+    minors = (
+        b_[0, 0] * b_[1, 1]
+        - b_[0, 1] ** 2
+        + b_[0, 0] * b_[2, 2]
+        - b_[0, 2] ** 2
+        + b_[1, 1] * b_[2, 2]
+        - b_[1, 2] ** 2
+    )
+    return closure_constant(closure) * norm * math.sqrt(max(float(minors), 0.0))
 
 
 def cell_reynolds(dx: float, speed: float, nu: float) -> float:

@@ -89,6 +89,7 @@ from stokes.physics.conditions.catalogue import (
     check_rule,
 )
 from stokes.physics.conditions.catalogue import kind as catalogue_kind
+from stokes.physics.conditions.profiles import kept_for_kind, varying_in
 
 if TYPE_CHECKING:
     from stokes.api.commands.selection import _Geometry
@@ -117,6 +118,26 @@ TARGET_HELP = (
 KIND_LABELS = {"inlet": "inlet", "outlet": "outlet", "wall": "wall"}
 """The default names of new boundaries by family; a constraint or interface kind uses its id."""
 NOT_VALUES = ("kind", "tag")
+
+
+def drop_profiles(
+    plan: Plan,
+    node: Node,
+    kind: str,
+    given: Mapping[str, Any] | None = None,  # Any: JSON values about to be set
+) -> tuple[str, ...]:
+    """On a change of kind or of a switch (``given``, the values the same step sets), the time
+    profiles (ADR-0022 addendum 2026-11-24) the boundary can no longer vary are taken away in the
+    same step, so none lies hidden and comes back when the change is undone by hand; the names
+    taken away."""
+    if not node.params.get("profiles"):
+        return ()
+    kept, dropped = kept_for_kind(kind, {**node.params, **(given or {})})
+    if dropped:
+        plan.set(node.id, "profiles", kept)
+    return dropped
+
+
 COMPONENTS = ("velocity_x", "velocity_y", "velocity_z")
 
 
@@ -368,6 +389,8 @@ class Assigned:
     region: RegionRef
     uses: dict[str, ParamUse]
     recoloured: bool
+    dropped: tuple[str, ...] = ()
+    """The time profiles a change of kind or switch took away (``drop_profiles``)."""
 
 
 def _onto_new(
@@ -463,10 +486,12 @@ def _onto_existing(
             details={"parameter": "region", "region": holder_node.path},
         )
     holder = use_region(plan, holder_node)
+    dropped: tuple[str, ...] = ()
     if node.type == BOUNDARY_TYPE:
         uses = uses_of(spec, node.params, given)
         if node.params.get("kind") != spec.id:
             plan.set(node.id, "kind", spec.id)
+        dropped = drop_profiles(plan, node, spec.id, given)
         tag = ref_node(project, node, "tag", TAG_TYPE)
         recoloured = recolour(plan, tag, color)
         tag_id = tag.id if tag is not None else None
@@ -480,7 +505,7 @@ def _onto_existing(
     if name is not None and name != node.name and node.parent is not None:
         plan.rename(node, plan.free(name, node.parent.id))
         bname = name
-    return Assigned(node.id, bname, tag_id, holder, uses, recoloured)
+    return Assigned(node.id, bname, tag_id, holder, uses, recoloured, dropped)
 
 
 @command(
@@ -567,6 +592,7 @@ def boundary_assign(
         "region": _brief(holder, "kind"),
         "created": list(plan.created),
         "recoloured": done.recoloured,
+        "profiles_dropped": list(done.dropped),
     }
 
 
@@ -662,6 +688,7 @@ def boundary_set(
     moved = False
     if spec.id != stored:
         plan.set(node.id, "kind", spec.id)
+    dropped = drop_profiles(plan, node, spec.id, given)
     final = ref_node(project, node, "tag", TAG_TYPE)
     if tag is not None:
         chosen = lookup(project, tag, TAGS_PATH)
@@ -689,7 +716,12 @@ def boundary_set(
     plan.label = f"edit boundary {name or node.name}"
     plan.boundary_changed(node)
     changed = plan.push(check=rules_check(node.id, uses))
-    return {**Lister(ctx).entry(node), "changed": changed, "recoloured": bool(recoloured)}
+    return {
+        **Lister(ctx).entry(node),
+        "changed": changed,
+        "recoloured": bool(recoloured),
+        "profiles_dropped": list(dropped),
+    }
 
 
 @command(
@@ -789,6 +821,8 @@ class Lister:
             "family": spec.family if spec is not None else None,
             "tag": info,
             "primary": _primary(self.project, node, spec),
+            # The values that vary in time (ADR-0022 addendum 2026-11-24), in use.
+            "varies": list(varying_in(self.project, node)),
             "warnings": warnings,
             "status": status,
         }

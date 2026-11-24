@@ -132,6 +132,16 @@ def test_a_non_orthogonal_mesh_gets_limited_schemes_and_a_corrector() -> None:
     assert "nNonOrthogonalCorrectors 2;" in limited["system/fvSolution"]
 
 
+def test_energy_convection_is_second_order_except_on_a_non_orthogonal_mesh() -> None:
+    """Upwind raised h.a_v 10-20 % on a gyroid test section; a poor tet mesh keeps it."""
+    steady = fluid.write(elbow())["system/fvSchemes"]
+    assert "div(phi,e)      bounded Gauss linearUpwind grad(e);" in steady
+    transient = fluid.write(dataclasses.replace(elbow(), transient=True))["system/fvSchemes"]
+    assert "div(phi,e)      Gauss linearUpwind grad(e);" in transient
+    limited = fluid.write(dataclasses.replace(elbow(), non_orthogonal=True))["system/fvSchemes"]
+    assert "div(phi,e)      bounded Gauss upwind;" in limited
+
+
 def test_the_prandtl_number_carries_the_conductivity() -> None:
     snap = elbow()
     text = fluid.write(snap)["constant/physicalProperties"]
@@ -225,8 +235,8 @@ def test_the_executor_dispatches_by_snapshot() -> None:
 
 
 def test_the_version_and_basis() -> None:
-    assert fluid.WRITER_VERSION == "of14-fluid/6"
-    assert fluid.basis(elbow()) == "of14-fluid/6:of14.fluid:laminar"
+    assert fluid.WRITER_VERSION == "of14-fluid/7"
+    assert fluid.basis(elbow()) == "of14-fluid/7:of14.fluid:laminar"
 
 
 # ---------------------------------------------------------------- kOmegaSST (ADR-0028)
@@ -449,11 +459,55 @@ def test_the_energy_monitors_read_mean_p_and_t_from_the_pt_directory() -> None:
             "postProcessing/patchAverage(patch=outlet,fields=(pT))/0/surfaceFieldValue.dat": (
                 header + "0\t1.01325e+05\t3.0e+02\n60\t1.01325000e+05\t3.00098560e+02\n"
             ),
+            "postProcessing/bulkT_outlet/0/surfaceFieldValue.dat": (
+                "# Time\taverage(T)\n0\t3.0e+02\n60\t2.99876500e+02\n"
+            ),
         }
     )
     snap = dataclasses.replace(elbow(), monitor_patches=("outlet",))
     found = _read_monitors(runner, "j_1", snap)
-    assert found == {"outlet": {"flow_rate": 4.08273182, "p_mean": 101325.0, "T_mean": 300.09856}}
+    assert found == {
+        "outlet": {
+            "flow_rate": 4.08273182,
+            "p_mean": 101325.0,
+            "T_area": 300.09856,
+            "T_bulk": 299.8765,
+        }
+    }
+
+
+def test_the_energy_monitors_weight_the_bulk_temperature_by_the_mass_flux() -> None:
+    """**A duty is computed from the mass-flow-weighted temperature** (2026-11-24): the area
+    average put the mini plate exchanger's duty at 51.4 W against 77.8 W. The bulk monitor is
+    `patchAverage` with `operation average` and `weightField phi`, in a folder of its own name."""
+    from stokes.compile.of14.fluid import bulk_temperature_function
+
+    call = bulk_temperature_function("hot_out", "hot").call
+    assert call == (
+        "patchAverage(funcName=bulkT_hot_out, patch=hot_out, fields=(T), operation=average, "
+        "weightField=phi, region=hot)"
+    )
+    control = fluid.write(elbow())["system/controlDict"]
+    for patch in elbow().monitor_patches:
+        assert f"funcName=bulkT_{patch}, patch={patch}, fields=(T), operation=average" in control
+    assert "area-averaged p and T" in control
+
+
+def test_a_multi_region_run_reads_the_bulk_temperature_under_its_region() -> None:
+    from types import SimpleNamespace
+
+    from stokes.run.executors import _read_monitors
+
+    runner = _Runner(
+        {
+            "postProcessing/hot/bulkT_hot_out/0/surfaceFieldValue.dat": (
+                "# Time\taverage(T)\n1737\t3.377977e+02\n"
+            ),
+        }
+    )
+    region = SimpleNamespace(name="hot", fluid=SimpleNamespace(monitor_patches=("hot_out",)))
+    snap: Any = SimpleNamespace(energy=True, regions=(region,), monitor_patches=("hot_out",))
+    assert _read_monitors(runner, "j_1", snap) == {"hot_out": {"T_bulk": 337.7977}}
 
 
 def test_the_flow_only_monitors_keep_their_paths() -> None:

@@ -87,6 +87,14 @@ def _require_adjoint_program(snap: Any, record: dict[str, Any], host: str) -> No
         )
 
 
+def _time_fields(snap: Any) -> dict[str, Any]:  # Any: a SolveSnapshot
+    """A transient run's record says so, with its end time (ADR-0022 addendum 2026-11-24), so the
+    Run card and the results read its iterations as time steps and its end as seconds."""
+    if not bool(getattr(snap, "transient", False)):
+        return {}
+    return {"transient": True, "end_time": float(snap.end_time)}
+
+
 @command(
     "run.start",
     params=(
@@ -225,6 +233,7 @@ def run_start(
             mesh_result=mesh_result,
             mesh_basis=str(mesh_status.get("basis") or ""),
             mesh_job=mesh_job,
+            **_time_fields(snap),
         )
     )
     ctx.record(run_id=record.id)
@@ -528,6 +537,7 @@ def run_resume(
             mesh_basis=str(mesh_status.get("basis") or ""),
             mesh_job=mesh_job,
             resumed_from=previous.id,
+            **_time_fields(snap),
         )
     )
     ctx.record(run_id=record.id)
@@ -680,22 +690,36 @@ def _run_host(ctx: CommandContext, run: str | None) -> tuple[Any, Any]:  # Any: 
     mutates=False,
 )
 def run_monitors(ctx: CommandContext, run: str | None = None) -> dict[str, Any]:
-    """The tables a run's function objects wrote (T-311): `{run, monitors: [{name, size}]}`.
+    """The tables a run's function objects wrote (T-311): `{run, monitors: [{name, size, patch,
+    opening, sign}]}`. `sign` is -1 for an inlet's flow-rate table: times it, the flow is the flow
+    INTO the domain, the convention `results.streams` states.
 
     Each name is a file under the job's `postProcessing/` (forces, probes, flow rates, residuals
     written by the case itself); `run.monitor` reads one. Asks the host, so it answers what the
     job holds now, including while the run is going.
     """
+    from stokes.api.commands.results_streams import monitor_patch, monitor_sign, opening_of
     from stokes.run.monitors import is_table, monitor_name
 
     found, runner = _run_host(ctx, run)
     reply = runner.call("job.outputs", job=found.job, timeout=60.0)
     files = reply.get("files") if isinstance(reply, dict) else None
-    monitors = [
-        {"name": monitor_name(str(item["path"])), "size": int(item.get("size") or 0)}
-        for item in files or []
-        if isinstance(item, dict) and is_table(str(item.get("path") or ""))
-    ]
+    openings = opening_of(ctx.session.require_project())
+    monitors = []
+    for item in files or []:
+        if not (isinstance(item, dict) and is_table(str(item.get("path") or ""))):
+            continue
+        name = monitor_name(str(item["path"]))
+        patch = monitor_patch(name)
+        monitors.append(
+            {
+                "name": name,
+                "size": int(item.get("size") or 0),
+                "patch": patch,
+                "opening": openings.get(patch, ""),
+                "sign": monitor_sign(name, openings),
+            }
+        )
     return {"run": found.id, "monitors": monitors}
 
 
@@ -780,6 +804,40 @@ def run_time(
         daemon=True,
     ).start()
     return {"run": found.id, "time": chosen, "fetching": True}
+
+
+@command(
+    "run.time_ranges",
+    params=(
+        ParamDef("run", "string", required=False, description="The run; default: the current one."),
+    ),
+    mutates=False,
+)
+def run_time_ranges(ctx: CommandContext, run: str | None = None) -> dict[str, Any]:
+    """Work out each field's range over every time a finished run wrote (`time_ranges.py`).
+
+    `{run, state}`: `ready` when `run.fields` already reports them (`all_times` per field),
+    `computing` while a worker reads the times on the host (`run.ranges` follows, or
+    `run.ranges_failed`), `none` for a run with a single time. **Not a mutation**: it fills a
+    cache of the result, as `run.time` does; asking again while it works starts nothing new.
+    """
+    from stokes.run import time_ranges
+    from stokes.run.errors import RunNotFound
+
+    store = _store(ctx)
+    found = store.record(run)
+    if found is None:
+        raise RunNotFound(f"no run {run or '(current)'}")
+    if not found.successful:
+        raise SolveInvalid(
+            f"run {found.id} is {found.state}; its ranges can be worked out once it has finished",
+            code="run.not_finished",
+        )
+    shown = store.fields_status(found.id)
+    if shown.get("surfaces") != "ok" or not found.job:
+        return {"run": found.id, "state": "none"}
+    times = [float(t) for t in shown.get("times") or []]
+    return {"run": found.id, "state": time_ranges.start(store, found.id, times)}
 
 
 def _probe_data(

@@ -345,6 +345,20 @@ and an explicit spec; T0 time is the scarce resource.
   reads twice the pressure drop and three times the duty (1.2 mm throats, 5.5 cells, cell Reynolds
   number about 200 there); a coarse gyroid core without a throat reads +16 %. Backflow through an
   outlet is not fixed.
+  **Fourth addendum (2026-11-23, round 4; clean-room from the papers, no other project's code
+  read):** the research for high resolution and for more of the OpenFOAM 14 options, with what was
+  read and what was not; `turbulence` takes `wale` and `vreman` (no eddy viscosity in a laminar
+  shear; `auto` unchanged, the addendum says why); a fine lattice starts from a coarser one's
+  solution (`warm_start`, on by default; `Lattice.prolong`); the populations are one buffer read
+  and written in place (`stokes/fast/inplace.py` has the layout and its proof, `stokes/fast/kernel.py`
+  the step), optionally in 16 bits (`storage: "f16"`: for the memory and for grids of half a million
+  cells and up; slower than f32 on small ones), and the cell cap is what one buffer of the
+  adapter holds (28 M cells in f32, 56 M in f16 at 2 GiB). Corrected the same day after an
+  independent check (the addendum's last section): a reset clears on the GPU, a 16-bit store draws
+  anew every step, the speed table is steady-state, and nothing is claimed for the warm start on
+  the plate exchanger (lowering the lattice speed still starts a lattice from rest). Deferred, in the addendum's order: a
+  cumulant collision, preconditioning, mass-conserving curved walls, a wall function, a RANS
+  scalar, buoyancy, porous drag, moving walls, refinement, fluid-only storage.
   Next slices: buoyancy, forces, imported bodies, planes at any angle, a run record for the Results stage.
 - **GUI pass and modeller additions (2026-11-19):** `implicit_lattice` (gyroid, Schwarz P, diamond; sheet or
   network; Create > Modify > Lattice; contract in `docs/engineering/implicit-schema.md`) and the sketcher's Fillet

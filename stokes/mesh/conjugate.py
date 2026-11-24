@@ -35,6 +35,16 @@ COLLAR_RINGS = 2
 #: Two corners are the same vertex when they agree to this, in metres.
 WELD = 1e-9
 
+#: Two bodies' triangles are one wall when their centres agree to this fraction of the base cell:
+#: far finer than any triangle the mesh would resolve, far coarser than the float noise between two
+#: bodies cut from one field (measured: 0.015 um median on the mini plate exchanger).
+TOUCH_FRACTION = 1e-3
+
+#: A boundary triangle lies on a zone surface when its centre is this fraction of the base cell
+#: from a zone triangle's plane (and inside it, and near parallel; `_off_zones`): ten times the
+#: float noise of two bodies cut from one field at a 0.5 mm cell, far under any wall the mesh holds.
+ON_SURFACE_FRACTION = 0.02
+
 #: Fewer triangles than this facing another body, or a smaller share of a body's interface, is
 #: stray: a wall two bodies share is thousands.
 MIN_SHARED = 8
@@ -100,8 +110,34 @@ def region_bodies(project: Any) -> list[tuple[Any, str, list[Any], str]]:
 
 
 def is_conjugate(project: Any) -> bool:
-    """Whether the project's regions make a multi-region mesh: they hold more than one body."""
+    """Whether the project's regions hold more than one body. A multi-region mesh needs this and
+    more (:func:`meshes_regions`)."""
     return len(region_bodies(project)) > 1
+
+
+def meshes_regions(mesher: str, domain: str, project: Any) -> bool:
+    """**The one rule for a multi-region mesh, and so a multi-region (conjugate) solve**: the
+    mesher is snappyHexMesh, the domain is the part, and the regions hold more than one body. The
+    other meshers, and a box domain, mesh one region whatever the regions hold.
+    ``stokes.mesh.snapshot.snapshot_for`` builds the conjugate snapshot on it, and what reads
+    "is this case conjugate" before a mesh exists (:func:`is_multi_region`) asks the same."""
+    return mesher == "snappy" and domain == "part" and is_conjugate(project)
+
+
+def is_multi_region(project: Any) -> bool:
+    """:func:`meshes_regions` with the project's mesh settings (their defaults when the project
+    has no settings node or a value is unset)."""
+    from stokes.mesh.model import SETTINGS_PATH
+    from stokes.model import registry
+
+    spec = registry.get("mesh_settings")
+    settings = project.find(SETTINGS_PATH)
+
+    def choice(name: str) -> str:
+        value = settings.params.get(name) if settings is not None else None
+        return str(spec.param(name).default if value is None else value)
+
+    return meshes_regions(choice("mesher"), choice("domain"), project)
 
 
 def columns_of(bodies: list[tuple[Any, Any]], base_size: float) -> list[Any]:
@@ -121,9 +157,27 @@ def classify(
     body. Returns, per body, a boolean array over its rows (an interface) and an integer array
     with the index of the neighbouring body (-1 for an outer triangle). ``columns`` is
     :func:`columns_of` the same bodies.
+
+    Three tests, in order (2026-11-24; the first two were added after the mini plate exchanger
+    measured most of each fluid's wall as outer skin, so uncoupled):
+
+    1. **A triangle another body repeats is an interface.** Bodies cut from one implicit field
+       share their walls triangle for triangle: a centre within `TOUCH_FRACTION` of a cell of
+       another body's triangle centre says so whatever the normals.
+    2. **The probe goes out of the body.** The display mesh has triangles wound the wrong way;
+       their probe landed inside their own body, so in no other, and they were taken for outer
+       skin. Where the probe is inside the body and the opposite one is not, the opposite one
+       is the outside.
+    3. **The probe is inside another body**, as before.
+
+    Then **small islands of outer skin inside an interface are interface too** (`_islands`).
     """
     import numpy as np
 
+    centres = [
+        np.asarray(positions, dtype="float64")[np.asarray(triangles)].mean(axis=1)
+        for positions, triangles in bodies
+    ]
     out: list[tuple[Any, Any]] = []
     for index, (positions, triangles) in enumerate(bodies):
         chosen = np.asarray(rows[index], dtype="int64")
@@ -131,23 +185,127 @@ def classify(
         normal = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
         length = np.linalg.norm(normal, axis=1)
         normal = normal / np.where(length > 0.0, length, 1.0)[:, None]
-        probe = corners.mean(axis=1) + OFFSET_FRACTION * base_size * normal
+        centre = corners.mean(axis=1)
         neighbour = np.full(len(chosen), -1, dtype="int64")
+        for other in range(len(bodies)):
+            free = np.flatnonzero(neighbour < 0)
+            if other == index or free.size == 0:
+                continue
+            same = coincident(centre[free], centres[other], TOUCH_FRACTION * base_size)
+            neighbour[free[same]] = other
+        free = np.flatnonzero(neighbour < 0)
+        probe = centre[free] + OFFSET_FRACTION * base_size * normal[free]
+        backward = centre[free] - OFFSET_FRACTION * base_size * normal[free]
+        if free.size:
+            flipped = columns[index].inside(probe) & ~columns[index].inside(backward)
+            probe[flipped] = backward[flipped]
         for other in range(len(bodies)):
             if other == index:
                 continue
-            free = np.flatnonzero(neighbour < 0)
-            if free.size == 0:
+            open_ = np.flatnonzero(neighbour[free] < 0)
+            if open_.size == 0:
                 break
-            hit = columns[other].inside(probe[free])
-            neighbour[free[hit]] = other
+            hit = columns[other].inside(probe[open_])
+            neighbour[free[open_[hit]]] = other
+        _islands(positions, triangles, chosen, neighbour, base_size)
         out.append((neighbour >= 0, neighbour))
     return out
 
 
-def collar(positions: Any, triangles: Any, rows: Any, is_interface: Any) -> Any:
+def coincident(points: Any, reference: Any, tolerance: float) -> Any:
+    """Which of ``points`` lie within ``tolerance`` (on every axis) of one of ``reference``.
+
+    numpy only: both sets are binned on a grid four tolerances wide; a point is looked up in
+    the bins its tolerance box touches (at most eight), so no pair closer than the tolerance is
+    missed, and a match is never further apart than two bins.
+    """
+    import itertools
+
+    import numpy as np
+
+    points = np.asarray(points, dtype="float64").reshape(-1, 3)
+    reference = np.asarray(reference, dtype="float64").reshape(-1, 3)
+    found = np.zeros(len(points), dtype=bool)
+    if len(points) == 0 or len(reference) == 0:
+        return found
+    low = np.minimum(points.min(axis=0), reference.min(axis=0))
+    high = np.maximum(points.max(axis=0), reference.max(axis=0))
+    bins = 1 << 20
+    # The bin is four tolerances, widened when the model is so large the keys would overflow.
+    width = max(4.0 * tolerance, float((high - low).max()) / (bins - 4))
+    reach = width / 4.0
+    origin = low - 2.0 * width
+
+    def key(at: Any) -> Any:
+        cell = np.floor((at - origin) / width).astype("int64")
+        return (cell[:, 0] << 42) | (cell[:, 1] << 21) | cell[:, 2]
+
+    known = np.unique(key(reference))
+    for signs in itertools.product((-1.0, 1.0), repeat=3):
+        wanted = key(points + reach * np.asarray(signs))
+        at = np.minimum(np.searchsorted(known, wanted), len(known) - 1)
+        found |= known[at] == wanted
+    return found
+
+
+#: An island of outer skin with no opening in it, smaller than this many base cells squared and
+#: bordered by an interface, is a mistake of the probe: an interface.
+ISLAND_CELLS = 4.0
+
+
+def _islands(positions: Any, triangles: Any, rows: Any, neighbour: Any, base_size: float) -> None:
+    """Make the small islands of outer triangles in an interface interface triangles, in place.
+
+    Measured on the mini plate exchanger (2026-11-24): the probe alone, with the winding
+    corrected, left 114 hot, 157 cold and 401 solid islands of a few triangles each on the
+    shared walls (the largest 4 mm2, at the flat ends of the gyroid core), against one outer
+    skin of 2,190 mm2 on the solid and one per port of 63 mm2 on each fluid. Each island seeded
+    a collar (`collar`). An island is a piece of the outer triangles, joined by shared corners,
+    that holds no tagged triangle (``rows`` are the untagged ones), is smaller than
+    `ISLAND_CELLS` base cells squared, and touches the interface; it takes the body one of the
+    interface triangles around it faces.
+    """
+    import numpy as np
+
+    from stokes.geometry.surface_repair import _components
+
+    outer = np.flatnonzero(neighbour < 0)
+    if outer.size == 0 or outer.size == len(rows):
+        return
+    corners = np.round(np.asarray(positions, dtype="float64")[triangles] / WELD).astype("int64")
+    _, vertex = np.unique(corners.reshape(-1, 3), axis=0, return_inverse=True)
+    vertex = vertex.reshape(-1, 3)
+    count = int(vertex.max()) + 1
+    # A tagged triangle is skin with an opening in it: the islands joined to one are kept.
+    tagged = np.ones(len(triangles), dtype=bool)
+    tagged[rows] = False
+    skin = np.concatenate([np.asarray(rows)[outer], np.flatnonzero(tagged)])
+    label = _components(vertex[skin], count)
+    pieces = int(label.max()) + 1
+    wide = np.asarray(positions, dtype="float64")[triangles[skin]]
+    area = 0.5 * np.linalg.norm(np.cross(wide[:, 1] - wide[:, 0], wide[:, 2] - wide[:, 0]), axis=1)
+    sizes = np.bincount(label, weights=area, minlength=pieces)
+    opened = np.zeros(pieces, dtype=bool)
+    opened[label[outer.size :]] = True
+    small = (sizes < ISLAND_CELLS * base_size * base_size) & ~opened
+    # The body each corner's interface triangles face (the largest index, any will do).
+    faces = np.full(count, -1, dtype="int64")
+    inner = np.flatnonzero(neighbour >= 0)
+    np.maximum.at(faces, vertex[np.asarray(rows)[inner]].ravel(), np.repeat(neighbour[inner], 3))
+    touching = faces[vertex[np.asarray(rows)[outer]]].max(axis=1)
+    island = label[: outer.size]
+    choice = np.full(pieces, -1, dtype="int64")
+    np.maximum.at(choice, island, touching)
+    flip = small[island] & (choice[island] >= 0)
+    neighbour[outer[flip]] = choice[island[flip]]
+
+
+def collar(
+    positions: Any, triangles: Any, rows: Any, is_interface: Any, largest: float | None = None
+) -> Any:
     """Which of a body's interface triangles lie along a rim of its outer skin, as a mask over
-    ``rows``: those within `COLLAR_RINGS` triangles of a triangle that is not an interface.
+    ``rows``: those within `COLLAR_RINGS` triangles of a triangle that is not an interface, and
+    no longer on any edge than ``largest`` when it is given.
 
     **Why the outer skin needs them.** Where a channel mouth meets the wall, each body's mesh has
     thin triangles along the edge whose normal is between the mouth's and the wall's; pushed off
@@ -156,8 +314,14 @@ def collar(positions: Any, triangles: Any, rows: Any, is_interface: Any) -> Any:
     cells it can reach from the inside point, and it reached the whole background box through
     those gaps (measured: a `background` patch of 6,136 faces on a 530 k-cell mesh). With the
     collar, each body's skin runs a little way down the shared wall, the two collars lie on each
-    other, and there is no way through. The collar's faces become `unassigned` wall faces: a
-    strip a fraction of a millimetre wide where the wall is adiabatic instead of coupled.
+    other, and there is no way through. The collar's faces become `unassigned` wall faces, and
+    are left out of the body's zone surface (one surface per face, `_off_zones`): a strip a
+    fraction of a millimetre wide where the wall is adiabatic instead of coupled.
+
+    **The collar grows only from the real rims** (2026-11-24): on the mini plate exchanger the
+    probe had left a few thousand islands of "outer" triangles on every shared wall, each grew a
+    collar, and 68 % of the hot wall's interface triangles became a collar. `classify` now
+    removes those islands; the collar is then 0.6 % of each wall (measured).
 
     Triangles are neighbours when they share a corner by position: the display mesh repeats its
     vertices at every face edge, so the indices alone do not say.
@@ -175,6 +339,14 @@ def collar(positions: Any, triangles: Any, rows: Any, is_interface: Any) -> Any:
         on[vertex[skin].ravel()] = True
         skin |= on[vertex].any(axis=1)
     found: Any = is_interface & skin[np.asarray(rows)]
+    if largest is not None:
+        # **Only small triangles make a collar** (2026-11-24): a collar triangle is a boundary
+        # face and no longer also a zone face, so on a coarse display mesh (a STEP box's face
+        # is two triangles) a collar of two rings would take the whole shared face out of the
+        # interface. The hairline gaps the collar closes are between thin rim triangles.
+        corners = np.asarray(positions, dtype="float64")[np.asarray(triangles)[np.asarray(rows)]]
+        edges = np.linalg.norm(corners - np.roll(corners, 1, axis=1), axis=2).max(axis=1)
+        found = found & (edges <= largest)
     return found
 
 
@@ -382,10 +554,9 @@ def _build_conjugate_snapshot(  # noqa: PLR0912, PLR0915 - one read of the tree,
         rows = untagged[index]
         # The outer skin takes a collar of the interface along every rim, so two bodies' skins
         # overlap where they meet (`collar`): without it the mesh leaked out through the seams.
-        skin = ~is_interface | collar(positions, triangles, rows, is_interface)
-        if skin.any():
-            outer.append(positions[triangles[rows[skin]]])
-            region_patches[names[index]].append("unassigned")
+        rim = collar(positions, triangles, rows, is_interface, base_size)
+        skin = ~is_interface | rim
+        outer.append(positions[triangles[rows[skin]]])
         touched, counts = np.unique(neighbour[is_interface], return_counts=True)
         for other, count in zip(touched.tolist(), counts.tolist(), strict=True):
             pair = (names[index], names[int(other)])
@@ -400,8 +571,16 @@ def _build_conjugate_snapshot(  # noqa: PLR0912, PLR0915 - one read of the tree,
                     details={"code": "mesh.fluids_touch", "regions": list(pair)},
                 )
             interfaces.add((min(pair), max(pair)))
-        if index != default and is_interface.any():
-            zone_corners.setdefault(index, []).append(positions[triangles[rows[is_interface]]])
+        # A collar triangle is the mesh's boundary, so it is not also a zone face: one surface
+        # holds each face (2026-11-24).
+        coupled = is_interface & ~rim
+        if index != default and coupled.any():
+            zone_corners.setdefault(index, []).append(positions[triangles[rows[coupled]]])
+    outer = _off_zones(outer, zone_corners, base_size)
+    for index, chunk in enumerate(outer):
+        if len(chunk):
+            region_patches[names[index]].append("unassigned")
+    outer = [chunk for chunk in outer if len(chunk)]
     if outer:
         o_low, o_high = level_pair(base_size, base_size)
         surfaces["unassigned"] = Surface(
@@ -533,6 +712,50 @@ def _build_conjugate_snapshot(  # noqa: PLR0912, PLR0915 - one read of the tree,
         cores=core_count(own["cores"]),
         snap_controls=SNAP_CONTROLS,
     )
+
+
+def _off_zones(outer: list[Any], zones: dict[int, list[Any]], base_size: float) -> list[Any]:
+    """Each body's outer-skin triangles without those that lie on a zone surface.
+
+    **Why.** snappyHexMesh snaps a face to the first surface it meets, and a boundary surface
+    lying on a zone surface makes the shared wall a wall baffle, not an interface: adiabatic,
+    and a second wall in the flow (measured on the mini plate exchanger, 2026-11-24: 241,774 of
+    the 304,501 `unassigned` triangles lay on the zone surfaces, 74 % of the hot wall by area was
+    left uncoupled, the duty read 39.8 W against 77.8 W with them removed and the hot pressure
+    drop 37 % high). A collar triangle of the solid on a fluid's zone is dropped: the fluid's
+    own collar closes the skin at that rim.
+
+    **On the surface, not on its triangles** (2026-11-24, second pass): two bodies tessellated
+    apart share a wall with no centre in common, so matching centres kept the solid's collar on
+    the fluid's zone (measured on two channels through a block, the block's tunnels meshed finer:
+    12 mm2 of 320 left as a baffle). A triangle lying in a zone triangle's plane, within
+    `ON_SURFACE_FRACTION` of a cell, near parallel and over it, is dropped too
+    (`stokes.mesh.on_surface`).
+
+    **Cut where it is partly on a zone** (2026-11-24, third pass): with a second solid, the
+    block a channel runs through is a zone too, and a channel's wall triangle that crosses the
+    block's face at a mouth is half on the block's zone and half outer skin. Dropped whole (its
+    centre on the zone) it left a hole of 0.3 to 1.1 mm2 in the outer skin outside each mouth;
+    kept whole, it lay on the zone. It is now cut along the zone's triangles and the part off
+    the zone kept (`stokes.mesh.on_surface.off_surface`).
+    """
+    import numpy as np
+
+    from stokes.mesh.on_surface import off_surface
+
+    staged = [np.concatenate(chunks) for chunks in zones.values() if chunks]
+    if not staged:
+        return outer
+    surface = np.concatenate(staged)
+    centres = surface.mean(axis=1)
+    kept: list[Any] = []
+    for chunk in outer:
+        if len(chunk) == 0:
+            kept.append(chunk)
+            continue
+        on = coincident(chunk.mean(axis=1), centres, TOUCH_FRACTION * base_size)
+        kept.append(off_surface(chunk[~on], surface, ON_SURFACE_FRACTION * base_size))
+    return kept
 
 
 def base_snapshot(

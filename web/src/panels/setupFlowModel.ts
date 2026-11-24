@@ -125,9 +125,11 @@ export function describeDefaults(answer: { boundaries?: unknown; material?: unkn
  * step the user takes on a page: `condition.edit` is the row's own click, which selects the node, and the
  * others have no command behind them, so they get **no button** rather than one that says "not wired yet".
  */
-export function findingFix(finding: { fix?: { [key: string]: unknown } }): { command: string; params: Record<string, unknown> } | null {
+export function findingFix(finding: { fix?: { [key: string]: unknown } | null }): { command: string; params: Record<string, unknown> } | null {
   const fix = finding.fix;
-  if (fix === undefined || typeof fix.command !== "string" || fix.command === "") return null;
+  // `fix: null` is what the server sends for a finding with no fix (`setup.needs_physics`): reading
+  // `.command` off it blanked the whole Conditions panel.
+  if (fix === undefined || fix === null || typeof fix.command !== "string" || fix.command === "") return null;
   const params = fix.params !== null && typeof fix.params === "object" && !Array.isArray(fix.params) ? (fix.params as Record<string, unknown>) : {};
   return { command: fix.command, params };
 }

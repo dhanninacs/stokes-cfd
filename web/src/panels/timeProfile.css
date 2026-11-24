@@ -1,0 +1,229 @@
+/* The time-profile editor (TimeProfileEditor.tsx): one block in the Guided Boundaries card and in a
+   boundary's Properties page. Tokens only, hairlines, no shadow of its own; the plot's line is the text
+   colour, so the accent stays on the Apply button. It narrows with its container: fields wrap two to a row
+   and then one. */
+.tp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--track);
+  font-size: 12px;
+}
+.tp-forms button {
+  padding: 0 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tp-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 6px 8px;
+}
+.tp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tp-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.tp-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.tp-input .field,
+.tp-table .field {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 7px;
+  font-variant-numeric: tabular-nums;
+}
+.tp-unit {
+  flex: none;
+  min-width: 26px;
+  font-size: 11px;
+}
+.tp .field[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.tp-error {
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.tp-table-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.tp-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 3px;
+  table-layout: fixed;
+}
+.tp-table th {
+  padding: 0 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 450;
+  text-align: left;
+}
+.tp-table th:last-child,
+.tp-table td:last-child {
+  width: 24px;
+}
+.tp-table td {
+  padding: 0 4px 0 0;
+  vertical-align: top;
+}
+.tp-table td:last-child {
+  padding-top: 4px;
+}
+.tp-add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.tp-plot {
+  margin: 0;
+  padding: 4px 0 0;
+  border-top: 1px solid var(--panel-border);
+}
+.tp-plot svg {
+  display: block;
+  width: 100%;
+  height: 64px;
+  overflow: visible;
+}
+.tp-plot-stale svg {
+  opacity: 0.35;
+}
+.tp-cycle {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+.tp-note {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.tp-plot-empty {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  text-align: center;
+}
+.tp-wave {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.tp-mean {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.tp-axes {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.tp-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.tp-actions .btn {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+/* The "Varies in time" control beside a value: an 8 px icon button, pressed while the value varies. */
+.tp-toggle {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.tp-toggle:hover {
+  color: var(--text);
+}
+/* Pressed (the value varies): the accent, as an active chip has it, so on and off read apart. */
+.tp-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.tp-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* A value that varies says how instead of one number. */
+.tp-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The Properties page: a heading row per value, the editor below. */
+.tp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tp-section-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tp-section-row .tp-section-label {
+  flex: none;
+  font-size: 12.5px;
+}
+/* Under a varying value in Full mode: the constant field further down is kept but unused. */
+.tp-kept {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.35;
+}
+/* The tree's marker for a boundary that varies in time. */
+.tree-varies {
+  flex: none;
+  color: var(--text-muted);
+}

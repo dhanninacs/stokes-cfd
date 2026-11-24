@@ -20,8 +20,9 @@ import { clippedEnds, dropReadout, legendLabels, legendOf, legendTickCount, setM
 import { useVariables } from "../panels/variablesControl";
 import { variableOf, variableTitle } from "../panels/variablesModel";
 import { sliceFieldOf, visibleSlices } from "../panels/sliceModel";
-import { monitorsOf, pressureDrop, runForMonitors } from "../panels/monitorsModel";
-import { rangeScopeOf } from "../panels/fieldsModel";
+import { atTimeText, pressureDrop, runForMonitors } from "../panels/monitorsModel";
+import { useMonitorsAt } from "../panels/monitorsAt";
+import { hasSeveralTimes, rangeScopeOf, spansAllTimes } from "../panels/fieldsModel";
 import { steppedGradientCssFor } from "../state/colormap";
 import { useStore } from "../state/store";
 
@@ -30,11 +31,12 @@ import { useStore } from "../state/store";
  * In Pa when the material's density is known (`dropReadout`), else the kinematic `Δp/ρ`; the tooltip holds the
  * kinematic value and the density the Pa figure was made from.
  */
-function DropReadout({ value, inlet, outlet, units, density }: { value: number; inlet: string; outlet: string; units: string; density: number | null }) {
+function DropReadout({ value, inlet, outlet, units, density, when }: { value: number; inlet: string; outlet: string; units: string; density: number | null; when: string }) {
   const shown = dropReadout(value, units, density);
   return (
     <div className="field-legend-drop" data-ws="field-drop" title={shown.detail === "" ? undefined : shown.detail}>
-      <span className="muted">{`Pressure drop, ${inlet} to ${outlet}`}</span>
+      {/* A transient run's drop is the one at the time on screen, and says which (ADR-0022 addendum 2026-11-24). */}
+      <span className="muted">{`Pressure drop, ${inlet} to ${outlet}${when !== "" ? `, ${when}` : ""}`}</span>
       {/* The solver spells the unit "m2/s2"; on screen the powers are raised: m²/s². */}
       <span className="field-legend-drop-value">{`${shown.symbol} ${shown.text} ${shown.units.replace(/([A-Za-z])([23])/g, (_, letter: string, power: string) => `${letter}${power === "2" ? "²" : "³"}`)}`}</span>
     </div>
@@ -156,10 +158,11 @@ export function FieldLegend() {
   // banded surface would be a legend that lies about its own colours.
   const look = legendOf(view);
   // Only in the Results stage, with a finished run whose monitors have an inlet and an outlet.
-  const drop = useMemo(() => {
-    const run = runForMonitors(runs, resultsRun);
-    return run === null ? null : pressureDrop(monitorsOf(run), fieldUnits(data, "p"));
-  }, [runs, resultsRun, data]);
+  // A transient run's drop follows the time on screen (`useMonitorsAt`); a steady run's is its last iteration's.
+  const monitorRun = useMemo(() => runForMonitors(runs, resultsRun), [runs, resultsRun]);
+  const atTime = useMonitorsAt(monitorRun);
+  const drop = useMemo(() => (monitorRun === null ? null : pressureDrop(atTime.monitors, fieldUnits(data, "p"))), [monitorRun, atTime.monitors, data]);
+  const when = atTimeText(monitorRun?.transient === true, atTime.at, atTime.last, monitorRun?.endTime ?? null);
   /*
     TODO(R1 follow-up): the density is not read here. It is the fluid region's material density at its
     reference temperature: `readFluidRegion(tree)` (guided/guidedTree.ts) names the material and T_ref, and the
@@ -169,7 +172,7 @@ export function FieldLegend() {
   */
   const density: number | null = null;
   const readout =
-    stage === "Results" && drop !== null ? <DropReadout value={drop.value} inlet={drop.inlet} outlet={drop.outlet} units={drop.units} density={density} /> : null;
+    stage === "Results" && drop !== null ? <DropReadout value={drop.value} inlet={drop.inlet} outlet={drop.outlet} units={drop.units} density={density} when={when} /> : null;
   // The walls' field, then the fields only the slices use (a slice that follows the walls adds none).
   const wallsShown = resultsShown(stage, view, data !== null);
   const fields: string[] = [];
@@ -211,7 +214,12 @@ export function FieldLegend() {
             bar={steppedGradientCssFor(look.map, look.bands, look.reverse, "to top", b.range)}
             ticks={legendLabels(b.range, view, legendTickCount(look.bands))}
           fixed={view.lock !== null && view.lock.field === b.field}
-          scope={rangeScopeOf(b.field, view.lock !== null && view.lock.field === b.field, data?.fields.some((f) => f.name === b.field) === true)}
+          scope={rangeScopeOf(
+            b.field,
+            view.lock !== null && view.lock.field === b.field,
+            data?.fields.some((f) => f.name === b.field) === true,
+            hasSeveralTimes(data) ? (spansAllTimes(view, data, b.field) ? "all" : "time") : null,
+          )}
           onPrint={() => setPrint((on) => !on)}
           values={b.field === view.field ? { min: b.range.min, max: b.range.max } : undefined}
           onEnd={

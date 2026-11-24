@@ -650,3 +650,183 @@ snappyHexMesh `locationInMesh` validation and compilation and any mesh-only topo
 probes; split waits for ADR-0021's deferred split operation. A GPU edge/point pass, bulk edge box
 and lasso, and arbitrary points on faces wait for profiling and a separate design. This amends
 ADR-0022 6.2–6.3 for the new modes; the existing Body/Face gestures and assignments stand.
+
+## Addendum · 16. Boundary values that vary in time (2026-11-24)
+
+**Context.** Every boundary value was one constant. A pulsating intake manifold inlet, runner-end
+pressure pulses or a warming inlet need a value that follows time. Decision 2.4's table is
+unchanged; this addendum adds one parameter and the rules around it.
+
+**Decision.**
+
+16.1 **What varies.** A velocity inlet's `velocity` (the speed, with `direction` normal or vector;
+three components do not vary), a mass-flow inlet's `mass_flow`, a pressure outlet's `pressure` and
+an inlet's `temperature`. The catalogue says so per kind (`PROFILED`, `profiled` in
+`boundary.kinds`). The pressure inlet and the outlet's backflow temperature do not vary: the case
+writer has no pressure inlet, and a backflow value is rarely what a user means to drive.
+
+16.2 **The forms.** `table` (time and value pairs, two or more, times strictly increasing; linear
+between rows and held at the end values outside), `sine` (`mean + amplitude sin(2 pi frequency t +
+phase)`; `phase` optional, 0) and `square`, shown as Pulse (`high` for the first `duty` of each
+`period`, `low` for the rest). The constant is no profile at all, so a project made before this
+addendum is unchanged and its run basis does not move.
+
+16.3 **Stored as quantities.** One hidden `json` parameter, `profiles`, keyed by the value's
+parameter name. Each number is stored as a quantity is (`{value, unit, expr?}`, SI, with the
+expression text when one was given), in its own dimension: the value's, `time`, `frequency`,
+`angle` and `dimensionless`. **A sine's amplitude is a difference** of the value, not a level: for
+a temperature its dimension is `temperature_difference`, where an offset unit is the size of its
+degree (`5 [degC]` is a swing of 5 K and `9 [degF]` one of 5 K; review found them read as 278.15 K
+and 260.37 K, a swing of over 550 K the preview called fine). Reading the unit as a difference was
+preferred to refusing it because "plus or minus 5 degC" is how an engineer says it, and the stored
+SI unit (K) is the same, so no project changes. A pulse's low and high and a table's values stay
+levels. In an expression temperatures combine in kelvin (ADR-0012), so a swing written as one is a
+difference of two levels or in K. **That is said, not left silent** (review found `swing = 5 [degC]`
+as the amplitude, and `5 [degC] + 1 [K]`, stored as 278.15 K and 279.15 K with the preview calling
+them fine): a temperature amplitude above half its mean gets a note on `amplitude` naming the
+level reading, and one that takes the temperature to 0 K (`2 * 5 [degC]`) is refused on
+`amplitude`, not on the value, with the same reason. The node parameter's structural check refuses another unit, a
+missing field and a broken rule. A profile is not a parameter of its own because its length varies
+(a table) and because one node type keeps every expression reference (decision 2.1). Expressions
+in a profile do not install dependencies in the model: they are evaluated when the profile is set
+and again when the case is written and the set-up is checked, so a profile follows the parameters
+it names at those points; one that no longer resolves is `setup.profile_invalid` and
+`solve.profile_invalid`.
+
+16.4 **Rules.** Sine: frequency above zero, amplitude not negative. Square: period above zero,
+duty in (0, 1). Table: as 16.2. The kind's rule applies to the time-mean of a flow (positive) and
+to every value of a temperature (above 0 K); a pressure is any. A flow that goes to zero or below
+for part of its profile is allowed and is `setup.profile_reverses` (its message gives the lowest
+value with its SI unit). A pulse whose high is below its low is allowed (it is the same wave with
+the duty on the lower value) and the preview returns a note on `high` saying so. A temperature that
+reaches 0 K is refused at the field that takes it there (a sine's `amplitude` or `mean`, a pulse's
+`low` or `high`, a table row's value). The editor shows each note under its field, and
+`boundary.set_profile` returns the same `notes`. `setup.no_inlet_temperature` (ADR-0027) does not name an inlet whose
+temperature varies in time and is in use: its constant still reads the default 300 K (16.5), but
+the run follows the profile, and such a profile counts as a chosen temperature for the others.
+
+16.5 **Commands.** `boundary.set_profile(boundary, parameter, profile | null)`: one undo step and
+one journal record; null makes the value constant again and the constant parameter is left as it
+was, so it comes back. `boundary.profile_preview(parameter, profile, end_time?, points?)` checks a
+draft and samples it without changing anything (`ok: false` with the `field` and the message, for
+the editor to show under that field; the message words a table field as the editor numbers its
+rows, "row 2 time", while `field` stays `rows.1.time`). `boundary.list` gains `varies`: the values
+that vary and are in use, a temperature only while the energy equation is solved (on in the
+settings, or a multi-region case: see 16.7 for which that is). A boundary's node summary carries
+the same `varies` (`varying_in`, the server's one rule), and a node event on what the rule reads
+(the solver or mesh settings, a region, a tag, a part, or a removal) re-sends, in `also`, the
+boundaries with a temperature profile; the tree's marker, the Guided rows and the Results notes
+render the server's `varies` as it is, never the raw stored `profiles`, and hold no energy rule of
+their own. A change of kind or of a switch takes away, in the same step, the profiles the boundary
+can no longer vary or use (a velocity inlet's speed once its direction is components), whichever
+command makes it: `boundary.set`, `boundary.assign` (the Full mode Condition picker) and
+`parameter.set` on `kind` or `direction`; each says what it took in `profiles_dropped`, so none
+lies hidden and comes back when the change is undone by hand. Errors:
+`boundary.invalid_profile` (`details.parameter`, `details.field`) and `boundary.invalid_value`.
+
+16.6 **How it compiles** (`stokes.compile.of14.time_functions`). Each form is the OpenFOAM 14
+function of the same name given inline: `sine` (`amplitude`, `frequency`, `start = -phase / (2 pi
+f)`, `level`), `square` (`amplitude = (high - low) / 2`, `frequency = 1 / period`, `start 0`,
+`level = (high + low) / 2`, `markSpace = duty / (1 - duty)`) and `table` (`values`). A velocity is
+`uniformFixedValue` with `uniformValue { type scale; scale <speed>; value <unit direction> }`; a
+mass flow is `massFlowRate <function>` on `flowRateInletVelocity`; an incompressible outlet's `p`
+is the gauge profile over the density; the `fluid` solver's `p_rgh` is the gauge profile moved by
+the outlet's hydrostatic shift and an ideal gas's `p` is raised by the operating pressure; an
+inlet temperature is `uniformFixedValue` on `T`. Keywords and their meanings were read from the
+install's own libraries and checked by running the install (a moving-lid cavity with each form,
+the written value at each time against the profile); no OpenFOAM source was read or copied. A
+conjugate region's dictionaries would be the `fluid` writer's; golden `time_profiles/coupled_wall`
+is that writer with a coupled wall, not a multi-region case (which is steady only, 16.7). The patch's
+`value` at time zero is written to the function's twelve digits.
+
+16.7 **Steady and transient.** A profile is in seconds, and a steady run's time counts iterations:
+a steady run writes the **time-mean** as the constant and `setup.profile_steady` (warning) says
+so, with a fix that switches the run to transient (`solve.configure values={transient: true}`).
+The coupled engine is steady only and refuses (`solve.profile_steady_only`;
+`setup.profile_steady_only`, error). The multi-region writer is steady only today
+(`compile.unsupported` for a transient case), so a conjugate case runs on the mean until it takes
+time. **Conjugate here means multi-region by the mesh's own rule**
+(`stokes.mesh.conjugate.meshes_regions`, which `snapshot_for` builds the multi-region mesh on):
+snappyHexMesh, a part domain and more than one body. Two bodies meshed by cfMesh or Gmsh, or in a
+box domain, are one region: they run transient like any case, and with energy off their inlet
+temperature profile is not in use. Review found the check calling any two-body project conjugate.
+On a multi-region case there `setup.profile_steady` says so with no switch to transient (its fix is the boundary's
+page), and on a transient conjugate run its fix switches the run back to steady. The Guided Run card
+offers Transient only when the finding's fix does. The checks, the solve, Fast mode and the coupled
+engine's refusal all read the same `varies` (a temperature profile with energy off is kept and not
+acted on). A transient run that ends before one period, or before
+a table's last time, is `setup.profile_short` (info). **Fast mode** holds a varying value at its
+time-mean (its preview is steady) and lists those boundaries in its status (`time_means`), which
+the panel says.
+
+16.8 **The editor.** One component (`web/src/panels/TimeProfileEditor.tsx`, rules in
+`timeProfileModel.ts`) in the Guided Boundaries card (a Varies in time toggle beside the value)
+and on a boundary's Properties page in Full mode; the tree marks a boundary that varies. The form
+picker is a radio group the arrow keys move along; a block pasted from a spreadsheet into a table
+cell replaces as many rows as it has from there on, keeps a cell's unit and a blank cell (the server
+checks each row as it checks a typed one), reads units from a header ("Time (ms)") onto the bare
+numbers below, and says how many rows came in and which lines it left out; while a field is wrong
+the last good waveform stays, faded, and Apply waits; the Varies in time toggle is offered only for
+the values the kind varies and uses (`kind.profiled` and the switches); the plot is the server's samples over the run's end time
+(or two cycles), with a mark where one period or the table ends. The Run card offers Steady or
+Transient once a value varies, with the end time and the time step (seconds or quantity text; a
+refusal under the field). The Results history names the report that follows each varying value (an
+inlet's flow rate, an outlet's mean pressure) or says none does (a temperature).
+
+**Alternatives.** A node per profile under the boundary (rejected: a second place to look for one
+value and more undo steps); a `table` parameter kind in the schema (rejected for now: one user,
+and a json parameter with a structural check carries the same rule); writing a steady run's
+profile with iterations as time (rejected: it means nothing physical); refusing a steady run with
+a profile (rejected: the mean is what Fast mode and a first look want).
+
+**Consequences.** `boundary` has one more parameter (hidden from the property grid). The run basis
+moves only for a project with a profile on a transient run. Not done: a profile on a velocity
+inlet by components, on a pressure inlet or a backflow temperature; a time-varying wall
+temperature or heat flux; a transient multi-region case; a dependency from a profile's expression
+to the parameter it names (removing that parameter is allowed and is then `setup.profile_invalid`);
+the editor's values in the project's display units (it shows and reads SI: m/s, kg/s, Pa, K).
+
+16.9 **A transient run's results** (2026-11-24, after a walk on a 200 mm water duct with a 5 Hz
+inlet, 0.4 s at 1 ms). What the results showed was the steady run's view of a time-accurate run:
+
+- **The record says it is transient** (`transient`, `end_time`, `sim_time`, the last residual
+  block's time). A transient run that reaches its end time is `done` (it has no convergence to
+  reach), and the Run card, the drawer, the strip and the toast say "0.4 s simulated in 400
+  steps"; one that ends early is `done_unconverged` and says so; progress is the end time over the
+  step; the Iterations and Residual target fields stay hidden.
+- **How often it writes** is the Run card's **Save every** (`write_time`). Switching a run to
+  transient, or changing its end time or step while the interval is still the suggestion, writes
+  the suggestion (`stokes/run/write_cadence.py`): 20 frames a period of the fastest sine or square
+  profile and at least 50 over the run, at least one step, at most 500 frames, a whole number of
+  steps. A value the user typed is kept. `solve.write_suggestion` reports it and the frames the
+  settings give; the card offers it when the run writes under two thirds of its frames.
+- **Refused under the field** by `solve.configure` (and by the card first): a time step longer than
+  the end time, a write interval under one step or longer than the run.
+- **The numbers follow the time shown.** `run.monitors_at` reads each opening's monitor tables once
+  from the host (kept for the session: a finished job cannot change) and takes the rows written
+  nearest the time; `results.streams time=` does the same. The legend's pressure drop, the Monitors
+  table and the Streams use it at the time the fields were read at and say "at t = 0.25 s" ("(last)"
+  at the last); until it answers they show the record's numbers and say "(last)".
+- **The flow's sign**: the solver's patch flow is positive out of the domain, so an inlet's was
+  negative. Every flow Stokes shows is in its opening's own direction, into the domain at an inlet
+  and out at an outlet (`results_streams.directed_flow`); negative means backflow. `run.monitors`
+  gives each table's `sign` and `opening`, so the History plot draws "Flow in, inlet" positive.
+- **One colour range for every frame.** `run.time_ranges` reads every written time once on the host
+  in the background (the extractions take the store's extract lock with the shown time's, since the
+  agent keeps one fields artifact per job) and caches the union beside the run's fields;
+  `run.fields` reports it per field as `all_times`. An Auto range spans all times by default (the
+  legend says "range over all times"); **This time** is the old behaviour. Play switches an Auto
+  range over this time to all times, or locks it when the all-times range is not there yet.
+- **The History plot** draws a robust range by default: the values after the start-up (the first
+  5 % of the span and at least two samples) unless the full range is within three times of it; the
+  excursion is drawn along the edge with a caret and its value, and a note says so. **Full** draws
+  every value, and **from t =** leaves out the start. A transient history's caption is min, mean
+  (time-weighted) and max, and the last period's mean when a profile repeats; "settled" stays a
+  steady run's word. The caption wraps under the plot rather than being cut off (review found the max and
+  the period mean hidden behind an ellipsis at 1600 px).
+- **Full mode steps through time too.** The Results panel has the Guided card's Time row (slider,
+  back, Play, on, Loop; the same component, `web/src/guided/TimeBlock.tsx`, its controls named
+  `results-time-*`) under the run's line, shown for a transient run with more than one written
+  time. Before, a Full mode user saw only the time last picked in Guided.
+- **The residuals** of a transient run are drawn against its time, with no convergence line: the
+  residual target is the steady run's stopping rule.

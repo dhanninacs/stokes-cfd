@@ -122,6 +122,11 @@ export interface RunSummary {
   resumedFrom?: string;
   /** `mesh` for an imported case's mesh-only run (the Mesh step's Generate); otherwise a simulation. */
   kind?: string;
+  /** A transient run: its iterations are time steps and it ends at `endTime` seconds (ADR-0022 addendum 2026-11-24). */
+  transient?: boolean;
+  /** A transient run's end time and the time it reached, in seconds; 0 when unknown. */
+  endTime?: number;
+  simTime?: number;
 }
 
 /** A record of an imported case's mesh-only run, which builds the mesh and solves nothing. */
@@ -171,6 +176,9 @@ export function readRunRecord(raw: unknown): RunSummary | null {
     stopped: raw.stopped === true,
     resumedFrom: text(raw.resumed_from),
     kind: text(raw.kind) || "simulation",
+    transient: raw.transient === true,
+    endTime: num(raw.end_time) ?? 0,
+    simTime: num(raw.sim_time) ?? 0,
   };
 }
 

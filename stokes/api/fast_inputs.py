@@ -106,9 +106,28 @@ def case_from_session(session: Session) -> tuple[FastCase, float]:
             label=held[0][2][0].path,
             zones=tuple(zones) if len(zones) > 1 or thermal else (),
             thermal=thermal,
+            time_means=_time_means(project),
         ),
         first.rho,
     )
+
+
+def _time_means(project: Any) -> tuple[str, ...]:  # Any: Project
+    """The boundaries whose values vary in time, which the steady preview holds at their means."""
+    from stokes.physics.conditions.profiles import varying_in
+
+    return tuple(
+        node.name
+        for node in project.root.walk()
+        if getattr(node, "type", "") == "boundary" and varying_in(project, node)
+    )
+
+
+def _means(project: Any, node: Any) -> dict[str, float]:  # Any: Project and Node
+    """The time-mean of each value of the boundary that varies in time (ADR-0022 addendum)."""
+    from stokes.run.profiles import boundary_profiles
+
+    return {name: p.time_mean() for name, p in boundary_profiles(project, node).items()}
 
 
 def _energy_on(project: Any) -> bool:  # Any: Project
@@ -215,8 +234,11 @@ def _boundary(
             },
         )
     outward = _outward(session, tag.id)
+    # A value that varies in time is held at its time-mean: the preview is steady.
+    means = _means(session.require_project(), node)
     if kind == "velocity_inlet":
         direction = str(params.get("direction") or "normal")
+        speed = means.get("velocity", _number(params.get("velocity")))
         if direction == "components":
             velocity = (
                 _number(params.get("velocity_x")),
@@ -225,11 +247,12 @@ def _boundary(
             )
         elif direction == "vector":
             unit = _unit(params.get("direction_vector"))
-            speed = _number(params.get("velocity"))
             velocity = (unit[0] * speed, unit[1] * speed, unit[2] * speed)
         else:
-            velocity = _along_normal(session, node, _number(params.get("velocity")))
-        temperature = _number(params.get("temperature")) if thermal else 0.0
+            velocity = _along_normal(session, node, speed)
+        temperature = (
+            means.get("temperature", _number(params.get("temperature"))) if thermal else 0.0
+        )
         return port_from_triangles(
             triangles,
             node.name,
@@ -239,7 +262,8 @@ def _boundary(
             zone=index,
             temperature=temperature if temperature > 0.0 else None,
         )
-    pressure = _number(params.get("pressure")) / zone.rho  # gauge Pa to kinematic m2/s2
+    gauge = means.get("pressure", _number(params.get("pressure")))
+    pressure = gauge / zone.rho  # gauge Pa to kinematic m2/s2
     return port_from_triangles(triangles, node.name, OUTLET, outward, pressure=pressure, zone=index)
 
 

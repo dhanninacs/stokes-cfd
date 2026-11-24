@@ -422,7 +422,9 @@ def test_a_run_offers_its_function_object_tables(
     session, _runner = _session(tmp_path, tutorials)
     run = session.execute("run.start", case="/cases/cavity")["run"]
     listed = session.execute("run.monitors", run=run)
-    assert listed["monitors"] == [{"name": "probes/0/p.dat", "size": 20}], "tables only"
+    # A probe is on no opening: no patch, and the solver's own sign (ADR-0022 16.9).
+    probe = {"name": "probes/0/p.dat", "size": 20, "patch": "", "opening": "", "sign": 1}
+    assert listed["monitors"] == [probe], "tables only"
     table = session.execute("run.monitor", run=run, name="probes/0/p.dat")
     assert table["columns"] == ["Time", "p"] and table["values"]["p"] == [1.0, 2.0]
     for bad in ("../state.json", "probes/0/p", "/etc/x.dat"):

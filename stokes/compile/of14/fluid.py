@@ -36,9 +36,10 @@ from stokes.compile.snapshot import (
 from . import fluid_thermo, turbulence
 from .boundaries import validate_patch, velocity_field
 from .control import average_function, purge_write, stop_function, transient_write
+from .time_functions import function1, start_value, uniform_fixed_value
 
 #: Changes in thermodynamics, time controls and model fields invalidate earlier generated cases.
-WRITER_VERSION = "of14-fluid/6"  # 6: every equation under-relaxed (the turbulence fields too)
+WRITER_VERSION = "of14-fluid/7"  # 7: second-order energy convection (linearUpwind)
 
 #: The one engine this writer expresses (ADR-0027 decision 1).
 ENGINE = "of14.fluid"
@@ -306,7 +307,8 @@ def _control_dict(snap: SolveSnapshot) -> Dict:
 
 
 def _monitors(snap: SolveSnapshot) -> tuple[Any, ...]:
-    """Flow rate and mean `p` and `T` per monitor patch. `phi` is a mass flux here, so kg/s."""
+    """Flow rate, area-averaged `p` and `T`, and the mass-flow-weighted `T` per monitor patch.
+    `phi` is a mass flux here, so kg/s, and `T` weighted by it is the bulk temperature."""
     items: list[Any] = []
     for name in snap.monitor_patches:
         items.append(
@@ -318,7 +320,34 @@ def _monitors(snap: SolveSnapshot) -> tuple[Any, ...]:
                 f"area-averaged p and T on {name}",
             )
         )
+        items.append(bulk_temperature_function(name))
     return tuple(items)
+
+
+def bulk_temperature_name(patch: str) -> str:
+    """The function (and `postProcessing` folder) name of a patch's bulk-temperature monitor."""
+    return f"bulkT_{patch}"
+
+
+def bulk_temperature_function(patch: str, region: str | None = None) -> FuncInclude:
+    """`T` on ``patch`` averaged with the mass flux as the weight: the bulk (mixing-cup)
+    temperature a duty is computed from.
+
+    **Not the area average** (2026-11-24): on the mini plate exchanger the area-averaged outlet
+    temperatures gave a duty of 51.4 W against 77.8 W from the flow-weighted ones (measured), and
+    on its hot outlet the two read 341.93 K and 337.80 K. `operation` and `weightField` are
+    `patchAverage`'s own entries, set through the call (measured on FoamWin 14 with
+    `foamPostProcess`: the result matched an explicit `surfaceFieldValue` with
+    `operation average; weightField phi;` to the last digit). **`funcName` names the folder**: the
+    call text with every argument in it made a path over Windows' 260 characters in a deep job
+    folder (measured, "Error 206" from `mkDir`).
+    """
+    tail = f", region={region}" if region else ""
+    return FuncInclude(
+        f"{_PATCH_AVERAGE_FUNC}(funcName={bulk_temperature_name(patch)}, patch={patch}, "
+        f"fields=(T), operation=average, weightField=phi{tail})",
+        f"mass-flow-weighted (bulk) T on {patch}",
+    )
 
 
 #: Fluent's own default temperature limits, K: far outside any real solution, so they never
@@ -368,6 +397,17 @@ def _relaxation(snap: SolveSnapshot) -> tuple[float, float]:
     return (0.2, 0.5) if snap.non_orthogonal else (0.3, 0.7)
 
 
+def _energy_scheme(snap: SolveSnapshot, energy: str) -> str:
+    """The energy convection scheme: second order, with upwind kept for a non-orthogonal mesh.
+
+    **Measured (2026-11-23):** on a fixed-wall gyroid test section upwind gave h.a_v 10-20 %
+    higher than `linearUpwind`, and a conjugate mini exchanger converged with `linearUpwind` on
+    FoamWin 14. A mesh above the non-orthogonality bar keeps upwind: the elbow's 79.8-degree
+    tetrahedral mesh has only been run with it, and nothing measured says linearUpwind holds there.
+    """
+    return "upwind" if snap.non_orthogonal else f"linearUpwind grad({energy})"
+
+
 def _fv_schemes(snap: SolveSnapshot) -> Dict:
     """Energy-aware schemes with physical time derivatives for transient runs."""
     energy = fluid_thermo.energy_field(snap)
@@ -375,7 +415,7 @@ def _fv_schemes(snap: SolveSnapshot) -> Dict:
     div_schemes = [
         Entry("default", Word("none")),
         Entry("div(phi,U)", Raw(f"{convection} linearUpwind grad(U)")),
-        Entry(f"div(phi,{energy})", Raw(f"{convection} upwind")),
+        Entry(f"div(phi,{energy})", Raw(f"{convection} {_energy_scheme(snap, energy)}")),
         # The kinetic energy in the energy equation: central differencing is what tipped the elbow's
         # tetrahedral mesh into a negative temperature, so a non-orthogonal mesh takes upwind.
         Entry("div(phi,K)", Raw(f"{convection} {'upwind' if snap.non_orthogonal else 'linear'}")),
@@ -558,6 +598,12 @@ def _pressure(snap: SolveSnapshot) -> Dict:
         if condition.kind in CONSTRAINT_KINDS:
             return Dict((Entry("type", Word(condition.patch_type)),))
         if fluid_thermo.is_gas(snap):
+            if condition.kind == "pressure_outlet" and condition.pressure_profile is not None:
+                # Absolute: the gauge profile raised by the operating pressure.
+                absolute = condition.pressure_profile.affine(1.0, snap.p_ref)
+                return uniform_fixed_value(
+                    function1(absolute), _uniform(start_value(absolute)).text
+                )
             if condition.kind == "pressure_outlet":
                 return Dict(
                     (
@@ -593,6 +639,11 @@ def _p_rgh(snap: SolveSnapshot) -> Dict:
     def entry(condition: PatchCondition) -> Dict:
         if condition.kind in CONSTRAINT_KINDS:
             return Dict((Entry("type", Word(condition.patch_type)),))
+        if condition.kind == "pressure_outlet" and condition.pressure_profile is not None:
+            # The same hydrostatic shift at every time: the gauge profile moved by it.
+            shift = outlet_value(condition) - float(condition.pressure or 0.0)
+            shifted = condition.pressure_profile.affine(1.0, shift)
+            return uniform_fixed_value(function1(shifted), _uniform(start_value(shifted)).text)
         if condition.kind == "pressure_outlet":
             return Dict(
                 (
@@ -603,6 +654,19 @@ def _p_rgh(snap: SolveSnapshot) -> Dict:
         return Dict((Entry("type", Word("fixedFluxPressure")), Entry("value", _uniform(0.0))))
 
     return _volume_field(_DIMS_PRESSURE, _uniform(0.0), _boundary(snap, entry))
+
+
+def _fixed_temperature(condition: PatchCondition) -> Dict:
+    """A fixed temperature: constant, or following its profile in time (ADR-0022 addendum)."""
+    profile = condition.temperature_profile
+    if profile is not None:
+        return uniform_fixed_value(function1(profile), _uniform(start_value(profile)).text)
+    return Dict(
+        (
+            Entry("type", Word("fixedValue")),
+            Entry("value", _uniform(condition.temperature or 0.0)),
+        )
+    )
 
 
 def _temperature(snap: SolveSnapshot) -> Dict:
@@ -616,12 +680,7 @@ def _temperature(snap: SolveSnapshot) -> Dict:
         ):  # a constraint patch (symmetry, empty, wedge): `_validate` refused every other `None`
             return Dict((Entry("type", Word(condition.patch_type)),))
         if thermal == "fixedValue":
-            return Dict(
-                (
-                    Entry("type", Word("fixedValue")),
-                    Entry("value", _uniform(condition.temperature or 0.0)),
-                )
-            )
+            return _fixed_temperature(condition)
         if thermal == "inletOutlet":
             backflow = _uniform(condition.temperature or 0.0)
             return Dict(

@@ -7,7 +7,8 @@
 // (inlet 0.05 m/s on one end, outlet on the other) > the Fast mode panel (the top bar's Fast
 // button): Start, the plane and its legend, the panel's numbers, another value, another plane moved
 // along its axis and the automatic one again, a higher fidelity, a faster inlet while it runs (the
-// turbulent preview), Stop and Start again, and Start with no inlet. Every step waits on the UI's own state; a screenshot per step; problems (page errors,
+// turbulent preview), Stop and Start again, Start with no inlet, and round 4's options (WALE, 16-bit
+// storage, a warm start at fidelity 4). Every step waits on the UI's own state; a screenshot per step; problems (page errors,
 // console errors, failed requests, timeouts) are printed at the end and make the exit code 1.
 //
 // STOKES_WALK_CHANNEL=chrome drives an installed Chrome where Playwright's own browser is absent.
@@ -32,6 +33,15 @@ async function until(what, test, ms = 120000) {
   fail(`timed out waiting for ${what}`);
   throw new Error(`timeout: ${what}`);
 }
+/** Whether the panel's status lines are wholly inside the panel and the window: read without scrolling. */
+const statusInView = () => page.evaluate(() => {
+  const lines = document.querySelector('[data-ws="fast-stats"]');
+  const card = document.querySelector('[data-ws="fast-panel"]');
+  if (!lines || !card) return false;
+  const a = lines.getBoundingClientRect();
+  const b = card.getBoundingClientRect();
+  return a.height > 0 && a.top >= b.top - 1 && a.bottom <= Math.min(b.bottom, window.innerHeight) + 1;
+});
 /** A command over the page's own client (what the panel calls). */
 const rpc = (method, params = {}) => page.evaluate(([m, p]) => window.__stokes.getState().execute(m, p), [method, params]);
 /** Stop from the panel. The plane's last fetch may lose the race with the stop: the routes answer
@@ -97,6 +107,7 @@ try {
   await shot('running-first');
   const steady = await until('steady', async () => /Steady/.test(await stats()), 120000);
   note(`steady after ${steady} ms: ${await stats()}`);
+  if (!(await statusInView())) fail('the status lines are not in view without scrolling');
   await shot('running-steady');
   const legend = await page.locator('[data-ws="fast-legend"]').innerText().catch(() => '');
   if (!legend) fail('no legend for the plane: its colours have no numbers');
@@ -148,6 +159,9 @@ try {
 
   console.log('7. A higher fidelity while it runs');
   await panel.locator('[data-ws="fast-fidelity"]').selectOption('3');
+  // The finer lattice takes the running one's flow, and the status says so until it is steady.
+  await until('the warm start from fidelity 2 is said', async () => /Warm start from fidelity 2/.test(await stats()), 20000);
+  await shot('warm-from-fidelity-2');
   await until('fidelity 3', async () => /Fidelity 3/.test(await stats()) && /updates\/s/.test(await stats()), 30000);
   note(await stats());
   await shot('fidelity-3');
@@ -192,6 +206,37 @@ try {
     await until('numbers after undo', async () => /updates\/s/.test(await stats()), 30000);
     await stop();
   }
+
+  // Round 4 (ADR-0047 addendum 4): the closures chosen by hand, 16-bit storage, and a fine lattice
+  // that settles a coarse one first and starts from its flow.
+  console.log('10b. WALE, 16-bit storage and a warm start at fidelity 4');
+  const closures = await panel.locator('[data-ws="fast-turbulence"] option').allInnerTexts();
+  if (!closures.some((c) => /WALE/.test(c)) || !closures.some((c) => /Vreman/.test(c))) fail(`the closures offered are ${closures.join(', ')}`);
+  await panel.locator('[data-ws="fast-turbulence"]').selectOption('wale');
+  await panel.locator('[data-ws="fast-storage"]').selectOption('f16');
+  if (!(await panel.locator('[data-ws="fast-warm"]').isChecked())) fail('the warm start is not on by default');
+  await panel.locator('[data-ws="fast-fidelity"]').selectOption('4');
+  await shot('round4-options');
+  await panel.locator('[data-ws="fast-start"]').click();
+  const warm = await until('the coarse pass of the warm start', async () => /Warm start/.test(await stats()), 30000);
+  note(`warm start said after ${warm} ms: ${await stats()}`);
+  if (!(await statusInView())) fail('the warm start line is not in view without scrolling');
+  await shot('round4-warming');
+  const fine = await until('fidelity 4 in 16 bits', async () => /Fidelity 4/.test(await stats()) && /16-bit/.test(await stats()) && !/Warm start/.test(await stats()), 120000);
+  note(`fine lattice after ${fine} ms more: ${await stats()}`);
+  const settled = await until('steady at fidelity 4', async () => /Steady/.test(await stats()), 240000);
+  note(`steady after ${settled} ms more: ${await stats()}`);
+  if (!(await statusInView())) fail('the status lines are not in view without scrolling at fidelity 4');
+  await shot('round4-fidelity-4-16-bit');
+  const round4 = await rpc('fast.status');
+  if (round4.storage !== 'f16' || round4.turbulence !== 'wale' || round4.warm_start !== true) fail(`the status says storage ${round4.storage}, turbulence ${round4.turbulence}, warm start ${round4.warm_start}`);
+  if (await panel.locator('[data-ws="fast-storage"]').isEnabled()) fail('the storage can be changed while a preview runs');
+  await panel.locator('[data-ws="fast-turbulence"]').selectOption('vreman');
+  await until('the Vreman closure', async () => (await rpc('fast.status')).turbulence === 'vreman', 10000);
+  await stop();
+  await panel.locator('[data-ws="fast-turbulence"]').selectOption('auto');
+  await panel.locator('[data-ws="fast-storage"]').selectOption('f32');
+  await panel.locator('[data-ws="fast-fidelity"]').selectOption('2');
 
   // 11. A conjugate project (optional fourth argument: a saved project with two fluids and a
   // solid, such as the plate exchanger): the panel names the bodies, offers the temperature, and

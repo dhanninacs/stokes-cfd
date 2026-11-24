@@ -24,9 +24,16 @@ interface Props {
   target: number | null;
   /** Fill the parent (the drawer) rather than a fixed panel height. */
   fill?: boolean;
+  /**
+   * A transient run (ADR-0022 addendum 2026-11-24): the x axis is the physical time, and there is no
+   * convergence line, because a time-accurate run does not stop on `residual_target` (its residuals are each
+   * step's solver answer, not a march to a steady state).
+   */
+  transient?: boolean;
 }
 
-export default function ResidualPlot({ series, target, fill = false }: Props) {
+export default function ResidualPlot({ series, target: steadyTarget, fill = false, transient = false }: Props) {
+  const target = transient ? null : steadyTarget;
   const drawn = useFrameValue(series);
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 320, height: 150 });
@@ -42,10 +49,10 @@ export default function ResidualPlot({ series, target, fill = false }: Props) {
     return () => watch.disconnect();
   }, []);
 
-  const model = useMemo(() => buildChart(drawn, hiddenFields, target, size.width, size.height), [drawn, target, size, bump]);
+  const model = useMemo(() => buildChart(drawn, hiddenFields, target, size.width, size.height, undefined, transient), [drawn, target, size, bump, transient]);
   const latest = useMemo(() => latestValues(drawn).map((f) => `${f.name} ${formatResidual(f.value)}`).join(", "), [drawn]);
   const last = drawn.iterations.length > 0 ? drawn.iterations[drawn.iterations.length - 1] : 0;
-  const label = `Residuals against iteration, log scale. Iteration ${last}${latest !== "" ? `. Latest: ${latest}` : ""}${target !== null ? `. Convergence target ${formatResidual(target)}` : ""}.`;
+  const label = `Residuals against ${model.xLabel === "iteration" ? "iteration" : "time"}, log scale. ${transient ? "Step" : "Iteration"} ${last}${latest !== "" ? `. Latest: ${latest}` : ""}${target !== null ? `. Convergence target ${formatResidual(target)}` : ""}.`;
 
   const toggle = (name: string) => {
     if (hiddenFields.has(name)) hiddenFields.delete(name);
@@ -82,7 +89,7 @@ export default function ResidualPlot({ series, target, fill = false }: Props) {
             </text>
           ))}
           <text className="res-tick" x={model.x1} y={size.height - 3} textAnchor="end">
-            iteration
+            {model.xLabel}
           </text>
           {model.lines.map((line) => (
             <g key={line.name}>

@@ -77,9 +77,31 @@ def check_dimension(q: Quantity, dim: Dimension) -> None:
         )
 
 
+DIFFERENCE_DIMENSIONS: tuple[str, ...] = ("temperature_difference",)
+"""Dimensions that are differences: an offset unit given for one (``5 degC``) is the size of its
+degree (5 K), not a level on its scale (278.15 K)."""
+
+
+def as_difference(q: Quantity) -> Quantity:
+    """``q`` with an offset unit (degC, degF, ...) read as the matching delta unit (delta_degC):
+    the size of the degree, not a level on its scale. Other units are left as they are."""
+    items = list(q.unit_items())
+    if len(items) != 1 or items[0][1] != 1:
+        return q
+    name = items[0][0]
+    registry = ureg()
+    # pint defines a delta unit for each offset unit only (no delta_kelvin).
+    if f"delta_{name}" not in registry:
+        return q
+    return registry.Quantity(q.magnitude, f"delta_{name}")
+
+
 def to_si(q: Quantity, dim: Dimension) -> float:
-    """Magnitude of ``q`` in the dimension's SI storage unit."""
+    """Magnitude of ``q`` in the dimension's SI storage unit. For a difference dimension
+    (:data:`DIFFERENCE_DIMENSIONS`) an offset unit is a difference (:func:`as_difference`)."""
     check_dimension(q, dim)
+    if dim.name in DIFFERENCE_DIMENSIONS:
+        q = as_difference(q)
     if dim.si_unit == "":
         return float(q.to("dimensionless").magnitude)
     return float(q.to(dim.si_unit).magnitude)

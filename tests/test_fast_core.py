@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import re
 
 import numpy as np
 import pytest
@@ -13,6 +14,7 @@ from stokes.fast import lattice
 from stokes.fast.case import FastCase
 from stokes.fast.errors import FastInvalid, FastPortNotPlanar, FastTooFast
 from stokes.fast.grid import CELLS_ACROSS, PADDING, Grid, grid_for
+from stokes.fast.kernel import step_shader
 from stokes.fast.ports import (
     INLET,
     OUTLET,
@@ -25,7 +27,6 @@ from stokes.fast.wgsl import (
     compile_field,
     gather_shader,
     slice_shader,
-    step_shader,
 )
 from stokes.implicit.features import box, cylinder
 from stokes.implicit.graph import to_text
@@ -246,11 +247,12 @@ def test_the_equilibrium_is_the_incompressible_one_on_the_densitys_deviation() -
     """No velocity is a momentum divided by a density, and no density sum starts at 1: the first
     made the volume flow follow the pressure (5 % along a duct), the second lost a slow flow in
     f32 round-off."""
-    from stokes.fast.wgsl import gather_shader, slice_shader, step_shader
+    from stokes.fast.kernel import step_shader
+    from stokes.fast.wgsl import gather_shader, slice_shader
 
     step = step_shader([(compile_field("_0 var-x"), False)], 8, 8)
     for text in (step, slice_shader(), gather_shader()):
-        assert "= 1.0;" not in text
+        assert re.search(r"var \w+ = 1\.0;", text) is None  # no sum starts at 1
         assert "/ rho" not in text and "m / r" not in text and "jl / rl" not in text
     assert "var rho0 = 0.0;" in step
     # The rest direction's equilibrium: the weight times the deviation, and a kinetic term with
@@ -259,17 +261,18 @@ def test_the_equilibrium_is_the_incompressible_one_on_the_densitys_deviation() -
 
 
 def test_the_turbulent_collision_is_the_regularised_one() -> None:
-    from stokes.fast.wgsl import step_shader
+    from stokes.fast.kernel import step_shader
 
     step = step_shader([(compile_field("_0 var-x"), False)], 8, 8)
-    les, laminar = step.split("  vel[id] = vec4f(u, mean);")
+    les, laminar = step.split("      o0 = f0 - wp * (f0 - e0);")
     assert "let keep = 1.0 - 1.0 / te;" in les
-    assert "dst[id] = e0 + keep * 1.5 * (" in les  # 4.5 times the rest weight
+    assert "o0 = e0 + keep * 1.5 * (" in les  # 4.5 times the rest weight
     assert "wm * (fm - em)" in laminar and "(fm - em)" not in les
 
 
 def test_a_port_only_takes_crossings_on_its_own_plane() -> None:
-    from stokes.fast.wgsl import PORT_PLANE_TOLERANCE, step_shader
+    from stokes.fast.kernel import step_shader
+    from stokes.fast.wgsl import PORT_PLANE_TOLERANCE
 
     assert PORT_PLANE_TOLERANCE < 0.5
     step = step_shader([(compile_field("_0 var-x"), False)], 8, 8)
