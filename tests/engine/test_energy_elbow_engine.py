@@ -53,7 +53,7 @@ def project_source() -> Path:
 def mixing_balance(monitors: dict[str, dict[str, Any]], inlets: list[str]) -> float:
     """The outlet temperature a perfect mix of the inlets would have: sum(|m| T) / sum(|m|)."""
     flows = [abs(float(monitors[name]["flow_rate"])) for name in inlets]
-    temperatures = [float(monitors[name]["T_mean"]) for name in inlets]
+    temperatures = [float(monitors[name]["T_bulk"]) for name in inlets]
     return sum(m * t for m, t in zip(flows, temperatures, strict=True)) / sum(flows)
 
 
@@ -84,7 +84,8 @@ def test_the_elbow_mixes_hot_and_cold_water(tmp_path: Path) -> None:
     assert len(inlets) >= 2 and len(outlets) == 1, monitors
 
     for name, data in monitors.items():
-        assert T_COLD - T_SLACK <= float(data["T_mean"]) <= T_HOT + T_SLACK, (name, data)
+        for key in ("T_area", "T_bulk"):
+            assert T_COLD - T_SLACK <= float(data[key]) <= T_HOT + T_SLACK, (name, key, data)
     fields = session.execute("run.fields", run=started["run"])
     temperature = [item for item in fields["fields"] if item["name"] == "T"]
     assert temperature, fields
@@ -92,5 +93,5 @@ def test_the_elbow_mixes_hot_and_cold_water(tmp_path: Path) -> None:
     assert float(temperature[0]["max"]) <= T_HOT + T_SLACK, temperature
 
     expected = mixing_balance(monitors, inlets)
-    outlet = float(monitors[outlets[0]]["T_mean"])
+    outlet = float(monitors[outlets[0]]["T_bulk"])
     assert abs(outlet - expected) <= MIXING_TOLERANCE, (outlet, expected, monitors)

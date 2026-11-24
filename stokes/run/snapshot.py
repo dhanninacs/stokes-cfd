@@ -48,6 +48,7 @@ from stokes.compile.snapshot import (
     FLOW_FIELDS,
     KINDS,
     NON_ORTHO_LIMIT,
+    PROFILE_FIELDS,
     THERMAL_FIELDS,
     TRANSIENT_CONTROL_DEFAULTS,
     TURBULENCE_FIELDS,
@@ -60,6 +61,7 @@ from stokes.cores import core_count
 from stokes.engines.catalogue import kinds_for
 from stokes.engines.model import RELAXATION_PARAMS
 from stokes.run.errors import SolveInvalid, SolvePartExcluded
+from stokes.run.profiles import apply_profiles, refuse_steady_only
 from stokes.run.thermal import gravity_of, thermal_values
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -138,6 +140,7 @@ def build_region_snapshot(
             **mesh_status,
             "patch_types": {name: types[name] for name in types if name in held},
         }
+    refuse_steady_only(project, str(params.get("engine") or ""))
     patches = _patches(
         session,
         project,
@@ -145,6 +148,7 @@ def build_region_snapshot(
         energy=energy,
         turbulence=str(params.get("turbulence") or "laminar") != "laminar",
         kinds=kinds_for(str(params.get("engine") or "")),
+        transient=bool(params.get("transient", False)),
     )
     return SolveSnapshot(
         **(_energy_fields(session, project, part_id, params) if energy else {}),
@@ -669,6 +673,7 @@ def _patches(
     energy: bool = False,
     turbulence: bool = False,
     kinds: tuple[str, ...] = KINDS,
+    transient: bool = False,
 ) -> tuple[PatchCondition, ...]:
     """One `PatchCondition` per patch the MESH has, in the mesh's order.
 
@@ -712,6 +717,12 @@ def _patches(
         if turbulence and kind in ("velocity_inlet", "pressure_outlet"):
             # The inflow group (ADR-0028). Only with kOmegaSST, so a laminar basis is unchanged.
             values.update(_turbulence_values(_boundary_for(project, mesh_status, patch)))
+        if kind in ("velocity_inlet", "mass_flow_inlet", "pressure_outlet"):
+            # Values that vary in time (ADR-0022 addendum 2026-11-24): the mean as the constant,
+            # and the profile itself on a transient run.
+            node = _boundary_for(project, mesh_status, patch)
+            if node is not None:
+                apply_profiles(session, project, node, values, transient=transient)
         out.append(PatchCondition(patch, patch_type, kind, **values))
     return tuple(out)
 
@@ -955,7 +966,7 @@ def solve_basis(snap: SolveSnapshot, mesh_basis: str, mesh_job: str, engine_stri
         if physical_snapshot.get(name) is None:
             physical_snapshot.pop(name, None)
     for patch in physical_snapshot["patches"]:
-        for name in (*THERMAL_FIELDS, *TURBULENCE_FIELDS, *FLOW_FIELDS):
+        for name in (*THERMAL_FIELDS, *TURBULENCE_FIELDS, *FLOW_FIELDS, *PROFILE_FIELDS):
             if patch.get(name) is None:
                 patch.pop(name, None)
     body: dict[str, Any] = {

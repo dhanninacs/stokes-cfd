@@ -30,8 +30,18 @@ NODE_REF = ParamDef("node", "string", description="Node id or path.")
 def parameter_set(ctx: CommandContext, node: str, name: str, value: Any) -> dict[str, Any]:
     """Set one parameter of a node; null clears an optional reference (a region's material, a
     boundary's partner), and a required one (a boundary's tag) refuses it."""
+    project = ctx.session.require_project()
     cmd = SetParam(node, name, value)
-    result = ctx.session.undo.push(cmd, ctx.session.require_project())
+    drop = _profiles_to_drop(project, node, name, value)
+    if drop is None:
+        result = ctx.session.undo.push(cmd, project)
+    else:
+        kept, dropped = drop
+        step = Composite(
+            label=f"set {name} (drops the {', '.join(dropped)} time profile)",
+            commands=[cmd, SetParam(node, "profiles", kept)],
+        )
+        result = {**ctx.session.undo.push(step, project)[0], "profiles_dropped": list(dropped)}
     ctx.session.emit("node.changed", node_id=cmd.node_id, path=result["path"], param=name)
     # **A units change re-imports the part** (Claude's defect 2). The source file is byte-identical,
     # so nothing else notices: the record's basis moves, the mesh keeps the old scale, and the
@@ -46,6 +56,28 @@ def parameter_set(ctx: CommandContext, node: str, name: str, value: Any) -> dict
 
             GeometryStore.of(ctx.session).reimport_part(part)
     return dict(result)
+
+
+def _profiles_to_drop(
+    project: Any,  # Any: Project
+    ref: str,
+    name: str,
+    value: Any,  # Any: JSON value
+) -> tuple[dict[str, Any] | None, tuple[str, ...]] | None:  # Any: JSON
+    """For a boundary's kind or switch (``direction``), the time profiles it keeps and the ones
+    it drops when ``name`` becomes ``value`` (ADR-0022 addendum 2026-11-24), as ``boundary.set``
+    drops them: none lies hidden to come back when the change is undone by hand. None when the
+    set drops nothing."""
+    target = project.find(ref)
+    if target is None or target.type != "boundary" or not target.params.get("profiles"):
+        return None
+    if not isinstance(value, str):
+        return None  # kind and the switches are words; anything else is refused by the set
+    from stokes.physics.conditions.profiles import kept_for_kind
+
+    after = {**target.params, name: value}
+    kept, dropped = kept_for_kind(str(after.get("kind")), after)
+    return (kept, dropped) if dropped else None
 
 
 @command(

@@ -24,6 +24,7 @@ import math
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -232,16 +233,21 @@ def mesh(
             log.warning("implicit mesh cache entry dropped", extra=fields(key=key, error=str(exc)))
             target.unlink(missing_ok=True)
             stats_path.unlink(missing_ok=True)
-    work = cache / f"{key}.run"
-    work.mkdir(parents=True, exist_ok=True)
+    # A folder of its own per run, with a SHORT name. Two workers can mesh the same request at once,
+    # and a shared `<key>.run` was emptied and removed under the other run. And Windows refuses a
+    # working directory longer than MAX_PATH even where long paths are on: the 64-character key
+    # pushed a project a few folders deep over it, and the mesher failed to start (WinError 267).
+    work = Path(tempfile.mkdtemp(prefix="run-", dir=cache))
     try:
         model = work / "model.txt"
         model.write_text(request.text, encoding="utf-8", newline="\n")
         out = work / "mesh.bin"
         stats = _run(program, request, model, out, work, cancel, progress, timeout)
         found = read(out)
-        out.replace(target)
-        stats_path.write_text(json.dumps(stats, separators=(",", ":")), encoding="utf-8")
+        written = work / "stats.json"
+        written.write_text(json.dumps(stats, separators=(",", ":")), encoding="utf-8")
+        _publish(written, stats_path)
+        _publish(out, target)
     finally:
         for leftover in work.iterdir() if work.is_dir() else []:
             leftover.unlink(missing_ok=True)
@@ -249,6 +255,19 @@ def mesh(
             work.rmdir()
     prune(cache, CACHE_CAP)
     return MeshOutcome(found, stats, False, time.monotonic() - start)
+
+
+def _publish(source: Path, target: Path) -> None:
+    """Move a finished file into the cache, atomically.
+
+    Windows refuses to replace a file another run has open; that run meshed the same request, so
+    the file already there is this one's equal and is kept.
+    """
+    try:
+        source.replace(target)
+    except PermissionError:
+        if not target.is_file():
+            raise
 
 
 def _run(

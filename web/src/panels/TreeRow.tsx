@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import {
   Activity,
+  Waves,
   Atom,
   Box,
   ChartLine,
@@ -30,6 +31,7 @@ import {
 } from "lucide-react";
 import type { NodeSummary } from "../api/types";
 import { StatusDot } from "../components/ui";
+import "./timeProfile.css";
 import { Tooltip } from "../components/Tooltip";
 import { useStore } from "../state/store";
 import { isNodeHidden } from "../viewport/hiddenNodes";
@@ -467,6 +469,13 @@ const TreeRow = memo(function TreeRow({ model, selected, primary, renaming, menu
         <>
           {/* Names yield space to the fixed icon columns, including in narrow desktop panes. */}
           <span className={`tree-name ${depth === 0 ? "font-medium" : ""}`}>{node.name}</span>
+          {/* A boundary whose values vary in time (ADR-0022 addendum 2026-11-24): a small wave after the name. */}
+          {/* `varies` is the server's answer, with the energy switch applied where the tree decorates the row. */}
+          {node.type === "boundary" && (node.varies?.length ?? 0) > 0 && (
+            <Waves size={11} className="tree-varies" role="img" aria-label="varies in time" data-ws="tree-varies">
+              <title>Varies in time</title>
+            </Waves>
+          )}
           {/*
             **A truncated value carries its FULL text in `title` as well as the tooltip** (Codex's
             035011: *"ensure full finding accessible via tooltip/accessible description"*). The

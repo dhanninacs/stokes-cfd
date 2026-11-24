@@ -12,7 +12,10 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import type { ConditionKind, UncoveredAnswer } from "../../api/types";
+import type { ConditionKind, NodeSummary, UncoveredAnswer } from "../../api/types";
+import TimeProfileEditor from "../../panels/TimeProfileEditor";
+import { VariesToggle, profilableValues } from "../../panels/TimeProfileSection";
+import { profileSummary, storedProfiles, varyingOf } from "../../panels/timeProfileModel";
 import { useStore } from "../../state/store";
 import { readSetupContext } from "../../setup/basicSets";
 import GuidedCard from "../GuidedCard";
@@ -32,6 +35,30 @@ let before: "body" | "face" | "edge" | "point" | null = null;
  * this card on a project with no face picked yet did exactly that.
  */
 const NO_FACES: number[] = [];
+/** What a row needs of time profiles: the stored ones (for the editor), which vary, which can. */
+interface RowProfiles {
+  stored: Record<string, unknown>;
+  /** The server's `varies`, with the energy switch. */
+  varies: readonly string[];
+  /** The values the kind varies and uses now (`kind.profiled`); the toggle is offered for these only. */
+  profilable: readonly string[];
+}
+const NO_PROFILES: RowProfiles = { stored: {}, varies: [], profilable: [] };
+
+/** Every boundary's time profiles by id, read from the tree as the rows are. */
+function boundaryProfiles(tree: NodeSummary | null, kinds: readonly ConditionKind[], energy: boolean): Map<string, RowProfiles> {
+  const out = new Map<string, RowProfiles>();
+  const stack: NodeSummary[] = tree ? [tree] : [];
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (node.type === "boundary") {
+      const kind = kinds.find((k) => k.id === node.params.kind);
+      out.set(node.id, { stored: storedProfiles(node.params), varies: varyingOf(node), profilable: profilableValues(node, kind, energy) });
+    }
+    if (node.children) stack.push(...node.children);
+  }
+  return out;
+}
 
 function useFacePicking(): void {
   useEffect(() => {
@@ -163,26 +190,66 @@ function NameBox({ row, action }: { row: BoundaryRow; action: ReturnType<typeof 
   );
 }
 
-/** One boundary of the list: colour, kind, a value to change, and a cross to remove it. */
-function Item({ row, action, energy }: { row: BoundaryRow; action: ReturnType<typeof useAction>; energy: boolean }) {
+/**
+ * One boundary of the list: colour, kind, a value to change, and a cross to remove it. A value that may vary
+ * in time has the "Varies in time" toggle beside it (ADR-0022 addendum 2026-11-24); it opens the shared
+ * profile editor under the row, and a value that varies shows its profile in a few words instead of a number.
+ */
+function Item({ row, action, energy, profiles }: { row: BoundaryRow; action: ReturnType<typeof useAction>; energy: boolean; profiles: RowProfiles }) {
   const editable = row.editable;
+  const { stored } = profiles;
+  const [open, setOpen] = useState<string | null>(null);
+  const editorId = `guided-tp-${row.id}`;
+  // What varies is the server's answer; the toggle is offered only where the server takes a profile.
+  const varies = (name: string) => profiles.varies.includes(name);
+  const toggle = (name: string, word: string) =>
+    profiles.profilable.includes(name) ? (
+      <VariesToggle pressed={varies(name)} expanded={open === name} controls={editorId} name={`${row.name} ${word}`} onClick={() => setOpen(open === name ? null : name)} />
+    ) : null;
+  const temperature = energy && row.temperature !== null;
 
   return (
-    <li className="guided-bnd" data-ws="guided-boundary" data-kind={row.kind} data-temp={energy && row.temperature !== null ? "" : undefined}>
-      <span className="guided-swatch" style={row.color !== "" ? { background: row.color } : undefined} aria-hidden="true" />
-      <NameBox row={row} action={action} />
-      {editable !== null ? (
-        <ValueBox label={`${row.word} ${editable.param}`} unit={editable.unit} value={row.value} fail={action.fail} onCommit={(n) => void action.run(() => setBoundaryValue(row.id, editable.param, n))} />
-      ) : (
-        <span className="muted guided-bnd-value">{row.valueText}</span>
+    <>
+      <li className="guided-bnd" data-ws="guided-boundary" data-kind={row.kind} data-temp={temperature ? "" : undefined} data-varies={profiles.varies.length > 0 || undefined}>
+        <span className="guided-swatch" style={row.color !== "" ? { background: row.color } : undefined} aria-hidden="true" />
+        <NameBox row={row} action={action} />
+        {editable !== null && varies(editable.param) ? (
+          <span className="tp-summary guided-bnd-summary" title={profileSummary(stored[editable.param], editable.param)} data-ws="guided-profile-summary">
+            {profileSummary(stored[editable.param], editable.param)}
+          </span>
+        ) : editable !== null ? (
+          <ValueBox label={`${row.word} ${editable.param}`} unit={editable.unit} value={row.value} fail={action.fail} onCommit={(n) => void action.run(() => setBoundaryValue(row.id, editable.param, n))} />
+        ) : (
+          <span className="muted guided-bnd-value">{row.valueText}</span>
+        )}
+        {editable !== null && toggle(editable.param, editable.param === "velocity" ? "speed" : editable.param)}
+        {temperature &&
+          (varies("temperature") ? (
+            <span className="tp-summary guided-bnd-temp" title={profileSummary(stored.temperature, "temperature")}>
+              {profileSummary(stored.temperature, "temperature")}
+            </span>
+          ) : (
+            <ValueBox className="guided-bnd-temp" label={`${row.word} temperature`} unit="K" value={row.temperature} fail={action.fail} onCommit={(n) => void action.run(() => setBoundaryValue(row.id, "temperature", n))} />
+          ))}
+        {temperature && toggle("temperature", "temperature")}
+        <button type="button" className="guided-x no-drag" aria-label={`Remove ${row.name}`} title="Remove this boundary" disabled={action.busy} onClick={() => void action.run(() => removeBoundary(row.id))}>
+          <X size={13} aria-hidden="true" />
+        </button>
+      </li>
+      {open !== null && (
+        <li id={editorId} className="guided-bnd-editor" data-ws="guided-profile-editor">
+          <TimeProfileEditor
+            key={`${row.id}:${open}`}
+            boundaryId={row.id}
+            boundaryName={row.name}
+            parameter={open}
+            constant={open === "temperature" ? row.temperature : row.value}
+            stored={stored[open] ?? null}
+            onDone={() => setOpen(null)}
+          />
+        </li>
       )}
-      {energy && row.temperature !== null && (
-        <ValueBox className="guided-bnd-temp" label={`${row.word} temperature`} unit="K" value={row.temperature} fail={action.fail} onCommit={(n) => void action.run(() => setBoundaryValue(row.id, "temperature", n))} />
-      )}
-      <button type="button" className="guided-x no-drag" aria-label={`Remove ${row.name}`} title="Remove this boundary" disabled={action.busy} onClick={() => void action.run(() => removeBoundary(row.id))}>
-        <X size={13} aria-hidden="true" />
-      </button>
-    </li>
+    </>
   );
 }
 
@@ -200,6 +267,8 @@ export default function BoundariesCard({ step }: { step: GuidedStep }) {
   const pickedHere = useStore((s) => (fluidId === null ? NO_FACES : (s.picked.faces[fluidId] ?? NO_FACES)));
   const action = useAction();
   const energy = useMemo(() => readSetupContext(tree).energy, [tree]);
+  // Each boundary's time profiles (ADR-0022 addendum 2026-11-24), by boundary id.
+  const profilesById = useMemo(() => boundaryProfiles(tree, kinds, energy), [tree, kinds, energy]);
   const [speed, setSpeed] = useState("0.5");
   const [temperature, setTemperature] = useState("293.15");
   const [pressure, setPressure] = useState("0");
@@ -282,7 +351,7 @@ export default function BoundariesCard({ step }: { step: GuidedStep }) {
       {rows.length > 0 && (
         <ul className="guided-bnds" aria-label="Boundaries so far" data-ws="guided-boundaries">
           {rows.map((row) => (
-            <Item key={row.id} row={row} action={action} energy={energy} />
+            <Item key={row.id} row={row} action={action} energy={energy} profiles={profilesById.get(row.id) ?? NO_PROFILES} />
           ))}
         </ul>
       )}

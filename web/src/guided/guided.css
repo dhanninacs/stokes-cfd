@@ -723,6 +723,22 @@
   border-top: 1px solid var(--panel-border);
   list-style: none;
 }
+/* An open time-profile editor (ADR-0022 addendum 2026-11-24) lets the list grow to show it whole. */
+.guided-bnds:has(.guided-bnd-editor) {
+  max-height: none;
+}
+.guided-bnd-editor {
+  padding: 2px 0 6px;
+}
+/* A varying value's summary takes the value's place and ends in an ellipsis; the full line is its title. */
+.guided-bnd .guided-bnd-summary {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .guided-bnd {
   display: flex;
   align-items: center;
@@ -869,4 +885,43 @@
   color: var(--text-muted);
   text-align: left;
   padding-left: 12px;
+}
+
+/* The Run card's steady or transient switch and a transient run's times (ADR-0022 addendum 2026-11-24). */
+.guided-run-time {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* The note that a value varies on a steady run: a warning, so it carries the amber 7 px dot. */
+.guided-run-time-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.guided-run-time-warn .dot {
+  flex: none;
+}
+.guided-run-time-warn .note-line {
+  margin: 0;
+}
+/* A time the server or the box refused, under its field, in the danger colour (DESIGN.md: errors inline). */
+.guided-run-time-error {
+  margin-top: -2px;
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+/* How many frames the run writes, and a finer interval when it writes too few. */
+.guided-run-time-frames {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.guided-run-time-frames .note-line {
+  margin: 0;
 }

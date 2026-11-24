@@ -32,6 +32,10 @@ import {
   formatValue,
   functionNameProblem,
   histogramChart,
+  historyCaption,
+  historyFrom,
+  robustRange,
+  transientStats,
   monitorLabel,
   monitorSeries,
   reportCsv,
@@ -47,6 +51,7 @@ import {
   type SurfacesReply,
 } from "./analyseModel";
 import { historyAxis } from "./timeModel";
+import { followingReport, historyNotes, varyingInTree } from "../panels/timeProfileModel";
 import { useVariables } from "../panels/variablesControl";
 import { prettyUnits } from "../panels/variablesModel";
 import "./linePlot.css";
@@ -163,8 +168,18 @@ export default function AnalyseBlock() {
   const [axis, setAxis] = useState("radius");
   const [hist, setHist] = useState<HistogramReply | null>(null);
   const [bins, setBins] = useState("20");
+  // Values that vary in time (ADR-0022 addendum 2026-11-24): the history says which report follows each.
+  const treeNow = useStore((s) => s.tree);
+  const varying = useMemo(() => varyingInTree(treeNow), [treeNow]);
   const [history, setHistory] = useState<{ name: string; label: string; units: string; x: number[]; y: number[] }[] | null>(null);
   const [historyPick, setHistoryPick] = useState(0);
+  // The history's view (ADR-0022 addendum 2026-11-24): the robust range by default or the full one, and where it starts.
+  const [historyFull, setHistoryFull] = useState(false);
+  const [fromText, setFromText] = useState("");
+  const [fromDraft, setFromDraft] = useState<string | null>(null);
+  const [fromError, setFromError] = useState("");
+  // The shortest period of a profile, for a transient history's last-period mean (the server's `solve.write_suggestion`).
+  const [period, setPeriod] = useState<number | null>(null);
   const [fnName, setFnName] = useState("");
   const [fnText, setFnText] = useState("");
   const [fnNote, setFnNote] = useState("");
@@ -226,15 +241,25 @@ export default function AnalyseBlock() {
     if (tab === "histogram") void go(async () => setHist(await ask<HistogramReply>("results.histogram", { ...common(chosen), bins: Number(bins) })));
     if (tab === "history")
       void go(async () => {
-        const listed = await ask<{ monitors: { name: string }[] }>("run.monitors", { run });
+        const listed = await ask<{ monitors: { name: string; sign?: number; opening?: string }[] }>("run.monitors", { run });
         const tables = await Promise.all(
           listed.monitors.map(async (m) => {
             const table = await ask<{ columns: string[]; values: Record<string, number[]> }>("run.monitor", { run, name: m.name });
-            const series = monitorSeries(table);
-            return series === null ? null : { name: m.name, ...monitorLabel(m.name), x: series.x, y: series.y };
+            // The server's sign turns an inlet's flow rate (the solver's: out of the domain) into the flow in.
+            const series = monitorSeries(table, m.sign === -1 ? -1 : 1);
+            return series === null ? null : { name: m.name, ...monitorLabel(m.name, m.opening ?? ""), x: series.x, y: series.y };
           }),
         );
-        setHistory(tables.filter((t): t is NonNullable<typeof t> => t !== null));
+        try {
+          const said = await ask<{ period: number | null }>("solve.write_suggestion", {});
+          setPeriod(typeof said.period === "number" && said.period > 0 ? said.period : null);
+        } catch {
+          setPeriod(null);
+        }
+        const found = tables.filter((t): t is NonNullable<typeof t> => t !== null);
+        setHistory(found);
+        // A value that varies in time opens the history on the report that follows it (ADR-0022 addendum 16).
+        if (varying.length > 0) setHistoryPick(followingReport(found.map((t) => t.name), varying));
       });
   };
 
@@ -469,23 +494,110 @@ export default function AnalyseBlock() {
           {history !== null && history.length > 0 && (() => {
             const pick = Math.min(historyPick, history.length - 1);
             const h = history[pick]!;
-            const chart = xyChart([{ x: h.x, y: h.y }], WIDTH, HEIGHT, "", "line");
-            const end = settled(h.y);
+            const timed = historyAxis(h.x) !== "iteration";
+            const fromRead = historyFrom(fromText, h.x);
+            const from = "from" in fromRead ? fromRead.from : undefined;
+            // A robust range by default: the start-up spike is drawn at the edge and marked, not left to flatten the rest.
+            const robust = robustRange(h.x, h.y, from);
+            const chart = xyChart([{ x: h.x, y: h.y }], WIDTH, HEIGHT, "", "line", { ...(robust !== null && !historyFull ? { yRange: robust.range } : {}), ...(from !== undefined ? { xFrom: from } : {}) });
+            const end = timed ? null : settled(from === undefined ? h.y : h.y.filter((_, i) => h.x[i]! >= from));
+            // The numbers under the plot describe what it draws: past the start-up while the robust range leaves it out.
+            const skipStart = from === undefined && robust !== null && !historyFull;
+            const stats = timed ? transientStats(h.x, h.y, skipStart ? robust.after : from, period) : null;
+            const unitText = h.units !== "" ? ` ${h.units}` : "";
+            const commitFrom = () => {
+              const text = fromDraft;
+              if (text === null) return;
+              const read = historyFrom(text, h.x);
+              if ("error" in read) {
+                setFromError(read.error);
+                return;
+              }
+              setFromError("");
+              setFromText(text.trim());
+              setFromDraft(null);
+            };
             return (
               <>
                 <div className="looks-row">
                   <span className="looks-label">Report</span>
                   <Select label="Report" value={String(pick)} options={history.map((m, i) => ({ value: String(i), label: m.label }))} onChange={(v) => setHistoryPick(Number(v))} ws="analyse-history-pick" />
                 </div>
+                <div className="looks-row analyse-history-view">
+                  <span className="looks-label">Range</span>
+                  <Tooltip label={robust === null ? "Every value is in view" : "Robust leaves out the start-up spike and marks it at the edge; Full draws every value"} side="top" describe={false}>
+                    <div>
+                      <Chips<string>
+                        label="History range"
+                        value={historyFull || robust === null ? "full" : "robust"}
+                        choices={[
+                          { value: "robust", label: "Robust", ...(robust === null ? { disabled: "Every value is in view" } : {}) },
+                          { value: "full", label: "Full" },
+                        ]}
+                        onChange={(v) => setHistoryFull(v === "full")}
+                      />
+                    </div>
+                  </Tooltip>
+                  <Tooltip label={`Leave out the start: draw the history from this ${timed ? "time (s)" : "iteration"} on; empty for the whole run`} side="top" describe={false}>
+                    <label className="analyse-from">
+                      <span className="muted">from {timed ? "t =" : "it"}</span>
+                      <input
+                        className="field mono"
+                        inputMode="decimal"
+                        aria-label={`Draw the history from this ${timed ? "time" : "iteration"}`}
+                        aria-invalid={fromError !== "" || undefined}
+                        placeholder="start"
+                        value={fromDraft ?? fromText}
+                        onChange={(e) => {
+                          setFromDraft(e.target.value);
+                          setFromError("");
+                        }}
+                        onBlur={commitFrom}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitFrom();
+                          if (e.key === "Escape") {
+                            setFromDraft(null);
+                            setFromError("");
+                          }
+                        }}
+                        data-ws="analyse-history-from"
+                      />
+                    </label>
+                  </Tooltip>
+                </div>
+                {fromError !== "" && (
+                  <p role="alert" className="guided-error" data-ws="analyse-history-from-error">
+                    {fromError}
+                  </p>
+                )}
                 <div className="line-plot" data-ws="analyse-history">
                   <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={h.label}>
+                    <defs>
+                      <clipPath id="analyse-history-clip">
+                        <rect x={chart.x0} y={chart.y0 - 1} width={chart.x1 - chart.x0} height={chart.y1 - chart.y0 + 2} />
+                      </clipPath>
+                    </defs>
                     <Axes chart={chart} xLabel={historyAxis(h.x)} />
-                    <path className="line-curve" d={chart.paths[0]} style={{ stroke: colours[0] }} />
+                    <path className="line-curve" d={chart.paths[0]} style={{ stroke: colours[0] }} clipPath="url(#analyse-history-clip)" />
+                    {chart.clipped.map((c, i) => (
+                      <path key={i} className="analyse-clip-mark" d={c.edge === "top" ? `M${c.x - 4} ${c.y + 6}L${c.x} ${c.y}L${c.x + 4} ${c.y + 6}Z` : `M${c.x - 4} ${c.y - 6}L${c.x} ${c.y}L${c.x + 4} ${c.y - 6}Z`} data-ws="analyse-history-clipped">
+                        <title>{`Off the range: ${formatValue(c.value)}${unitText}`}</title>
+                      </path>
+                    ))}
                   </svg>
-                  <div className="line-title muted">
-                    {h.label}
-                    {h.units !== "" ? ` (${h.units})` : ""}
-                    {end !== null && `: ${formatValue(end.last)}${end.change === null ? "" : `, ${end.change < 0.1 ? "settled" : `moved ${end.change.toFixed(1)} % over the last tenth`}`}`}
+                  {chart.clipped.length > 0 && (
+                    <Note tip="The robust range leaves out the start-up of the run; Full draws every value" data-ws="analyse-history-clip-note">
+                      {`Start-up to ${formatValue(chart.clipped.reduce((a, c) => (Math.abs(c.value) > Math.abs(a) ? c.value : a), chart.clipped[0]!.value))}${unitText} off the range`}
+                    </Note>
+                  )}
+                  {historyNotes(history.map((m) => m.name), varying).map((note) => (
+                    <Note key={note.text} tip={note.tip} data-ws="analyse-history-varies">
+                      {note.text}
+                    </Note>
+                  ))}
+                  {/* Wrapped, not cut: a transient caption's max and period mean are past the width of the card. */}
+                  <div className="line-title line-caption muted" data-ws="analyse-history-caption">
+                    {historyCaption(h.label, h.units, end, stats, skipStart)}
                   </div>
                 </div>
               </>

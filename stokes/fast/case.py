@@ -60,6 +60,9 @@ class FastCase:
     ``field_text`` and ``nu``."""
     thermal: bool = False
     """True when the temperature is solved."""
+    time_means: tuple[str, ...] = ()
+    """The boundaries whose values vary in time (ADR-0022 addendum 2026-11-24): the preview is
+    steady and holds each at its time-mean, which the panel says."""
 
     @property
     def all_zones(self) -> tuple[Zone, ...]:

@@ -34,6 +34,14 @@ export const TURBULENCE = [
   { value: "auto", label: "Automatic" },
   { value: "shear_improved", label: "Shear-improved (laminar-safe)" },
   { value: "smagorinsky", label: "Smagorinsky (smoothest)" },
+  { value: "wale", label: "WALE (laminar-safe)" },
+  { value: "vreman", label: "Vreman (laminar-safe)" },
+] as const;
+
+/** How a preview keeps its numbers (`fast.start`'s `storage`): 16 bits halve the memory of a fine lattice. */
+export const STORAGES = [
+  { value: "f32", label: "32-bit" },
+  { value: "f16", label: "16-bit (half the memory)" },
 ] as const;
 
 /** One fluid body's figures, as the Results stage's Streams table has them for a solved case. */
@@ -82,7 +90,10 @@ export interface FastFrame {
   /** Outflow less inflow, as a share of the inflow. */
   imbalance: number;
   guard: number;
+  /** The frame is not valid: the lattice went NaN or shows a sign of a runaway (`stokes.fast.health`). */
   unstable: boolean;
+  /** Which sign: "not_finite", "density", "guard", "imbalance", or "". */
+  instability: string;
   steady: boolean;
   restrictive: boolean;
   geometryVersion: number;
@@ -97,6 +108,13 @@ export interface FastFrame {
   holding: boolean;
   /** The flow is steady and the temperature takes several steps to each of its. */
   catchingUp: boolean;
+  /** The run is on the coarse lattice of a warm start. */
+  warming: boolean;
+  /** The fidelity of the lattice this one took its flow from, until it is steady; null from rest. */
+  warmedFrom: number | null;
+  /** The fidelity of the grid the frame was sampled on and its fluid cells; null from an older server, or before they are counted. */
+  fidelity: number | null;
+  fluidCells: number | null;
 }
 
 /** The lattice's box along one axis, for the plane's position: where it starts, its cell size and count. */
@@ -126,11 +144,18 @@ export interface FastStatus {
   zones: { name: string; kind: string }[];
   /** The temperature is solved. */
   thermal: boolean;
+  /** Boundaries whose values vary in time, which the steady preview holds at their time-mean. */
+  timeMeans: string[];
   /** Each fluid's cells across its passages (its hydraulic diameter in cells). */
   resolution: { name: string; cellsAcross: number }[];
   /** The closure asked for (`auto` or one of them) and the one in use. */
   turbulence: string;
   closure: string;
+  /** How the populations are kept (`f32` or `f16`), and whether a fine lattice starts from a coarser one. */
+  storage: string;
+  warmStart: boolean;
+  /** A coarse lattice is running first; the asked-for one starts from its solution. */
+  warming: boolean;
   /** The lattice's box per axis (x, y, z), or null before there is a grid. */
   spans: FastSpan[] | null;
   adapter: string;
@@ -165,6 +190,7 @@ export function readFrame(data: unknown): FastFrame | null {
     imbalance: num(d.imbalance),
     guard: num(d.guard),
     unstable: d.unstable === true,
+    instability: typeof d.instability === "string" ? d.instability : "",
     steady: d.steady === true,
     restrictive: d.restrictive === true,
     geometryVersion: num(d.geometry_version),
@@ -175,6 +201,10 @@ export function readFrame(data: unknown): FastFrame | null {
     heatBalance: orNull(d.heat_balance),
     holding: d.holding === true,
     catchingUp: d.catching_up === true,
+    warming: d.warming === true,
+    warmedFrom: orNull(d.warmed_from),
+    fidelity: num(d.fidelity, 0) || null,
+    fluidCells: num(d.fluid_cells, 0) || null,
   };
 }
 
@@ -208,11 +238,15 @@ export function readStatus(data: unknown): FastStatus {
     automaticPlane: d.automatic_plane !== false,
     zones: Array.isArray(d.zones) ? d.zones.filter((z): z is { name: string; kind: string } => z !== null && typeof z === "object" && typeof (z as { name?: unknown }).name === "string").map((z) => ({ name: z.name, kind: String(z.kind) })) : [],
     thermal: d.thermal === true,
+    timeMeans: Array.isArray(d.time_means) ? d.time_means.filter((n): n is string => typeof n === "string") : [],
     resolution: Array.isArray(d.resolution)
       ? d.resolution.filter((r): r is { name: string; cells_across: number } => r !== null && typeof r === "object" && typeof (r as { cells_across?: unknown }).cells_across === "number").map((r) => ({ name: String(r.name), cellsAcross: r.cells_across }))
       : [],
     turbulence: typeof d.turbulence === "string" ? d.turbulence : "auto",
     closure: typeof d.closure === "string" ? d.closure : "",
+    storage: d.storage === "f16" ? "f16" : "f32",
+    warmStart: d.warm_start !== false,
+    warming: d.warming === true,
     spans: readSpans(grid),
     adapter: adapter !== null && typeof adapter.name === "string" ? adapter.name : "",
     error: error !== null && typeof error.message === "string" ? error.message : "",
@@ -258,8 +292,14 @@ function percentText(share: number): string {
 export function statsLines(status: FastStatus): string[] {
   const frame = status.frame;
   const lines: string[] = [];
-  const cells = status.fluidCells ?? status.cells;
-  const head = [status.fidelity !== null ? `Fidelity ${status.fidelity}` : "", cells !== null ? cellsText(cells) : "", status.les ? "turbulent preview (LES)" : "laminar"];
+  // The fluid's cells, once the lattice has counted them: the grid's own count has the solid and the
+  // padding cells too, and showing it meanwhile made one case read 130 k cells, then 97 k.
+  // The header follows the frame: the status is asked for once a second, and for that second after a
+  // new grid it is the old grid's (a frame of the new grid has no count until its cells are counted).
+  const fidelity = frame?.fidelity ?? status.fidelity;
+  const stale = frame !== null && frame.fidelity !== null && frame.fidelity !== status.fidelity;
+  const cells = frame !== null && frame.fidelity !== null ? frame.fluidCells ?? (stale ? null : status.fluidCells) : status.fluidCells;
+  const head = [fidelity !== null ? `Fidelity ${fidelity}` : "", cells !== null ? cellsText(cells) : "", status.les ? "turbulent preview (LES)" : "laminar", status.storage === "f16" ? "16-bit" : ""];
   lines.push(head.filter((s) => s !== "").join(" · "));
   if (frame === null || frame.step === 0) {
     lines.push("Building the lattice…");
@@ -269,7 +309,8 @@ export function statsLines(status: FastStatus): string[] {
   lines.push(`Pressure drop ${pressureText(frame.dpPa)}`);
   lines.push(`Flow in ${flowText(frame.flowIn)} · inlet ${Number(frame.inletSpeed.toPrecision(3))} m/s`);
   lines.push(`Flow out ${flowText(frame.flowOut)} (${percentText(frame.imbalance)})`);
-  lines.push(frame.holding ? "Steady · holding (edit to resume)" : frame.steady ? "Steady" : frame.catchingUp ? "Flow steady · temperature settling…" : "Settling…");
+  const warming = status.warming || frame.warming;
+  lines.push(warming ? `Warm start · settling a coarse lattice first${status.requested !== null ? ` (then fidelity ${status.requested})` : ""}…` : frame.holding ? "Steady · holding (edit to resume)" : frame.steady ? "Steady" : frame.catchingUp ? "Flow steady · temperature settling…" : frame.warmedFrom !== null ? `Warm start from fidelity ${frame.warmedFrom} · settling…` : "Settling…");
   return lines;
 }
 
@@ -314,6 +355,13 @@ export function gridNotes(status: FastStatus): { text: string; tip: string }[] {
       tip: `The flow is too fast for the cells of fidelity ${status.requested}, so the preview runs on finer ones. Lower the inlet speed to use the fidelity you chose.`,
     });
   }
+  if (status.timeMeans.length > 0) {
+    // ADR-0022 addendum 2026-11-24: the preview is steady, so a value that varies in time is held at its mean.
+    notes.push({
+      text: "Time-varying values at their mean",
+      tip: `The preview is steady: ${status.timeMeans.join(", ")} ${status.timeMeans.length === 1 ? "varies" : "vary"} in time and ${status.timeMeans.length === 1 ? "is" : "are"} held at the time-mean. A transient run follows the profile.`,
+    });
+  }
   if (status.coarsened) {
     notes.push({
       text: "Coarser cells than asked",
@@ -339,10 +387,18 @@ export function resolutionWarning(status: FastStatus): string {
 /** The most the outflow may differ from the inflow, once steady, before the panel says so. */
 export const IMBALANCE_LIMIT = 0.05;
 
+/** What each sign of a runaway says, after "Unstable". */
+const INSTABILITY: Record<string, string> = {
+  not_finite: " (the lattice went NaN)",
+  density: " (the pressure left the lattice's range)",
+  guard: " (the stability guard is holding much of the flow)",
+  imbalance: " (the flow out and the flow in drifted apart)",
+};
+
 /** What the user should know about the last frame, or "". */
 export function frameWarning(frame: FastFrame | null): string {
   if (frame === null) return "";
-  if (frame.unstable) return "The lattice became unstable and was restarted. Raise the fidelity or lower the inlet speed.";
+  if (frame.unstable) return `Unstable${INSTABILITY[frame.instability] ?? ""}: these numbers are not valid. The preview restarts slower, then stops; raise the fidelity or lower the inlet speed.`;
   if (frame.guard > 0) return "The stability guard is holding parts of the flow: the numbers are not reliable. Raise the fidelity.";
   if (frame.steady && Math.abs(frame.imbalance) > IMBALANCE_LIMIT) return "The flow out differs from the flow in: the cells are too coarse for an opening. Raise the fidelity.";
   if (frame.restrictive) return "A restrictive core: the lattice runs slower to stay accurate.";

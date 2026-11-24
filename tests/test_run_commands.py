@@ -187,7 +187,7 @@ def a_mesh(session: Session) -> None:
 # ---------------------------------------------------------------- the commands exist
 
 
-def test_all_eighteen_run_commands_are_registered() -> None:
+def test_all_twenty_run_commands_are_registered() -> None:
     """**The exact set**, so a new `run.*` command cannot land unregistered or unnoticed.
 
     Eleven since `run.report` added the results report for item 5: one self-contained HTML file
@@ -197,6 +197,8 @@ def test_all_eighteen_run_commands_are_registered() -> None:
     `run.monitors` and `run.monitor` (T-311) offer the tables a run's function objects wrote.
     Sixteen since `run.vectors` samples the velocity through the solved volume (ADR-0030).
     Eighteen since `run.stop` (Stop writes the iteration it is on) and `run.resume` (continue it).
+    Twenty since `run.monitors_at` (a transient run's openings at the time shown) and
+    `run.time_ranges` (each field's range over every written time).
     **The count in the name is deliberate**: it is the thing a reader has to change when they add
     one, which is what makes this a second look rather than an edit to a set.
     """
@@ -222,6 +224,8 @@ def test_all_eighteen_run_commands_are_registered() -> None:
         "run.clear",
         "run.stop",
         "run.resume",
+        "run.monitors_at",
+        "run.time_ranges",
     }
 
 

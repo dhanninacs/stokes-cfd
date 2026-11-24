@@ -300,12 +300,13 @@ def snapshot_for(session: Session, settings: Node, *, project: Project | None = 
     # stand-in keeps working on the inline path.
     extra: dict[str, Any] = {} if project is None else {"project": project}
     if mesher == "snappy":
-        from stokes.mesh.conjugate import build_conjugate_snapshot, is_conjugate
+        from stokes.mesh.conjugate import build_conjugate_snapshot, meshes_regions
 
         tree = project if project is not None else session.require_project()
         # **More than one region with a body is a multi-region mesh** (ADR-0042). The other
-        # meshers still mesh the domain part alone.
-        if str(_params(settings, registry)["domain"]) == "part" and is_conjugate(tree):
+        # meshers still mesh the domain part alone. The rule is `meshes_regions`, which the
+        # set-up check and the time profiles ask too.
+        if meshes_regions(mesher, str(_params(settings, registry)["domain"]), tree):
             return build_conjugate_snapshot(session, settings, **extra)
         return build_snappy_snapshot(session, settings, **extra)
     if mesher in CFMESH_MESHERS:

@@ -9,7 +9,7 @@
  *
  * Import rule: no React, no store, no DOM.
  */
-import type { ResidualSeries } from "./residualSeries";
+import { seriesTimes, type ResidualSeries } from "./residualSeries";
 
 export interface ChartPad {
   left: number;
@@ -50,6 +50,16 @@ export interface ChartModel {
   lines: ChartLine[];
   /** The convergence target's y in px, when it is set; the label reads "target 1e-4". */
   target: { y: number; label: string } | null;
+  /** What the x axis is: "iteration", or "time (s)" for a transient run whose blocks carry their time. */
+  xLabel: string;
+}
+
+/** A time on the x axis: four significant digits, no trailing zeros. */
+function timeTick(value: number): string {
+  if (value === 0) return "0";
+  const a = Math.abs(value);
+  if (a < 1e-3 || a >= 1e5) return value.toExponential(1).replace(/\.0e/, "e").replace("e+", "e");
+  return String(Number(value.toPrecision(4)));
 }
 
 /** 1, 1e-1, 1e-2 ... the one label format of the log axis. */
@@ -142,8 +152,20 @@ function path(points: readonly (Point | null)[]): { d: string; dots: Point[] } {
 /**
  * The chart for a size. `hidden` names the fields the reader switched off in the legend: they are not
  * drawn and do not stretch the axis. `target` is `residual_target`; it is on the axis whatever the data.
+ *
+ * `time` draws a transient run against its physical time (ADR-0022 addendum 2026-11-24) when the blocks carry
+ * one: each time step's residuals are the solver's per-step answer, so the step's time is what a reader places
+ * them by. A block without a time is then a gap.
  */
-export function buildChart(series: ResidualSeries, hidden: ReadonlySet<string>, target: number | null, width: number, height: number, pad: ChartPad = CHART_PAD): ChartModel {
+export function buildChart(
+  series: ResidualSeries,
+  hidden: ReadonlySet<string>,
+  target: number | null,
+  width: number,
+  height: number,
+  pad: ChartPad = CHART_PAD,
+  time = false,
+): ChartModel {
   const x0 = pad.left;
   const y0 = pad.top;
   const x1 = Math.max(x0 + 1, width - pad.right);
@@ -155,11 +177,21 @@ export function buildChart(series: ResidualSeries, hidden: ReadonlySet<string>, 
   if (target !== null) values.push(target);
   const { eMin, eMax } = decadeRange(values);
 
-  const iterations = series.iterations;
-  const first = iterations.length > 0 ? iterations[0] : 0;
-  const last = iterations.length > 0 ? iterations[iterations.length - 1] : 1;
+  const times = time ? seriesTimes(series) : null;
+  const iterations = times ?? series.iterations;
+  let first = Infinity;
+  let last = -Infinity;
+  for (const v of iterations) {
+    if (!Number.isFinite(v)) continue;
+    first = Math.min(first, v);
+    last = Math.max(last, v);
+  }
+  if (first === Infinity) {
+    first = 0;
+    last = 1;
+  }
   const xMin = first;
-  const xMax = last > first ? last : first + 1;
+  const xMax = last > first ? last : first + (times !== null ? Math.max(Math.abs(first) * 1e-3, 1e-9) : 1);
   const sx = (v: number) => x0 + ((v - xMin) / (xMax - xMin)) * (x1 - x0);
   const sy = (v: number) => y1 - ((Math.log10(v) - eMin) / (eMax - eMin)) * (y1 - y0);
 
@@ -167,7 +199,7 @@ export function buildChart(series: ResidualSeries, hidden: ReadonlySet<string>, 
     const ys = f.values.map((v) => (v > 0 && Number.isFinite(v) ? v : Number.NaN));
     const buckets = Math.max(1, Math.floor((x1 - x0) * 2));
     const picks = iterations.length > buckets * 2 ? decimate(iterations, ys, buckets) : iterations.map((_, i) => ({ i }));
-    const points = picks.map(({ i }) => (Number.isFinite(ys[i]) ? { x: sx(iterations[i]), y: sy(ys[i]) } : null));
+    const points = picks.map(({ i }) => (Number.isFinite(ys[i]) && Number.isFinite(iterations[i]) ? { x: sx(iterations[i]), y: sy(ys[i]) } : null));
     const { d, dots } = path(points);
     return { name: f.name, index, d, dots };
   });
@@ -177,7 +209,19 @@ export function buildChart(series: ResidualSeries, hidden: ReadonlySet<string>, 
   const yTicks: Tick[] = [];
   for (let e = eMax; e >= eMin; e--) if ((eMax - e) % step === 0) yTicks.push({ value: 10 ** e, at: y1 - ((e - eMin) / (eMax - eMin)) * (y1 - y0), label: decadeLabel(e) });
 
-  const xTicks = niceTicks(xMin, xMax, Math.max(2, Math.floor((x1 - x0) / 70)), true).map((value) => ({ value, at: sx(value), label: String(value) }));
+  const xTicks = niceTicks(xMin, xMax, Math.max(2, Math.floor((x1 - x0) / 70)), times === null).map((value) => ({ value, at: sx(value), label: times === null ? String(value) : timeTick(value) }));
 
-  return { x0, y0, x1, y1, eMin, eMax, xTicks, yTicks, lines, target: target !== null ? { y: sy(target), label: `target ${targetLabel(target)}` } : null };
+  return {
+    x0,
+    y0,
+    x1,
+    y1,
+    eMin,
+    eMax,
+    xTicks,
+    yTicks,
+    lines,
+    target: target !== null ? { y: sy(target), label: `target ${targetLabel(target)}` } : null,
+    xLabel: times === null ? "iteration" : "time (s)",
+  };
 }

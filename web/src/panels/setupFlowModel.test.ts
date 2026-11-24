@@ -114,6 +114,8 @@ describe("a finding's Fix", () => {
     expect(findingFix({ fix: { action: "condition.edit", node: "b1" } })).toBeNull();
     expect(findingFix({ fix: { action: "material.assign" } })).toBeNull();
     expect(findingFix({ fix: { command: "" } })).toBeNull();
+    // setup.needs_physics comes with `fix: null`; this blanked the Conditions panel.
+    expect(findingFix({ fix: null })).toBeNull();
   });
 });
 

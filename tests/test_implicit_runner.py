@@ -141,6 +141,30 @@ def test_a_second_run_comes_from_the_cache(reference: Path, tmp_path: Path) -> N
     assert len(list(tmp_path.glob("*.mesh"))) == 1
 
 
+def test_the_same_request_meshed_at_once_by_two_runs_both_finish(
+    reference: Path, tmp_path: Path
+) -> None:
+    """Each run has its own work folder: a shared one was removed under the other run."""
+    request = _request(F.sphere(3.0, (0.0, 0.0, 0.0)), 0.2)
+    results: list[runner.MeshOutcome] = []
+    errors: list[BaseException] = []
+
+    def one() -> None:
+        try:
+            results.append(runner.mesh(request, tmp_path))
+        except BaseException as exc:  # collected for the assertion below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=one) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == [] and len(results) == 4
+    assert len(list(tmp_path.glob("*.mesh"))) == 1
+    assert [p for p in tmp_path.iterdir() if p.is_dir()] == []
+
+
 def test_the_cache_is_pruned_least_recently_used_first(tmp_path: Path) -> None:
     import os
     import time

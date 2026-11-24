@@ -49,6 +49,9 @@ from stokes.errors import StokesError
 from stokes.geometry.model import BOUNDARY_TYPE, REGIONS_PATH, TAG_TYPE, TAGS_PATH
 from stokes.model import QuantityValue
 from stokes.physics.conditions.catalogue import BY_ID, ConditionSpec, check_rule
+from stokes.physics.conditions.profile_checks import CODES as PROFILE_CODES
+from stokes.physics.conditions.profile_checks import profile_findings
+from stokes.physics.conditions.profiles import varying_in
 
 if TYPE_CHECKING:
     from stokes.geometry.selection import Member
@@ -92,6 +95,9 @@ CODES: tuple[str, ...] = (
     # **Appended with the engine-aware kinds**: a kind the solver in `/solver/settings` cannot
     # write is an error here, before `solve.unsupported_kind` refuses it at run time.
     "setup.kind_unsupported",
+    # **Appended with values that vary in time** (ADR-0022 addendum 2026-11-24): see
+    # `profile_checks`.
+    *PROFILE_CODES,
 )
 """The codes of ADR-0022 decision 5.3 (sixteen), plus the ones added since.
 
@@ -570,10 +576,14 @@ def _is_default_temperature(node: Node) -> bool:
 
 def _temperatures_chosen(project: Any) -> bool:
     """Whether any boundary holds a temperature (an inflow or a backflow one) other than the
-    catalogue default."""
+    catalogue default, or has a temperature that varies in time and is in use: the constant is
+    kept for when the profile goes (ADR-0022 16.5) and still reads 300 K, but the run follows the
+    profile, which was chosen."""
     for node in project.root.walk():
         if node.type != "boundary":
             continue
+        if "temperature" in varying_in(project, node):
+            return True
         for name in ("temperature", "backflow_temperature"):
             value = node.params.get(name)
             found = getattr(value, "value", value)
@@ -697,6 +707,7 @@ def _boundary(report: _Report, node: Node, stale: Collection[str]) -> None:
     _partner(report, project, node, spec)
     _physics(report, node, spec)
     _engine_kind(report, node, spec)
+    profile_findings(report, node)
 
 
 def _overlap(report: _Report, boundaries: Sequence[Node]) -> None:

@@ -44,18 +44,31 @@ class FastService:
     # ------------------------------------------------------------------ commands
 
     def start(
-        self, fidelity: int, axis: int | None, offset: float | None, turbulence: str | None = None
+        self,
+        fidelity: int,
+        axis: int | None,
+        offset: float | None,
+        turbulence: str | None = None,
+        warm_start: bool = True,
+        storage: str = "f32",
     ) -> dict[str, Any]:  # Any: JSON
         from stokes.api.fast_inputs import case_from_session
+        from stokes.fast.errors import FastInvalid
         from stokes.fast.runner import FastRunner
+        from stokes.fast.wgsl import STORAGES
 
+        if storage not in STORAGES:
+            raise FastInvalid(
+                f"the storage is one of {list(STORAGES)}; got {storage!r}",
+                details={"storage": storage},
+            )
         case, density = case_from_session(self._session)
         self.stop()
         runner = FastRunner(self._session.emit, density=density)
         runner.configure(fidelity=fidelity, axis=axis, offset=offset, turbulence=turbulence)
         with self._lock:
             self._runner = runner
-        runner.start(case)
+        runner.start(case, warm_start=warm_start, storage=storage)
         return {
             "started": True,
             "fluid": case.label,

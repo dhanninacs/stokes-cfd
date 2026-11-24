@@ -1,5 +1,5 @@
 /**
- * Transient results on the Results card: a Time row with a slider over the times the run wrote, a step back and
+ * Transient results on the Guided Results card and the Full mode Results panel: a Time row with a slider over the times the run wrote, a step back and
  * on, and Play (Fluent's solution animation playback, Discovery's time slider). Shown only when the run wrote
  * fields at more than one time.
  *
@@ -14,6 +14,8 @@ import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { Button } from "../components/ui";
 import { Tooltip } from "../components/Tooltip";
 import { loadResults } from "../panels/resultsControl";
+import { setRangeMode, rangeModeOf } from "../panels/legendModel";
+import { setTimeScope, setView, spansAllTimes } from "../panels/fieldsModel";
 import { useStore } from "../state/store";
 import { Note } from "./controls";
 import "./analyse.css";
@@ -22,7 +24,25 @@ import { looksSteady, nextFrame, stepTime, timeIndex, timeText, writtenTimes } f
 /** How long a frame stays on screen once it has arrived, before Play asks for the next. */
 const FRAME_MS = 700;
 
-export default function TimeBlock() {
+/**
+ * Play draws every frame on ONE colour range (ADR-0022 addendum 2026-11-24): an Auto range over the time on screen
+ * is switched to the range over all times when the server has it, else fixed at the range on screen (Locked). A
+ * fixed range, or one over all times, is left as it is. Returns the words for what changed, or "".
+ */
+function fixRangeForPlay(): string {
+  const { results } = useStore.getState();
+  const view = results.view;
+  if (rangeModeOf(view) !== "auto" || ((view.timeScope ?? "all") === "all" && spansAllTimes(view, results.data, view.field))) return "";
+  if (spansAllTimes({ timeScope: "all" }, results.data, view.field)) {
+    useStore.setState((s) => ({ results: setView(s.results, setTimeScope(s.results.view, "all")) }));
+    return "Range over all times while playing";
+  }
+  useStore.setState((s) => ({ results: setView(s.results, setRangeMode(s.results.view, s.results.data, "locked")) }));
+  return "Range locked while playing";
+}
+
+/** `ws`: the prefix of the controls' `data-ws` names (`guided-time` on the card, `results-time` in the panel). */
+export default function TimeBlock({ ws = "guided-time" }: { ws?: string } = {}) {
   const client = useStore((s) => s.client);
   const run = useStore((s) => s.results.data?.run ?? null);
   const shown = useStore((s) => s.results.data?.time ?? 0);
@@ -33,6 +53,7 @@ export default function TimeBlock() {
   const [playing, setPlaying] = useState(false);
   const [loop, setLoop] = useState(false);
   const [error, setError] = useState("");
+  const [fixedNote, setFixedNote] = useState("");
   const pendingRef = useRef<number | null>(null);
   pendingRef.current = pending;
 
@@ -81,7 +102,7 @@ export default function TimeBlock() {
   const on = stepTime(times, shown, 1);
 
   return (
-    <div className="analyse-time" data-ws="guided-time">
+    <div className="analyse-time" data-ws={ws}>
       <Tooltip label={`The run wrote its fields at ${times.length} times; drag to show another`} side="top" describe={false}>
         <div className="looks-row">
           <span className="looks-label">Time</span>
@@ -98,35 +119,44 @@ export default function TimeBlock() {
               setPlaying(false);
               show(times[Number(e.target.value)]!);
             }}
-            data-ws="guided-time-slider"
+            data-ws={`${ws}-slider`}
           />
           <span className="looks-value mono">{timeText(times[at]!, steady)}</span>
         </div>
       </Tooltip>
       <div className="guided-actions analyse-time-actions">
         <Tooltip label="The time before" side="top">
-          <Button aria-label="Previous time" aria-disabled={back === null || playing || undefined} onClick={() => back !== null && !playing && show(back)} data-ws="guided-time-back">
+          <Button aria-label="Previous time" aria-disabled={back === null || playing || undefined} onClick={() => back !== null && !playing && show(back)} data-ws={`${ws}-back`}>
             <ChevronLeft size={14} aria-hidden="true" />
           </Button>
         </Tooltip>
-        <Tooltip label={playing ? "Stop the playback" : "Play the written times in order, each as soon as it has been read"} side="top">
-          <Button active={playing} aria-pressed={playing} onClick={() => setPlaying(!playing)} data-ws="guided-time-play">
+        <Tooltip label={playing ? "Stop the playback" : "Play the written times in order, each as soon as it has been read, on one colour range"} side="top">
+          <Button
+            active={playing}
+            aria-pressed={playing}
+            onClick={() => {
+              if (!playing) setFixedNote(fixRangeForPlay());
+              setPlaying(!playing);
+            }}
+            data-ws={`${ws}-play`}
+          >
             {playing ? <Pause size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
             {playing ? "Stop" : "Play"}
           </Button>
         </Tooltip>
         <Tooltip label="The time after" side="top">
-          <Button aria-label="Next time" aria-disabled={on === null || playing || undefined} onClick={() => on !== null && !playing && show(on)} data-ws="guided-time-on">
+          <Button aria-label="Next time" aria-disabled={on === null || playing || undefined} onClick={() => on !== null && !playing && show(on)} data-ws={`${ws}-on`}>
             <ChevronRight size={14} aria-hidden="true" />
           </Button>
         </Tooltip>
         <Tooltip label="Start again from the first time after the last" side="top">
-          <Button active={loop} aria-pressed={loop} onClick={() => setLoop(!loop)} data-ws="guided-time-loop">
+          <Button active={loop} aria-pressed={loop} onClick={() => setLoop(!loop)} data-ws={`${ws}-loop`}>
             Loop
           </Button>
         </Tooltip>
       </div>
       {pending !== null && <Note tip="The host is reading the fields at that time">{`Reading ${timeText(pending, steady)}…`}</Note>}
+      {fixedNote !== "" && playing && <Note tip="Each frame of a playback is drawn on the same colour range, so the colours of two times compare">{fixedNote}</Note>}
       {error !== "" && (
         <p role="alert" className="guided-error">
           {error}

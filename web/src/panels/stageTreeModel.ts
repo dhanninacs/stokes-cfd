@@ -18,6 +18,7 @@
  *
  * Import rule: no React, no store, no DOM. The groups of the tree are found by path, as the stage map does.
  */
+import { varyingOf } from "./timeProfileModel";
 import type { ConditionKind, NodeStatus, NodeSummary, SetupCheck } from "../api/types";
 import { inUseParams } from "./conditions";
 import { fieldLabel, fieldUnits, formatTick, type ResultsLive } from "./fieldsModel";
@@ -282,7 +283,10 @@ export function boundaryRow(node: NodeSummary, kinds: readonly ConditionKind[]):
   const raw = node.params[pick.name];
   const dflt = pick.schema.default;
   const value = typeof shown === "string" && shown !== "" ? shown : typeof raw === "string" ? raw : typeof raw === "number" ? formatTick(raw) : typeof dflt === "string" ? dflt : "";
-  return { subtitle: value === "" ? shortKind(kind) : `${shortKind(kind)} · ${value}`, missing: false };
+  // A value that varies in time (ADR-0022 addendum 2026-11-24) says so instead of its constant.
+  const varies = varyingOf(node).includes(pick.name);
+  const said = varies ? "varies" : value;
+  return { subtitle: said === "" ? shortKind(kind) : `${shortKind(kind)} · ${said}`, missing: false };
 }
 
 /** The status a set-up row shows: the server's, then what `setup.check` says about this node (an error reads as failed). */
@@ -311,7 +315,9 @@ function regionRow(region: NodeSummary, root: NodeSummary, ctx: TreeContext): No
   const decorated = boundaries.map((b) => {
     if (b.type !== "boundary") return b;
     const row = boundaryRow(b, ctx.kinds);
-    return withRow(b, row.subtitle, setupStatus(b, ctx.setup, row.missing));
+    // `varies` as the tree's wave marker shows it: the server's answer as it is.
+    const decorated = withRow(b, row.subtitle, setupStatus(b, ctx.setup, row.missing));
+    return b.varies === undefined ? decorated : { ...decorated, varies: varyingOf(b) };
   });
   boundaries = decorated;
   const materialId = region.params.material;

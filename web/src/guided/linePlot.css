@@ -39,6 +39,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.line-caption {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 .line-actions {
   margin-top: 0;
 }

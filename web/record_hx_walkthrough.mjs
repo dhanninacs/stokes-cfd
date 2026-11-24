@@ -312,7 +312,7 @@ try {
     const m = status?.monitors ?? {};
     const q = (s) => {
       const i = m[`${s}_in`] ?? m.inlet, o = m[`${s}_out`] ?? m.outlet;
-      return i && o ? o.flow_rate * 4182 * (o.T_mean - i.T_mean) : null;
+      return i && o ? o.flow_rate * 4182 * (o.T_bulk - i.T_bulk) : null;
     };
     w.note(`monitors: ${JSON.stringify(m).slice(0, 500)}`);
     w.note(`heat: hot ${q('hot')} W, cold ${q('cold')} W`);

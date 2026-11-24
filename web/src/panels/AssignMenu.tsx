@@ -18,6 +18,7 @@ import { Button } from "../components/ui";
 import { Dialog } from "../components/Dialog";
 import { Menu, type MenuItemSpec } from "../components/Menu";
 import { assignCommand, assignTarget } from "./assignTarget";
+import { toastChange } from "./droppedProfiles";
 import { defaultValues, formFields } from "./conditions";
 import { overlapAfterAssign, overlapShort } from "./coverage";
 import { usePickOverlap } from "./usePickOverlap";
@@ -229,7 +230,8 @@ export function useAssignMenu(): AssignMenu {
     const id = result.boundary?.id;
     if (id) state.select(id, { keepPick: true });
     const name = result.boundary?.name;
-    state.pushToast("ok", name ? `${kind.label} assigned to ${name}` : `${kind.label} assigned`);
+    // A kind that does not use a varying value drops its profile: the toast says which, with Undo.
+    void toastChange(result, name ? `${kind.label} assigned to ${name}` : `${kind.label} assigned`);
     // G10: the faces may now be in two boundaries; say so at the moment it happens.
     const shared = name ? overlapAfterAssign({ name, warnings: result.boundary?.warnings }) : null;
     if (shared !== null) state.pushToast("info", shared);

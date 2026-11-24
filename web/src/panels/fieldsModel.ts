@@ -43,6 +43,12 @@ export interface ResultsView extends Partial<LegendSettings> {
    * because the dark palette is approved and banding is an addition to it.
    */
   bands: number;
+  /**
+   * What an Auto range spans in a run with several written times (ADR-0022 addendum 2026-11-24): `all` (absent is
+   * all) is the field's range over every time, so the frames of a playback share one scale; `time` is the range of
+   * the time on screen. Until the server has the all-times range, the shown time's is used either way.
+   */
+  timeScope?: "all" | "time";
   /*
     **The legend's settings (`legendModel.ts`, R1) are OPTIONAL fields of this view, not new required ones**:
     a view built before they existed - a test literal, a saved workspace, `NO_RESULTS` - has none of them, and
@@ -217,16 +223,33 @@ export function effectiveRange(view: ResultsView, data: RunFields | null): Range
  * `p01 >= p99` (a constant field) or numbers outside min..max would otherwise draw against a range that is
  * not the data's.
  */
-export function autoRange(view: Pick<ResultsView, "fullRange">, data: RunFields | null, field: string): Range | null {
-  const full = fieldRange(data, field);
-  if (full === null || view.fullRange === true) return full;
+export function autoRange(view: Pick<ResultsView, "fullRange" | "timeScope">, data: RunFields | null, field: string): Range | null {
   const f = data?.fields.find((x) => x.name === field);
-  const low = f?.p01;
-  const high = f?.p99;
+  // The range over every written time when the run has one and the view wants it (the default).
+  const over = view.timeScope !== "time" ? f?.allTimes : undefined;
+  const full = over !== undefined ? { min: over.min, max: over.max } : fieldRange(data, field);
+  if (full === null || view.fullRange === true) return full;
+  const low = over !== undefined ? over.p01 : f?.p01;
+  const high = over !== undefined ? over.p99 : f?.p99;
   if (low === undefined || high === undefined || !(low < high)) return full;
   const min = Math.max(low, full.min);
   const max = Math.min(high, full.max);
   return min < max ? { min, max } : full;
+}
+
+/** Whether an Auto range of this field spans every written time (the server's all-times range is there and wanted). */
+export function spansAllTimes(view: Pick<ResultsView, "timeScope">, data: RunFields | null, field: string): boolean {
+  return view.timeScope !== "time" && data?.fields.find((x) => x.name === field)?.allTimes !== undefined;
+}
+
+/** Whether the run wrote fields at several times, so its Auto range can span one time or all of them. */
+export function hasSeveralTimes(data: RunFields | null): boolean {
+  return (data?.times ?? []).filter((t) => t > 0).length > 1;
+}
+
+/** The view with an Auto range over every written time (`all`) or the time on screen (`time`). */
+export function setTimeScope(view: ResultsView, scope: "all" | "time"): ResultsView {
+  return (view.timeScope ?? "all") === scope ? view : { ...view, timeScope: scope };
 }
 
 /** Whether the run gives percentiles for a field, i.e. whether "full range" is a different answer from "auto". */
@@ -595,8 +618,11 @@ export function componentRange(values: FieldValues, axis: 0 | 1 | 2): Range {
  * one run can legitimately show different legends. Without the label the two read identically and a user
  * comparing them would take a difference in what was sampled for a change in the physics.
  */
-export function rangeScopeOf(field: string, locked: boolean, ranged = false): string {
+export function rangeScopeOf(field: string, locked: boolean, ranged = false, times: "all" | "time" | null = null): string {
   if (locked) return "range set by you";
+  // A run with several written times says which its range spans (ADR-0022 addendum 2026-11-24).
+  if (times === "all") return "range over all times";
+  if (times === "time") return "range at this time";
   // A component the server has ranged over every surface (`variablesControl.rangeVariable`) is the run's range.
   if (derivedComponentOf(field) !== null && !ranged) return "over the values on this cut";
   return "";

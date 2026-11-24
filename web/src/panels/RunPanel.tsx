@@ -158,7 +158,7 @@ export default function RunPanel({ section }: { section?: string } = {}) {
       <section className="mesh-section" aria-label="Residuals" data-ws="run-residuals">
         <div className="section-title">Residuals</div>
         {hasSeries ? (
-          <ResidualPlot series={residuals} target={target} />
+          <ResidualPlot series={residuals} target={target} transient={run?.transient === true || settings?.params.transient === true} />
         ) : (
           <p className="muted mesh-hint" title="The residuals appear here once a run starts. The dashed line is the convergence target.">No run yet</p>
         )}

@@ -260,6 +260,14 @@ def test_cli_boundary_and_region_verbs(tmp_path: Path, capsys: pytest.CaptureFix
         '{"velocity": 3}',
     )
     assert code == 0 and changed["primary"]["display"] == "3 m/s"
+    sine = '{"form": "sine", "mean": "3 [m/s]", "amplitude": "1 [m/s]", "frequency": "5 [Hz]"}'
+    inlet_path = "/regions/fluid/boundaries/inlet"
+    code, varied = words(
+        capsys, "boundary profile", project, inlet_path, "velocity", "--profile", sine
+    )
+    assert code == 0 and varied["varies"] == ["velocity"] and varied["profile"]["cycle"] == 0.2
+    code, constant = words(capsys, "boundary profile", project, inlet_path, "velocity")
+    assert code == 0 and constant["varies"] == [] and constant["profile"] is None
     code, kinds = words(capsys, "boundary kinds")
     assert code == 0 and kinds[0]["id"] == "velocity_inlet"
     code, out = words(capsys, "boundary assign", project, "inlet", "fan")

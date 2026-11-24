@@ -176,6 +176,8 @@ export default function Residuals() {
     const active = s.run.runs.find((r) => r.id === s.run.activeRun);
     return active?.last ?? [];
   });
+  // A transient run's residuals are drawn against its time, with no convergence line (ADR-0022 addendum 2026-11-24).
+  const transient = useStore((s) => s.run.runs.find((r) => r.id === s.run.activeRun)?.transient === true || findSolverSettings(s.tree)?.params.transient === true);
   const view = residualsView({
     hasRun: runId !== null,
     iterations: residuals?.iterations.length ?? 0,
@@ -184,7 +186,7 @@ export default function Residuals() {
   if (residuals !== null && residuals.iterations.length > 0) {
     return (
       <div className="relative h-full w-full px-2 py-1" data-ws="residuals-live">
-        <ResidualPlot series={residuals} target={residualTarget(findSolverSettings(tree))} fill />
+        <ResidualPlot series={residuals} target={residualTarget(findSolverSettings(tree))} transient={transient} fill />
       </div>
     );
   }

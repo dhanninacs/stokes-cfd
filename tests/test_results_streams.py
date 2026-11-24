@@ -75,14 +75,28 @@ def test_a_stream_s_pressure_drop_and_heat_come_from_its_monitors(
 ) -> None:
     monkeypatch.setattr(results_streams, "_specific_heat", lambda ctx, material, t: 4180.0)
     monitors = {
-        "hot_in": {"flow_rate": -0.002, "p_mean": 101400.0, "T_mean": 350.0},
-        "hot_out": {"flow_rate": 0.002, "p_mean": 101325.0, "T_mean": 330.0},
+        "hot_in": {"flow_rate": -0.002, "p_mean": 101400.0, "T_area": 351.0, "T_bulk": 350.0},
+        "hot_out": {"flow_rate": 0.002, "p_mean": 101325.0, "T_area": 334.0, "T_bulk": 330.0},
     }
     stream = results_streams._stream
     found = stream(None, "hot", "water", ["hot_in"], ["hot_out"], monitors, True)  # type: ignore[arg-type]
     assert found["pressure_drop"] == pytest.approx(75.0)
     assert found["mass_flow"] == pytest.approx(0.002)
     assert found["heat"] == pytest.approx(0.002 * 4180.0 * (330.0 - 350.0))
+
+
+def test_a_run_without_the_bulk_temperature_has_no_heat(monkeypatch: pytest.MonkeyPatch) -> None:
+    """**The area average is never a duty** (2026-11-24): a run recorded before the bulk monitor
+    existed has only the area-averaged `T`, and its heat is not given rather than given low."""
+    monkeypatch.setattr(results_streams, "_specific_heat", lambda ctx, material, t: 4180.0)
+    monitors = {
+        "hot_in": {"flow_rate": -0.002, "p_mean": 101400.0, "T_area": 350.0},
+        "hot_out": {"flow_rate": 0.002, "p_mean": 101325.0, "T_area": 330.0},
+    }
+    stream = results_streams._stream
+    found = stream(None, "hot", "water", ["hot_in"], ["hot_out"], monitors, True)  # type: ignore[arg-type]
+    assert found["heat"] is None and found["T_out"] is None
+    assert found["pressure_drop"] == pytest.approx(75.0)
 
 
 def test_a_flow_only_run_has_no_heat(monkeypatch: pytest.MonkeyPatch) -> None:

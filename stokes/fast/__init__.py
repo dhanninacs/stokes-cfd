@@ -8,8 +8,11 @@ Modules, each importable on its own:
 
 * ``errors``    the ``fast.*`` error codes
 * ``wgsl``      field text (Fidget's format, ``stokes.implicit.graph.to_text``) to a WGSL function,
-                and the lattice's compute shaders
-* ``lattice``   D3Q19 constants and the conversion between SI and lattice units
+                the shaders' shared parts, the classification, the temperature's step, the samples
+* ``kernel``    the lattice's step as WGSL: streaming in place, the wall and port links, the
+                collisions and the turbulent preview's closures
+* ``inplace``   where a population lives in the one buffer (the layout and its proof)
+* ``lattice``   D3Q19 constants, the conversion between SI and lattice units, the closures
 * ``grid``      the lattice's size and placement from the fluid's box and a fidelity
 * ``ports``     planar inlets and outlets from tagged triangles, and their footprint masks
 * ``case``      ``FastCase``: everything the solver needs, as plain data

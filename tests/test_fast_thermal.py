@@ -238,7 +238,7 @@ def test_the_closure_is_shear_improved_until_the_cells_are_coarse() -> None:
         "shear_improved"
     )
     with pytest.raises(FastInvalid, match="closure"):
-        lattice.scaling_for(1e-4, 0.5, 1e-6, closure="wale")
+        lattice.scaling_for(1e-4, 0.5, 1e-6, closure="k-epsilon")
 
 
 def test_the_runner_takes_a_closure_and_refuses_an_unknown_one() -> None:
@@ -324,7 +324,8 @@ def test_the_walls_keep_a_cells_mass_and_the_guard_holds_the_speed_alone() -> No
     """What the interpolated walls return less what was sent to them comes off the rest population
     (they lost a tenth of the flow in channels eight cells wide), and the density is not capped:
     with the incompressible equilibrium it is the pressure alone."""
-    from stokes.fast.wgsl import compile_field, step_shader
+    from stokes.fast.kernel import step_shader
+    from stokes.fast.wgsl import compile_field
 
     step = step_shader([(compile_field("_0 var-x"), False)], 8, 8)
     assert step.count("leak += f") == 18 and "  f0 -= leak;" in step

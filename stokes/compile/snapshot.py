@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from stokes.physics.conditions.profiles import TimeProfile
+
 #: The condition kinds this writer can express (docs/05 §2). Anything else is `compile.unsupported`,
 #: which is deliberate: a silently wrong boundary condition is far worse than a refusal.
 KINDS: tuple[str, ...] = (
@@ -92,6 +94,15 @@ class PatchCondition:
     intensity: float | None = None
     viscosity_ratio: float | None = None
     length_scale: float | None = None
+    #: Values that vary in time (ADR-0022 addendum 2026-11-24), on a transient run only: the
+    #: speed of a velocity inlet (its direction is `velocity`'s, whose length is then the
+    #: time-mean), the mass flow, the gauge pressure of an outlet and an inlet's temperature, each
+    #: in SI. `None` is the constant value above; a steady run gets the time-mean there and none
+    #: of these.
+    velocity_profile: TimeProfile | None = None
+    mass_flow_profile: TimeProfile | None = None
+    pressure_profile: TimeProfile | None = None
+    temperature_profile: TimeProfile | None = None
 
 
 #: The temperature conditions the snapshot can carry (ADR-0027 step 2). Convection walls are not
@@ -119,6 +130,15 @@ ENERGY_FIELDS: tuple[str, ...] = ("energy", "mu", "cp", "kappa", "T_ref", "gravi
 #: The patch fields only a mass-flow inlet fills, dropped from the basis when `None` so a project
 #: without one keeps its basis.
 FLOW_FIELDS: tuple[str, ...] = ("mass_flow",)
+
+#: The time profiles of a patch (ADR-0022 addendum 2026-11-24), dropped from the basis when
+#: `None` so a project with constant values keeps its basis.
+PROFILE_FIELDS: tuple[str, ...] = (
+    "velocity_profile",
+    "mass_flow_profile",
+    "pressure_profile",
+    "temperature_profile",
+)
 
 #: The patch fields that only the energy equation fills, dropped from the basis when `None`.
 THERMAL_FIELDS: tuple[str, ...] = ("thermal", "temperature", "heat_flux", "centroid")

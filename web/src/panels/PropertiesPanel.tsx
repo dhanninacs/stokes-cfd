@@ -20,6 +20,7 @@ import { changedFromDefault, hasBasicSet, readSetupContext, visibleFields } from
 import BasicAdvanced from "./BasicAdvanced";
 import BodyRoleChips from "./BodyRoleChips";
 import MaterialReadout from "./MaterialReadout";
+import { BoundaryTimeProfiles } from "./TimeProfileSection";
 import SchemaFields from "./SchemaFields.tsx"; // the .tsx: "./SchemaFields" would case-match the helpers' schemaFields.ts on Windows
 import SettingsNodeFields from "./SettingsNodeFields";
 import { parameterCommand, settingsMode } from "./settingsCommand";
@@ -398,6 +399,8 @@ export default function PropertiesPanel() {
       <div className="flex flex-col gap-1.5" data-ws="node-verbs">
         {isRegion && <MaterialPicker regionId={node.id} currentId={materialOf(node)} />}
         {isBoundary && <ConditionPicker boundaryId={node.id} current={conditionOf(node)} />}
+        {/* Values that vary in time (ADR-0022 addendum 2026-11-24): the shared editor, as in the Guided card. */}
+        {isBoundary && <BoundaryTimeProfiles node={node} />}
       </div>
     ) : null;
 

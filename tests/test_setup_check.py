@@ -12,6 +12,7 @@ from typing import Any
 from stokes.api import Session
 from stokes.geometry.files import SourceStamp
 from stokes.physics.conditions.checks import CODES, COMPLETE, STATES, check_setup
+from stokes.physics.conditions.profile_checks import CODES as PROFILE_CODES
 from tests.selection_support import (
     STAMP,
     add_part,
@@ -49,6 +50,13 @@ SEVERITY_OF: dict[str, str] = {
     "setup.excluded_body": "warning",
     "setup.no_inlet_temperature": "warning",
     "setup.kind_unsupported": "error",
+    # Values that vary in time (ADR-0022 addendum 2026-11-24; tests in
+    # `test_setup_check_profiles.py`).
+    "setup.profile_steady": "warning",
+    "setup.profile_steady_only": "error",
+    "setup.profile_short": "info",
+    "setup.profile_reverses": "warning",
+    "setup.profile_invalid": "error",
 }
 """The ADR table's rows: code to severity, in the order the table lists them."""
 
@@ -199,6 +207,21 @@ def test_an_inlet_at_300_k_beside_one_set_hotter_is_not_named(tmp_path: Path) ->
         boundary=boundary_id(session, "outlet"),
         values={"backflow_temperature": "350 [K]"},
     )
+    assert "setup.no_inlet_temperature" not in codes(check(session))
+
+
+def test_an_inlet_whose_temperature_varies_in_time_is_not_named(tmp_path: Path) -> None:
+    """Checked by review: with energy on and the inlet temperature a sine about 20 degC, the check
+    still said the inlet had the default 300 K. The constant is kept for when the profile goes
+    (ADR-0022 16.5), but the run follows the profile, so the temperature was chosen."""
+    session = new_session(tmp_path)
+    body = cube_part(session)
+    fluid(session, body)
+    complete(session, body)
+    session.execute("solve.configure", engine="of14.fluid", values={"energy": True})
+    sine = {"form": "sine", "mean": "20 [degC]", "amplitude": "5 [degC]", "frequency": "1 [Hz]"}
+    inlet = boundary_id(session, "inlet")
+    session.execute("boundary.set_profile", boundary=inlet, parameter="temperature", profile=sine)
     assert "setup.no_inlet_temperature" not in codes(check(session))
 
 
@@ -609,6 +632,8 @@ def _documented() -> list[tuple[str, str]]:
     """The rows of the Checks table of the contract: ``(code, severity)``."""
     text = DOC.read_text(encoding="utf-8")
     section = text.split("## Checks (T-037", 1)[1].split("\n## ", 1)[0]
+    # The ADR's table only: the codes added since are listed after it, in their own table.
+    section = section.split("\nAdded since the table", 1)[0]
     return [
         (cells[0].strip("`"), cells[1])
         for line in section.splitlines()
@@ -625,7 +650,7 @@ def test_the_documented_table_is_the_code_table() -> None:
     # point of the test: `report.add` DROPS a code it does not know, so an unregistered one is a
     # finding nobody sees rather than an error.
     assert tuple(SEVERITY_OF) == CODES
-    assert len(CODES) == 19
+    assert len(CODES) == 24
     # **The ADR's table, which this test verifies word for word**, still lists sixteen - and the
     # comparison is against the SEVERITIES map minus what was added since, so the doc can be checked
     # exactly while a later code does not make the check unfalsifiable.
@@ -633,6 +658,7 @@ def test_the_documented_table_is_the_code_table() -> None:
         "setup.excluded_body",
         "setup.no_inlet_temperature",
         "setup.kind_unsupported",
+        *PROFILE_CODES,
     }
     assert len(_documented()) == 16, "the ADR's table still lists sixteen"
     assert _documented() == [
@@ -647,7 +673,8 @@ def test_every_adr_table_code_has_a_test() -> None:
     # finding
     # nobody has ever seen produce.
     assert tuple(code for code in COVERS) == tuple(code for code in CODES if code in COVERS)
-    assert set(CODES) - set(COVERS) == {"setup.excluded_body"}
+    # The time-profile codes are covered in `test_setup_check_profiles.py`.
+    assert set(CODES) - set(COVERS) == {"setup.excluded_body", *PROFILE_CODES}
     assert COVERS["setup.no_inlet_temperature"] == "test_an_inlet_at_default_temperature_is_named"
     for code, name in COVERS.items():
         assert name.startswith("test_"), code

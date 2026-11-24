@@ -20,7 +20,7 @@ import type { NodeSummary, SetupCheck } from "../api/types";
 import { formatCount, type MeshPhase } from "../panels/meshPanelModel";
 import type { Stage } from "../state/store";
 import { isRunActive, type RunSummary } from "../panels/runApi";
-import { stateLine, type Tone } from "../panels/runPanelModel";
+import { stateLine, transientEnd, type Tone } from "../panels/runPanelModel";
 import { fluidBody, readBodies, readBoundaries, readCase, readFluidRegion, type Body, type FoamCase } from "./guidedTree";
 
 export type GuidedStepId = "geometry" | "fluid" | "boundaries" | "mesh" | "run" | "results" | "optimise";
@@ -54,7 +54,7 @@ export interface GuidedInput {
   meshStale: boolean;
   meshCells: number;
   /** The run records, newest first. */
-  runs: readonly (Pick<RunSummary, "state" | "stale" | "iterations" | "converged"> & { kind?: string })[];
+  runs: readonly (Pick<RunSummary, "state" | "stale" | "iterations" | "converged"> & Partial<Pick<RunSummary, "stopped" | "transient" | "endTime" | "simTime">> & { kind?: string })[];
   /** The newest finished run's fields are read. */
   resultsLoaded: boolean;
   /** A field colours the model. */
@@ -125,6 +125,8 @@ function run(meshDone: boolean, i: GuidedInput): Omit<GuidedStep, "id" | "label"
     if (latest.stale) return { state: "attention", hint: "Out of date: run again" };
     // "Converged" only when the solver said so; a case that ran to its End finished, and a run
     // that hit its iteration cap stopped (`done_unconverged`).
+    const timed = latest.stopped === true ? null : transientEnd(latest);
+    if (timed !== null) return { state: "done", hint: latest.state === "done" ? timed.charAt(0).toUpperCase() + timed.slice(1) : `Ended early: ${timed}` };
     const word = latest.state !== "done" ? "Stopped at" : latest.converged ? "Converged in" : "Finished in";
     return { state: "done", hint: `${word} ${plural(latest.iterations, "iteration")}` };
   }
@@ -314,7 +316,7 @@ export function reportBlocker(finished: boolean, hasResults: boolean): string | 
 export function runLine(run: RunSummary | null, limit: number | null): { text: string; tone: Tone } {
   if (run !== null && (run.state === "queued" || run.state === "running")) {
     const going = run.state === "running" || run.iterations > 0 || run.fraction !== null;
-    if (going) return { text: run.iterations > 0 ? `Running · iteration ${run.iterations}` : "Running", tone: "busy" };
+    if (going) return { text: run.iterations > 0 ? `Running · ${run.transient === true ? "step" : "iteration"} ${run.iterations}` : "Running", tone: "busy" };
   }
   if (run !== null && run.state === "cancelling") return { text: "Stopping…", tone: "busy" };
   return stateLine(run, limit);

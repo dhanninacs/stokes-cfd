@@ -44,6 +44,7 @@ from stokes.geometry.model import (
     TURBULENCE_INPUTS,
 )
 from stokes.physics.conditions import ConditionError, InvalidKind
+from stokes.physics.conditions.profiles import PROFILED
 
 Rule = Literal["any", "positive", "nonnegative", "nonzero", "fraction"]
 Family = Literal["inlet", "outlet", "wall", "constraint", "interface"]
@@ -184,6 +185,8 @@ class ConditionSpec:
             "arrives": self.arrives or None,
             "available": self.available,
             "note": self.note,
+            # The values that may vary in time (ADR-0022 addendum 2026-11-24), in this order.
+            "profiled": list(PROFILED.get(self.id, ())),
             "params": [
                 {
                     "name": use.name,

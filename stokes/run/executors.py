@@ -393,7 +393,9 @@ def _read_monitors(runner: Any, job: str, snap: SolveSnapshot | None) -> dict[st
     # **The energy writer averages `p` and `T` together** (`fields=(p T)`), and OpenFOAM 14 drops
     # the space in the directory name: `patchAverage(patch=outlet,fields=(pT))`, whose rows are
     # `time p T`. Asking for `fields=(p)` there missed the file (ADR-0027 step 5).
-    averaged = ("p_mean", "T_mean") if snap.energy else ("p_mean",)
+    # The area average's `T` is `T_area`, labelled so (2026-11-24): a duty is computed from
+    # `T_bulk`, the mass-flow-weighted one, read from its own function below.
+    averaged = ("p_mean", "T_area") if snap.energy else ("p_mean",)
     fields = "".join(key.split("_")[0] for key in averaged)
     # **A multi-region case writes each function under its region** (ADR-0042, measured):
     # `postProcessing/<region>/patchFlowRate(patch=<patch>,region=<region>)/0/...`.
@@ -422,6 +424,15 @@ def _read_monitors(runner: Any, job: str, snap: SolveSnapshot | None) -> dict[st
                 values = _last_values(runner, job, path, len(keys))
                 if values is not None:
                     entry.update(zip(keys, values, strict=True))
+                    break
+        if snap.energy:
+            from stokes.compile.of14.fluid import bulk_temperature_name
+
+            for time_dir in _time_dirs():
+                path = f"{folder}/{bulk_temperature_name(patch)}/{time_dir}/surfaceFieldValue.dat"
+                values = _last_values(runner, job, path, 1)
+                if values is not None:
+                    entry["T_bulk"] = values[0]
                     break
         if entry:
             found[str(patch)] = entry

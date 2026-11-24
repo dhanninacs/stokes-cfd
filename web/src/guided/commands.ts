@@ -10,6 +10,7 @@
 import { StokesApiError } from "../api/client";
 import type { ConditionKind, NodeSummary } from "../api/types";
 import { assignCommand, assignTarget } from "../panels/assignTarget";
+import { droppedOf, toastChange } from "../panels/droppedProfiles";
 import { useStore } from "../state/store";
 import type { Role } from "../panels/meshTaskPages/bodiesModel";
 import { configureSolve } from "../panels/runControl";
@@ -118,6 +119,8 @@ export async function assignPickedFaces(kind: ConditionKind, values: Record<stri
   const answer = (await call(call_.method, call_.params)) as AssignAnswer;
   await refreshed(null);
   useStore.getState().clearPick();
+  // Faces of a boundary that varies, given a kind that does not use the value, drop its profile: say so.
+  if (droppedOf(answer).length > 0) await toastChange(answer, `${answer.boundary?.name ?? kind.label} assigned`);
   return answer.boundary?.name ?? kind.label;
 }
 

@@ -7,6 +7,9 @@ bodies that starts with ``[`` is JSON (members, or part ids); anything else is a
     stokes boundary assign demo.stokes /geometry/tags/inlet velocity_inlet \\
         --values '{"velocity": "2 [m/s]"}'
     stokes boundary assign demo.stokes '[{"part": "/geometry/parts/pipe", "faces": [3]}]' wall
+    stokes boundary profile demo.stokes /regions/fluid/boundaries/inlet velocity \\
+        --profile '{"form": "sine", "mean": "2 [m/s]", "amplitude": "1 [m/s]",
+                    "frequency": "5 [Hz]"}'
     stokes region assign demo.stokes water '["/geometry/parts/pipe"]'
     stokes setup check demo.stokes
     stokes setup defaults demo.stokes /geometry/parts/enclosure external --velocity '2 [m/s]'
@@ -25,6 +28,7 @@ BOUNDARY_VERBS: tuple[tuple[str, str], ...] = (
     ("set", "change a boundary's kind, values, tag, faces or name"),
     ("delete", "delete a boundary (and its tag with --delete-tag)"),
     ("list", "every boundary with its tag, primary value, findings and status"),
+    ("profile", "make one value vary in time (table, sine, square), or constant with no --profile"),
     ("kinds", "the condition kinds and their parameters (no project needed)"),
 )
 REGION_VERBS: tuple[tuple[str, str], ...] = (
@@ -100,6 +104,15 @@ def _boundary_arguments(verb: str, p: argparse.ArgumentParser) -> None:
         p.add_argument("--delete-tag", action="store_true", help="delete its tag too")
     elif verb == "list":
         p.add_argument("--region", help="only this region's boundaries")
+    elif verb == "profile":
+        p.add_argument("boundary", help="boundary id or path")
+        p.add_argument("parameter", help="velocity, mass_flow, pressure or temperature")
+        p.add_argument(
+            "--profile",
+            help="the profile as JSON with its form and fields (quantity text, e.g. "
+            '{"form": "sine", "mean": "2 [m/s]", "amplitude": "0.5 [m/s]", '
+            '"frequency": "10 [Hz]"}); omitted: constant',
+        )
 
 
 def _region_arguments(verb: str, p: argparse.ArgumentParser) -> None:
@@ -185,6 +198,14 @@ def _boundary(session: Any, args: argparse.Namespace) -> tuple[Any, bool]:  # An
             return result, True
         case "list":
             return session.execute("boundary.list", region=args.region), False
+        case "profile":
+            result = session.execute(
+                "boundary.set_profile",
+                boundary=args.boundary,
+                parameter=args.parameter,
+                profile=_optional(args.profile, "--profile", dict),
+            )
+            return result, True
     raise StokesError(f"unknown boundary subcommand {args.boundary_cmd!r}")  # pragma: no cover
 
 

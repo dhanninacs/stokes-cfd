@@ -22,14 +22,61 @@ from stokes.compile.snapshot import (
     SYMMETRY_PATCH_TYPE_NONPLANAR,
 )
 
+from .time_functions import function1, scaled_vector, start_value, uniform_fixed_value
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from stokes.compile.snapshot import PatchCondition
+    from stokes.physics.conditions.profiles import TimeProfile
 
 
 def _vector(values: tuple[float, float, float]) -> Raw:
     """A vector through `Raw`: the printer has no vector node, and `uniform (0 0 0)` is one line."""
     x, y, z = values
     return Raw(f"uniform ({x} {y} {z})")
+
+
+def _at_start(
+    velocity: tuple[float, float, float], profile: TimeProfile
+) -> tuple[float, float, float]:
+    """The velocity at time zero: the direction of ``velocity`` (direction x mean) at the
+    profile's first speed."""
+    length = sum(c * c for c in velocity) ** 0.5
+    speed = start_value(profile)
+    if length == 0.0:
+        return (0.0, 0.0, 0.0)
+    x, y, z = (float(f"{c / length * speed:.12g}") for c in velocity)
+    return (x, y, z)
+
+
+def _inlet_velocity(condition: PatchCondition, rho: float) -> Dict:
+    """The `0/U` entry of a mass-flow or velocity inlet, constant or varying in time."""
+    if condition.kind == "mass_flow_inlet":
+        if condition.mass_flow is None:
+            raise CompileInvalid(f"the inlet {condition.name!r} has no mass flow")
+        # A mass flow that varies in time is the same keyword holding a function of time
+        # (ADR-0022 addendum 2026-11-24); `constant <kg/s>` is that function's constant form.
+        flow = (
+            function1(condition.mass_flow_profile)
+            if condition.mass_flow_profile is not None
+            else Raw(f"constant {condition.mass_flow}")
+        )
+        return Dict(
+            (
+                Entry("type", Word("flowRateInletVelocity")),
+                Entry("massFlowRate", flow),
+                Entry("rhoInlet", rho),
+            )
+        )
+    if condition.velocity is None:
+        # `validate_patch` refuses this too; kept here so the function is total on its own.
+        raise CompileInvalid(f"the inlet {condition.name!r} has no velocity")
+    if condition.velocity_profile is not None:
+        # The direction stays; the speed follows the profile (`velocity` is direction x mean).
+        return uniform_fixed_value(
+            scaled_vector(condition.velocity_profile, condition.velocity),
+            _vector(_at_start(condition.velocity, condition.velocity_profile)).text,
+        )
+    return Dict((Entry("type", Word("fixedValue")), Entry("value", _vector(condition.velocity))))
 
 
 def velocity_field(condition: PatchCondition, rho: float = 1.0) -> Dict:
@@ -41,23 +88,8 @@ def velocity_field(condition: PatchCondition, rho: float = 1.0) -> Dict:
     which is the incompressible case.
     """
     kind = condition.kind
-    if kind == "mass_flow_inlet":
-        if condition.mass_flow is None:
-            raise CompileInvalid(f"the inlet {condition.name!r} has no mass flow")
-        return Dict(
-            (
-                Entry("type", Word("flowRateInletVelocity")),
-                Entry("massFlowRate", Raw(f"constant {condition.mass_flow}")),
-                Entry("rhoInlet", rho),
-            )
-        )
-    if kind == "velocity_inlet":
-        if condition.velocity is None:
-            # `validate_patch` refuses this too; kept here so the function is total on its own.
-            raise CompileInvalid(f"the inlet {condition.name!r} has no velocity")
-        return Dict(
-            (Entry("type", Word("fixedValue")), Entry("value", _vector(condition.velocity)))
-        )
+    if kind in ("mass_flow_inlet", "velocity_inlet"):
+        return _inlet_velocity(condition, rho)
     if kind == "pressure_outlet":
         # **`pressureInletOutletVelocity`**: at an outlet the flow can reverse, and this
         # condition lets
@@ -96,6 +128,9 @@ def pressure_field(condition: PatchCondition, rho: float) -> Dict:
             raise CompileInvalid(f"the outlet {condition.name!r} has no pressure")
         if rho <= 0:
             raise CompileInvalid(f"rho must be positive to convert {condition.name!r}'s pressure")
+        if condition.pressure_profile is not None:
+            kinematic = condition.pressure_profile.affine(1.0 / rho)
+            return uniform_fixed_value(function1(kinematic), f"uniform {start_value(kinematic)}")
         return Dict(
             (
                 Entry("type", Word("fixedValue")),

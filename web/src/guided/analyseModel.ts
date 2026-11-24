@@ -244,6 +244,17 @@ export interface XYChart {
   paths: string[];
   /** The x-axis scale's unit after scaling metres (mm for a pipe). */
   xUnit: string;
+  /**
+   * Where a line leaves the y range it is drawn in (a history's start-up spike): one mark per excursion, at the
+   * edge it crosses and the x of its furthest point, with that point's value. Empty without a `yRange`.
+   */
+  clipped: { x: number; y: number; edge: "top" | "bottom"; value: number }[];
+}
+
+/** What a chart is asked to show of its data: a fixed y range (the robust one), and the x it starts from. */
+export interface ChartView {
+  yRange?: readonly [number, number];
+  xFrom?: number;
 }
 
 export const CHART_PAD = { left: 46, right: 8, top: 8, bottom: 26 };
@@ -278,43 +289,171 @@ function padded([lo, hi]: [number, number], share = 0.05): [number, number] {
  * Several series on one pair of axes. `mode` "dots" draws each point as a short tick (a scatter of a surface's
  * points, where joining them would zig-zag); "line" joins them in order (a history against the iteration).
  */
-export function xyChart(series: readonly { x: readonly number[]; y: readonly number[] }[], width: number, height: number, xUnits: string, mode: "dots" | "line"): XYChart {
+export function xyChart(series: readonly { x: readonly number[]; y: readonly number[] }[], width: number, height: number, xUnits: string, mode: "dots" | "line", view: ChartView = {}): XYChart {
   const x0 = CHART_PAD.left;
   const y0 = CHART_PAD.top;
   const x1 = Math.max(x0 + 1, width - CHART_PAD.right);
   const y1 = Math.max(y0 + 1, height - CHART_PAD.bottom);
-  const allX = series.flatMap((s) => s.x as number[]);
-  const allY = series.flatMap((s) => s.y as number[]);
+  const from = view.xFrom;
+  // The points before `xFrom` are not on the chart at all: neither the x nor the y range counts them.
+  const shown = from === undefined ? series : series.map((s) => keepFrom(s, from));
+  const allX = shown.flatMap((s) => s.x as number[]);
+  const allY = shown.flatMap((s) => s.y as number[]);
   const xs = span(allX);
-  const ys = span(allY);
-  const empty: XYChart = { x0, y0, x1, y1, xTicks: [], yTicks: [], paths: series.map(() => ""), xUnit: xUnits };
+  const ys = view.yRange !== undefined && view.yRange[1] >= view.yRange[0] ? ([view.yRange[0], view.yRange[1]] as [number, number]) : span(allY);
+  const empty: XYChart = { x0, y0, x1, y1, xTicks: [], yTicks: [], paths: series.map(() => ""), xUnit: xUnits, clipped: [] };
   if (xs === null || ys === null) return empty;
   const { unit, scale } = xScaleFor(xUnits, Math.max(Math.abs(xs[0]), Math.abs(xs[1])));
   const [xlo, xhi] = padded([xs[0] / scale, xs[1] / scale], mode === "line" ? 0 : 0.02);
   const [ylo, yhi] = padded(ys);
   const sx = (v: number) => x0 + ((v / scale - xlo) / (xhi - xlo)) * (x1 - x0);
   const sy = (v: number) => y1 - ((v - ylo) / (yhi - ylo)) * (y1 - y0);
-  const paths = series.map((s) => {
+  const clipped: XYChart["clipped"] = [];
+  const paths = shown.map((s) => {
     let d = "";
     let pen = false;
+    // The furthest point of the excursion past an edge that is going on, if one is.
+    let out: { x: number; value: number; edge: "top" | "bottom" } | null = null;
+    const close = () => {
+      if (out !== null) clipped.push({ x: sx(out.x), y: out.edge === "top" ? y0 : y1, edge: out.edge, value: out.value });
+      out = null;
+    };
     for (let i = 0; i < s.x.length; i++) {
       const x = s.x[i]!;
       const y = s.y[i]!;
       if (!Number.isFinite(x) || !Number.isFinite(y)) {
         pen = false;
+        close();
         continue;
       }
+      // A value past the range is drawn AT its edge (the line runs along it) and marked once per excursion, so the
+      // ticks stay the range's and the excursion is never silently lost.
+      const edge = y > yhi ? "top" : y < ylo ? "bottom" : null;
+      if (edge === null) close();
+      else if (out === null || out.edge !== edge) {
+        close();
+        out = { x, value: y, edge };
+      } else if (Math.abs(y) > Math.abs(out.value)) out = { x, value: y, edge };
+      const py = (edge === "top" ? y0 : edge === "bottom" ? y1 : sy(y)).toFixed(1);
       const px = sx(x).toFixed(1);
-      const py = sy(y).toFixed(1);
       if (mode === "dots") d += `M${px} ${py}h0.01`;
       else d += `${pen ? "L" : "M"}${px} ${py}`;
       pen = true;
     }
+    close();
     return d;
   });
   const xTicks = niceTicks(xlo, xhi, Math.max(2, Math.floor((x1 - x0) / 60))).map((value) => ({ value, at: x0 + ((value - xlo) / (xhi - xlo)) * (x1 - x0), label: tickText(value) }));
   const yTicks = niceTicks(ylo, yhi, Math.max(2, Math.floor((y1 - y0) / 28))).map((value) => ({ value, at: sy(value), label: tickText(value) }));
-  return { x0, y0, x1, y1, xTicks, yTicks, paths, xUnit: unit };
+  return { x0, y0, x1, y1, xTicks, yTicks, paths, xUnit: unit, clipped };
+}
+
+function keepFrom(s: { x: readonly number[]; y: readonly number[] }, from: number): { x: number[]; y: number[] } {
+  const x: number[] = [];
+  const y: number[] = [];
+  for (let i = 0; i < s.x.length; i++) {
+    if (s.x[i]! >= from) {
+      x.push(s.x[i]!);
+      y.push(s.y[i]!);
+    }
+  }
+  return { x, y };
+}
+
+/** The share of a history's x span counted as its start-up: the impulsive start of a run, not its answer. */
+export const START_SHARE = 0.05;
+/** The fewest first samples counted as start-up whatever the span (the first iterations of a steady run). */
+export const START_SAMPLES = 2;
+/** The full range is drawn when it is at most this many times the range after the start-up. */
+export const SPIKE_FACTOR = 3;
+
+/**
+ * The y range a history is drawn in by default (ADR-0022 addendum 2026-11-24): the range of its values after the
+ * start-up (the first `START_SHARE` of the x span, and at least the first `START_SAMPLES` samples), unless the full
+ * range is within `SPIKE_FACTOR` of it. A run that starts impulsively (a mean inlet pressure of 200 m2/s2 at the
+ * second step against a swing of +-2 afterwards) would otherwise flatten everything after it into a line. Null
+ * when the full range should be drawn (nothing to clip, or too few samples to tell).
+ */
+export function robustRange(x: readonly number[], y: readonly number[], from?: number): { range: [number, number]; full: [number, number]; after: number } | null {
+  const pairs: [number, number][] = [];
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (Number.isFinite(x[i]!) && Number.isFinite(y[i]!) && (from === undefined || x[i]! >= from)) pairs.push([x[i]!, y[i]!]);
+  }
+  if (pairs.length < 3 * START_SAMPLES) return null;
+  const full = span(pairs.map((p) => p[1]));
+  const first = pairs[0]![0];
+  const last = pairs[pairs.length - 1]![0];
+  const cut = first + (last - first) * START_SHARE;
+  const kept = pairs.filter((p, i) => i >= START_SAMPLES && p[0] >= cut);
+  const body = span(kept.map((p) => p[1]));
+  if (full === null || body === null) return null;
+  const width = (r: [number, number]) => r[1] - r[0];
+  const scale = Math.max(width(body), 1e-12 * Math.max(1, Math.abs(body[1])));
+  if (width(full) <= SPIKE_FACTOR * scale) return null;
+  // `after`: where the start-up ends, the first x the range was measured from (for the caption's numbers).
+  return { range: body, full, after: kept[0]![0] };
+}
+
+/**
+ * The words under a transient history (ADR-0022 addendum 2026-11-24): its smallest, mean and largest value, and
+ * the mean over the last whole period when a profile repeats. "Settled" and "moved over the last tenth" are a
+ * steady run's questions; a time-accurate history is read for its swing. The mean weighs each sample by the time
+ * it stands for (trapezoids), so an uneven write interval does not bias it. Null with fewer than two samples.
+ */
+export function transientStats(x: readonly number[], y: readonly number[], from: number | undefined, period: number | null): { min: number; mean: number; max: number; periodMean: number | null } | null {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (Number.isFinite(x[i]!) && Number.isFinite(y[i]!) && (from === undefined || x[i]! >= from)) pts.push([x[i]!, y[i]!]);
+  }
+  if (pts.length < 2) return null;
+  const mean = (a: [number, number][]): number | null => {
+    if (a.length < 2) return null;
+    let area = 0;
+    for (let i = 1; i < a.length; i++) area += ((a[i]![1] + a[i - 1]![1]) / 2) * (a[i]![0] - a[i - 1]![0]);
+    const t = a[a.length - 1]![0] - a[0]![0];
+    return t > 0 ? area / t : null;
+  };
+  const values = pts.map((p) => p[1]);
+  const end = pts[pts.length - 1]![0];
+  const lastPeriod = period !== null && period > 0 && end - pts[0]![0] >= period * (1 - 1e-9) ? pts.filter((p) => p[0] >= end - period * (1 + 1e-9)) : [];
+  return { min: Math.min(...values), mean: mean(pts) ?? values[0]!, max: Math.max(...values), periodMean: lastPeriod.length >= 2 ? mean(lastPeriod) : null };
+}
+
+/** The caption of a transient history: "min 0.7 · mean 1 · max 1.3 · period mean 1". */
+export function transientCaption(stats: NonNullable<ReturnType<typeof transientStats>>): string {
+  const parts = [`min ${formatValue(stats.min)}`, `mean ${formatValue(stats.mean)}`, `max ${formatValue(stats.max)}`];
+  if (stats.periodMean !== null) parts.push(`last period's mean ${formatValue(stats.periodMean)}`);
+  return parts.join(" · ");
+}
+
+/**
+ * The caption under a history: its name and units, then how a steady run ended (`settled`) or a transient
+ * run's min, mean, max and last period's mean (`transientCaption`). The whole of it, so the plot can wrap it
+ * rather than cut the max off.
+ */
+export function historyCaption(
+  label: string,
+  units: string,
+  end: ReturnType<typeof settled>,
+  stats: ReturnType<typeof transientStats>,
+  skipStart: boolean,
+): string {
+  let text = `${label}${units !== "" ? ` (${units})` : ""}`;
+  if (end !== null) text += `: ${formatValue(end.last)}${end.change === null ? "" : `, ${end.change < 0.1 ? "settled" : `moved ${end.change.toFixed(1)} % over the last tenth`}`}`;
+  if (stats !== null) text += `: ${transientCaption(stats)}${skipStart ? " (after the start-up)" : ""}`;
+  return text;
+}
+
+/** A typed "from" of a history: a number on its x axis, or null with the reason. Empty is "from the start". */
+export function historyFrom(text: string, x: readonly number[]): { from: number | undefined } | { error: string } {
+  const t = text.trim();
+  if (t === "") return { from: undefined };
+  const n = Number(t);
+  if (!Number.isFinite(n)) return { error: "Type a number on the x axis" };
+  const finite = x.filter((v) => Number.isFinite(v));
+  const last = finite.length > 0 ? Math.max(...finite) : 0;
+  if (finite.length > 0 && n >= last) return { error: `The history ends at ${formatValue(last)}` };
+  return { from: n };
 }
 
 export interface Bar {
@@ -362,11 +501,15 @@ export function histogramChart(reply: HistogramReply, width: number, height: num
   return { x0, y0, x1, y1, bars, xTicks, yTicks };
 }
 
-/** A monitor file's name as a person reads it: `patchFlowRate(patch=inlet)/0/…` is "Flow rate, inlet". */
-export function monitorLabel(name: string): { label: string; units: string } {
-  const head = name.split("/")[0] ?? name;
+/**
+ * A monitor file's name as a person reads it: `patchFlowRate(patch=inlet)/0/…` is "Flow in, inlet" at an inlet and
+ * "Flow out, outlet" at an outlet (ADR-0022 addendum 2026-11-24: each opening's flow in its own direction, the
+ * server's `sign`), else "Flow rate, wall". A region's tables sit under its folder (`fluid/patchFlowRate(...)`).
+ */
+export function monitorLabel(name: string, opening = ""): { label: string; units: string } {
+  const head = name.split("/").find((part) => part.startsWith("patch")) ?? name.split("/")[0] ?? name;
   const patch = /patch=([^,)]+)/.exec(head)?.[1] ?? "";
-  if (head.startsWith("patchFlowRate")) return { label: `Flow rate, ${patch}`, units: "m3/s" };
+  if (head.startsWith("patchFlowRate")) return { label: `${opening === "inlet" ? "Flow in" : opening === "outlet" ? "Flow out" : "Flow rate"}, ${patch}`, units: "m3/s" };
   if (head.startsWith("patchAverage")) {
     const field = /fields=\(([^)]*)\)/.exec(head)?.[1] ?? "p";
     return { label: `Mean ${field}, ${patch}`, units: field === "p" ? "m2/s2" : "" };
@@ -374,13 +517,17 @@ export function monitorLabel(name: string): { label: string; units: string } {
   return { label: head, units: "" };
 }
 
-/** A monitor table's history: the first column against the first value column, as `{x, y}`. */
-export function monitorSeries(table: { columns: string[]; values: Record<string, number[]> }): { x: number[]; y: number[]; column: string } | null {
+/**
+ * A monitor table's history: the first column against the first value column, as `{x, y}`, times `sign` (the
+ * server's -1 for an inlet's flow rate, so the flow into the domain is positive).
+ */
+export function monitorSeries(table: { columns: string[]; values: Record<string, number[]> }, sign = 1): { x: number[]; y: number[]; column: string } | null {
   if (table.columns.length < 2) return null;
   const x = table.values[table.columns[0]!] ?? [];
   const column = table.columns[1]!;
-  const y = table.values[column] ?? [];
-  if (x.length === 0 || x.length !== y.length) return null;
+  const raw = table.values[column] ?? [];
+  if (x.length === 0 || x.length !== raw.length) return null;
+  const y = sign === -1 ? raw.map((v) => -v) : raw;
   return { x, y, column };
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Play, Square, Zap } from "lucide-react";
 import { Note } from "../components/Note";
 import { Button } from "../components/ui";
-import { AUTOMATIC_PLANE, FIDELITIES, PLANES, TURBULENCE, fieldsFor, frameWarning, gridNotes, heatText, legendOf, resolutionWarning, planeOffset, planeShare, readStatus, statsLines, streamRows, zonesLine, type FastField } from "../fast/fastModel";
+import { AUTOMATIC_PLANE, FIDELITIES, PLANES, STORAGES, TURBULENCE, fieldsFor, frameWarning, gridNotes, heatText, legendOf, resolutionWarning, planeOffset, planeShare, readStatus, statsLines, streamRows, zonesLine, type FastField } from "../fast/fastModel";
 import { useFastStore } from "../fast/fastStore";
 import { steppedGradientCssFor } from "../state/colormap";
 import { useStore } from "../state/store";
@@ -33,6 +33,8 @@ export default function FastPanel() {
   const [plane, setPlane] = useState<number>(AUTOMATIC_PLANE);
   const [moved, setMoved] = useState<{ share: number; axis: number; at: number } | null>(null);
   const [turbulence, setTurbulence] = useState<string>("auto");
+  const [storage, setStorage] = useState<string>("f32");
+  const [warmStart, setWarmStart] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const running = status !== null && (status.state === "running" || status.state === "starting");
@@ -81,7 +83,7 @@ export default function FastPanel() {
       .finally(() => setBusy(false));
   };
 
-  const start = () => run("fast.start", { fidelity, turbulence, ...(plane >= 0 ? { axis: plane } : {}) });
+  const start = () => run("fast.start", { fidelity, turbulence, storage, warm_start: warmStart, ...(plane >= 0 ? { axis: plane } : {}) });
   const stop = () => run("fast.stop", {});
   const configure = (params: Record<string, unknown>) => {
     if (running) run("fast.configure", params);
@@ -235,23 +237,30 @@ export default function FastPanel() {
           </span>
         </label>
 
-        <div className="fast-actions">
-          {!running ? (
-            <Button
-              variant="primary"
-              disabled={busy || project === null || available?.ok !== true}
-              title={project === null ? "Open a project first" : available === null ? "Looking for a GPU…" : available.ok ? "Solve the case on the GPU" : available.why || "Fast mode is not available on this computer"}
-              onClick={start}
-              data-ws="fast-start"
+        <label className="fast-field">
+          <span>Storage</span>
+          <span className="select-wrap">
+            <select
+              className="field"
+              aria-label="Storage"
+              title="How the lattice keeps its numbers. 16-bit halves the memory, so a fine lattice fits; set before Start."
+              value={live?.storage ?? storage}
+              disabled={running}
+              onChange={(e) => setStorage(e.target.value)}
+              data-ws="fast-storage"
             >
-              <Play size={12} /> Start
-            </Button>
-          ) : (
-            <Button disabled={busy} onClick={stop} data-ws="fast-stop">
-              <Square size={12} /> Stop
-            </Button>
-          )}
-        </div>
+              {STORAGES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
+        <label className="fast-check" title="A fine lattice (fidelity 4 or 5) first settles a coarse one and starts from its flow; a fidelity raised while running keeps the flow.">
+          <input type="checkbox" checked={live?.warmStart ?? warmStart} disabled={running} onChange={(e) => setWarmStart(e.target.checked)} data-ws="fast-warm" />
+          <span>Warm start from a coarser lattice</span>
+        </label>
 
         {legend !== null && (
           <div className="fast-legend" data-ws="fast-legend">
@@ -298,6 +307,26 @@ export default function FastPanel() {
             )}
           </table>
         )}
+      </div>
+      {/* Start, Stop and what the preview says stay in view: the options above scroll, these do not. */}
+      <div className="fast-foot" data-ws="fast-foot">
+        <div className="fast-actions">
+          {!running ? (
+            <Button
+              variant="primary"
+              disabled={busy || project === null || available?.ok !== true}
+              title={project === null ? "Open a project first" : available === null ? "Looking for a GPU…" : available.ok ? "Solve the case on the GPU" : available.why || "Fast mode is not available on this computer"}
+              onClick={start}
+              data-ws="fast-start"
+            >
+              <Play size={12} /> Start
+            </Button>
+          ) : (
+            <Button disabled={busy} onClick={stop} data-ws="fast-stop">
+              <Square size={12} /> Stop
+            </Button>
+          )}
+        </div>
         {lines.length > 0 && (
           <div className="fast-stats" role="status" aria-live="polite" data-ws="fast-stats">
             {lines.map((line, index) => (

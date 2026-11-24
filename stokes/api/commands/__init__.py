@@ -2,6 +2,7 @@
 
 from stokes.api.commands import (  # noqa: F401
     boundary,
+    boundary_profile,
     case,
     case_files,
     case_settings,

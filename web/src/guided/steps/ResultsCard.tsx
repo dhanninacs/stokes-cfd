@@ -45,6 +45,7 @@ import StreamsSummary from "../../panels/StreamsSummary";
 import FieldPicker from "../../panels/FieldPicker";
 import ColormapPicker from "../../panels/ColormapPicker";
 import TimeBlock from "../TimeBlock";
+import TimeScopeChoice from "../../panels/TimeScopeChoice";
 import ShownSurfaces from "../ShownSurfaces";
 import { fitRange } from "../fitRange";
 import { contourLinesOn, linesFor, withContourLines } from "../analyseModel";
@@ -400,6 +401,7 @@ export default function ResultsCard({ step }: { step: GuidedStep }) {
                 />
               </div>
             </Tooltip>
+            <TimeScopeChoice />
             {rangeMode === "manual" && (
               <div className="looks-row">
                 <span className="looks-label" />

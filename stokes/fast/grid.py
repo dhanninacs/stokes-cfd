@@ -3,8 +3,8 @@
 One setting, the fidelity (1 to 5, as Discovery's slider), sets the number of cells across the
 smallest side of the fluid's bounding box. The cells are cubes; the grid is the box plus
 ``PADDING`` cells on every side, so every fluid cell has a solid neighbour layer around it and no
-step ever reads past the grid. A cap on the cell count (and the adapter's buffer limit) coarsens
-the grid rather than refusing it, and the grid says it did.
+step ever reads past the grid. A cap on the cell count (the adapter's buffer limit: the
+populations are one buffer) coarsens the grid rather than refusing it, and the grid says it did.
 """
 
 from __future__ import annotations
@@ -18,11 +18,23 @@ from stokes.fast.errors import FastInvalid
 CELLS_ACROSS = {1: 24, 2: 32, 3: 48, 4: 64, 5: 96}
 FIDELITY_DEFAULT = 2
 PADDING = 2
-#: Cells a grid may hold by default: about 1.2 GB of populations in f32.
-MAX_CELLS = 8_000_000
-#: Bytes a lattice cell needs on the device: two sets of 19 populations, a flag, the velocity
-#: with the stress's mean, and two temperatures.
-BYTES_PER_CELL = (2 * 19 + 1 + 4 + 2) * 4
+#: The most cells any grid holds. What caps a grid in practice is the adapter's largest buffer
+#: binding, which the populations' one buffer must fit (``cell_limit``): 28 million cells in f32
+#: and 56 million in 16 bits at the usual 2 GiB.
+MAX_CELLS = 64_000_000
+
+
+def bytes_per_cell(storage: str = "f32") -> int:
+    """Bytes a lattice cell needs on the device: nineteen populations (4 bytes each, 2 in 16-bit
+    storage), a flag, the velocity with the density, the stress's mean, and two temperatures:
+    108, or 70. (Two population buffers made it 184.)"""
+    return 19 * (2 if storage == "f16" else 4) + (1 + 4 + 1 + 2) * 4
+
+
+def cell_limit(max_binding: int, storage: str = "f32") -> int:
+    """The cells a grid may hold on an adapter whose largest buffer binding is ``max_binding``
+    bytes: the populations are the largest buffer."""
+    return min(MAX_CELLS, max_binding // (19 * (2 if storage == "f16" else 4)))
 
 
 @dataclass(frozen=True)
@@ -70,7 +82,6 @@ def grid_for(
     high: tuple[float, float, float],
     fidelity: int = FIDELITY_DEFAULT,
     max_cells: int = MAX_CELLS,
-    max_bytes: int | None = None,
 ) -> Grid:
     """The grid over the box ``low``..``high`` (m) at ``fidelity``."""
     if fidelity not in CELLS_ACROSS:
@@ -81,9 +92,7 @@ def grid_for(
     sides = [high[a] - low[a] for a in range(3)]
     if not all(math.isfinite(s) and s > 0.0 for s in sides):
         raise FastInvalid("the fluid has no finite, non-empty box", details={"box": [low, high]})
-    limit = max_cells
-    if max_bytes is not None:
-        limit = min(limit, max_bytes // BYTES_PER_CELL)
+    limit = min(max_cells, MAX_CELLS)
     dx = min(sides) / CELLS_ACROSS[fidelity]
     coarsened = False
     while _count(sides, dx) > limit:

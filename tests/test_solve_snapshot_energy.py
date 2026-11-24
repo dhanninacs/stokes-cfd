@@ -18,6 +18,7 @@ import pytest
 from stokes.api import Session
 from stokes.compile.snapshot import (
     ENERGY_FIELDS,
+    PROFILE_FIELDS,
     THERMAL_FIELDS,
     TURBULENCE_FIELDS,
     PatchCondition,
@@ -102,6 +103,8 @@ def legacy_basis(snap: SolveSnapshot) -> str:
         for name in (*THERMAL_FIELDS, *TURBULENCE_FIELDS):
             patch.pop(name)
         patch.pop("mass_flow")  # added with the mass-flow inlet; dropped from the basis when None
+        for name in PROFILE_FIELDS:  # added with time profiles; dropped from the basis when None
+            patch.pop(name)
     doc: dict[str, Any] = {
         "writer": WRITER_VERSION,
         "engine": "e",

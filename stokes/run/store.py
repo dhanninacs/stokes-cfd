@@ -231,6 +231,15 @@ class RunStore:
         self._field_ranges: dict[str, dict[str, tuple[float, float]]] = {}
         #: `{run id: time}`, the solved time the artifact was cut at.
         self._field_time: dict[str, float] = {}
+        #: `{run id: tables}`: a finished run's monitor histories by patch, read once from its host
+        #: for the values at a written time (`results_streams.monitors_at`). A finished job's
+        #: `postProcessing/` cannot change, so the tables are kept for the session.
+        self._monitor_tables: dict[str, Any] = {}
+        #: `{run id: worker}` for the all-times field ranges being computed (`time_ranges.py`).
+        self._range_workers: dict[str, threading.Thread] = {}
+        #: Held across one `extract.fields` and its download: the agent keeps ONE fields artifact
+        #: per job, so a time being shown and the all-times ranges must not extract at once.
+        self.extract_lock = threading.Lock()
         #: `{run id: time}` a user chose with `run.time`; every later cut of the run (fields,
         #: planes, iso-surfaces) is made at it. Absent means the latest, as a run starts with.
         self._chosen_time: dict[str, float] = {}
@@ -739,6 +748,9 @@ class RunStore:
             if blocks:
                 last = dict(blocks[-1].get("residuals") or {})
                 iterations = iterations or int(blocks[-1].get("iteration") or 0)
+        with self._lock:
+            held = self._history.get(run_id, {}).get("blocks") or []
+            sim_time = _last_time(held[-50:], found.sim_time)
         final = state
         if state == "done":
             # **An imported case that reached its `End` is done, not "unconverged".** The report's
@@ -752,7 +764,12 @@ class RunStore:
             # A mesh-only run (`kind: mesh`, the Mesh step's Generate) solves nothing: its job
             # finishing is the whole success criterion.
             meshed = found.kind == "mesh"
-            final = "done" if converged or ended or meshed else "done_unconverged"
+            # **A transient run that reached its end time finished as asked** (ADR-0022 addendum
+            # 2026-11-24): a time-accurate run has no convergence to reach, so "not converged"
+            # said something untrue about it. A stopped one keeps `done_unconverged` (it is a
+            # result to resume), and so does one that ended early.
+            simulated = found.transient and not found.stopped and _reached(sim_time, found.end_time)
+            final = "done" if converged or ended or meshed or simulated else "done_unconverged"
             # **A SECOND finish must not downgrade a converged run.** An empty report means the read
             # raced or failed, not that the solver failed to converge — and a run already
             # recorded as
@@ -801,6 +818,7 @@ class RunStore:
             state=final,
             converged=converged,
             iterations=iterations,
+            sim_time=sim_time,
             last_residuals=last,
             monitors=monitors,
             timings={"seconds": seconds} if seconds is not None else {},
@@ -1039,30 +1057,32 @@ class RunStore:
         try:
             runner = HostRegistry.of(self._session).runner(record.host or "local")
             extra: dict[str, Any] = {} if time is None else {"time": float(time)}
-            summary = runner.call(
-                "extract.fields",
-                job=record.job,
-                surfaces_job=record.mesh_job or record.job,
-                slice=self.slice_plane(),
-                timeout=EXTRACT_FIELDS_TIMEOUT_S,
-                **extra,
-            )
-            if not isinstance(summary, dict):
-                raise RunError("extract.fields returned no summary")
             path = self.fields_path(run_id)
             # **Fetched beside the file, then swapped in under the view lock** (T-310): a client
             # reading the run's fields keeps the old file mapped, and on Windows a mapped file
             # cannot be replaced. `_load_fields_file` maps under the same lock, so between the
             # view's release and the replace no reader can map the old file again.
             incoming = path.with_name(path.name + ".next")
-            fetch_artifact(
-                runner,
-                record.job,
-                str(summary["artifact"]),
-                incoming,
-                str(summary["sha256"]),
-                int(summary["size"]),
-            )
+            # One extraction at a time: the agent keeps one artifact per job (`extract_lock`).
+            with self.extract_lock:
+                summary = runner.call(
+                    "extract.fields",
+                    job=record.job,
+                    surfaces_job=record.mesh_job or record.job,
+                    slice=self.slice_plane(),
+                    timeout=EXTRACT_FIELDS_TIMEOUT_S,
+                    **extra,
+                )
+                if not isinstance(summary, dict):
+                    raise RunError("extract.fields returned no summary")
+                fetch_artifact(
+                    runner,
+                    record.job,
+                    str(summary["artifact"]),
+                    incoming,
+                    str(summary["sha256"]),
+                    int(summary["size"]),
+                )
             try:
                 with self._lock:
                     cached = self._field_views.pop(str(path), None)
@@ -1965,6 +1985,53 @@ class RunStore:
 
         threading.Thread(target=work, name="stokes-iso-cut", daemon=True).start()
 
+    @property
+    def session(self) -> Session:
+        """The session this store belongs to."""
+        return self._session
+
+    def emit_event(self, name: str, data: dict[str, Any]) -> None:
+        """Emit a run event (for the helpers beside the store, `time_ranges.py`)."""
+        self._emit(name, data)
+
+    def spans_of(
+        self, header: dict[str, Any], low_key: str, high_key: str
+    ) -> dict[str, tuple[float, float]]:
+        """`{field: (low, high)}` over every patch and the slice of an artifact header."""
+        return self._spans(header, low_key, high_key)
+
+    def volume_spans_of(self, header: dict[str, Any]) -> dict[str, tuple[float, float]]:
+        """`{field: (min, max)}` over the internal mesh of an artifact header."""
+        return self._volume_ranges(header)
+
+    def claim_range_worker(self, run_id: str, worker: threading.Thread) -> bool:
+        """Register the all-times ranges worker of a run; False when one is already going."""
+        with self._lock:
+            going = self._range_workers.get(run_id)
+            if going is not None and going.is_alive():
+                return False
+            self._range_workers[run_id] = worker
+            return True
+
+    def release_range_worker(self, run_id: str) -> None:
+        with self._lock:
+            self._range_workers.pop(run_id, None)
+
+    def range_worker_alive(self, run_id: str) -> bool:
+        with self._lock:
+            going = self._range_workers.get(run_id)
+            return going is not None and going.is_alive()
+
+    def monitor_tables(self, run_id: str) -> Any:  # Any: results_streams' tables
+        """The monitor tables kept for a finished run, or None."""
+        with self._lock:
+            return self._monitor_tables.get(run_id)
+
+    def keep_monitor_tables(self, run_id: str, tables: Any) -> None:  # Any: as above
+        """Keep a finished run's monitor tables for the session."""
+        with self._lock:
+            self._monitor_tables[run_id] = tables
+
     def fields_status(self, run_id: str | None = None) -> dict[str, Any]:
         """What `run.fields` answers: the names, their ranges, and whether the cache is there.
 
@@ -2009,10 +2076,21 @@ class RunStore:
             entries.append(entry)
         time_value = float(header.get("time") or 0.0)
         times = [float(value) for value in header.get("times") or [time_value]]
+        # **The range over every written time** (`time_ranges.py`), once worked out: the legend's
+        # default for a run with several times, so the frames of a playback share one scale.
+        from stokes.run import time_ranges
+
+        cached = time_ranges.read_cached(self, found.id)
+        if cached is not None:
+            for entry in entries:
+                over = time_ranges.field_entry(cached, str(entry["name"]))
+                if over is not None:
+                    entry["all_times"] = over
         return {
             "run": found.id,
             "time": time_value,
             "times": times,
+            "time_ranges": "ready" if cached is not None else time_ranges.status(self, found.id),
             "fields": entries,
             "slice": self._has_slice(header),
             # **The cells the slice could not draw** (the T0 review's item 4): the agent re-cuts
@@ -2588,6 +2666,20 @@ def _now() -> str:
     from datetime import datetime
 
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _last_time(blocks: Sequence[dict[str, Any]], before: float) -> float:
+    """The physical time of the last residual block that carries one; `before` when none does."""
+    for block in reversed(blocks):
+        value = block.get("time")
+        if isinstance(value, int | float) and math.isfinite(value):
+            return float(value)
+    return before
+
+
+def _reached(sim_time: float, end_time: float) -> bool:
+    """Whether a transient run got to its end time, within the solver's own rounding of it."""
+    return end_time > 0 and sim_time >= end_time * (1.0 - 1e-6)
 
 
 def _is_run_id(run_id: object) -> bool:

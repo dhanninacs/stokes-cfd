@@ -41,8 +41,11 @@ functions
     #includeFunc stopAtFile(action=writeNow)  // Stop writes the current iteration and ends the run
     #includeFunc patchFlowRate(patch=cold_inlet)  // mass flow rate through cold_inlet
     #includeFunc patchAverage(patch=cold_inlet, fields=(p T))  // area-averaged p and T on cold_inlet
+    #includeFunc patchAverage(funcName=bulkT_cold_inlet, patch=cold_inlet, fields=(T), operation=average, weightField=phi)  // mass-flow-weighted (bulk) T on cold_inlet
     #includeFunc patchFlowRate(patch=hot_inlet)  // mass flow rate through hot_inlet
     #includeFunc patchAverage(patch=hot_inlet, fields=(p T))  // area-averaged p and T on hot_inlet
+    #includeFunc patchAverage(funcName=bulkT_hot_inlet, patch=hot_inlet, fields=(T), operation=average, weightField=phi)  // mass-flow-weighted (bulk) T on hot_inlet
     #includeFunc patchFlowRate(patch=outlet)  // mass flow rate through outlet
     #includeFunc patchAverage(patch=outlet, fields=(p T))  // area-averaged p and T on outlet
+    #includeFunc patchAverage(funcName=bulkT_outlet, patch=outlet, fields=(T), operation=average, weightField=phi)  // mass-flow-weighted (bulk) T on outlet
 }

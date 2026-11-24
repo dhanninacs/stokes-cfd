@@ -19,6 +19,8 @@ export interface StreamsAnswer {
   /** The heat the heated streams gained against what the cooled ones lost, when both exist. */
   balance: { gained: number; lost: number; imbalance: number } | null;
   units: { massFlow: string; pressure: string };
+  /** The time the numbers are at (a transient run's written row nearest the time asked), or null for the run's last. */
+  time: number | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -27,8 +29,9 @@ const names = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is s
 
 /** The command's answer, read defensively: anything malformed reads as no streams. */
 export function readStreams(raw: unknown): StreamsAnswer {
-  const out: StreamsAnswer = { streams: [], balance: null, units: { massFlow: "kg/s", pressure: "Pa" } };
+  const out: StreamsAnswer = { streams: [], balance: null, units: { massFlow: "kg/s", pressure: "Pa" }, time: null };
   if (!isRecord(raw)) return out;
+  out.time = num(raw.time);
   if (Array.isArray(raw.streams)) {
     for (const s of raw.streams) {
       if (!isRecord(s) || typeof s.region !== "string") continue;

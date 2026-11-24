@@ -53,6 +53,12 @@ export interface FieldInfo {
    */
   p01?: number;
   p99?: number;
+  /**
+   * The field's range over EVERY time a transient run wrote (`run.time_ranges`, ADR-0022 addendum 2026-11-24), once
+   * the server has worked it out: the legend's default for a run with several times, so a playback's frames share
+   * one scale. Absent for a steady run, before it is ready, and from an older server.
+   */
+  allTimes?: { min: number; max: number; p01?: number; p99?: number; times: number };
 }
 
 /** The reply of `run.fields`, trimmed to what the front end uses. */
@@ -77,6 +83,8 @@ export interface RunFields {
   twoD?: boolean;
   /** Every time the run wrote fields at, ascending (a transient run's steps); absent from an older server. */
   times?: number[];
+  /** Whether the ranges over every written time are there (`ready`), being worked out (`computing`) or not asked (`none`). */
+  timeRanges?: "ready" | "computing" | "none";
 }
 
 /** `run.fields`' reply, or null for a payload that is not one (no run id). */
@@ -93,7 +101,16 @@ export function readRunFields(payload: unknown): RunFields | null {
       if (min === null || max === null) continue;
       const p01 = num(f.p01);
       const p99 = num(f.p99);
-      fields.push({ name: text(f.name), units: text(f.units), min, max, ...(p01 !== null && p99 !== null ? { p01, p99 } : {}) });
+      const all = isRecord(f.all_times) ? f.all_times : null;
+      const aMin = num(all?.min);
+      const aMax = num(all?.max);
+      const aLow = num(all?.p01);
+      const aHigh = num(all?.p99);
+      const allTimes =
+        aMin !== null && aMax !== null && aMin <= aMax
+          ? { allTimes: { min: aMin, max: aMax, times: Math.max(0, Math.round(num(all?.times) ?? 0)), ...(aLow !== null && aHigh !== null ? { p01: aLow, p99: aHigh } : {}) } }
+          : {};
+      fields.push({ name: text(f.name), units: text(f.units), min, max, ...(p01 !== null && p99 !== null ? { p01, p99 } : {}), ...allTimes });
     }
   }
   return {
@@ -105,6 +122,7 @@ export function readRunFields(payload: unknown): RunFields | null {
     surfaces: payload.surfaces === "missing" ? "missing" : "ok",
     ...(typeof payload.two_d === "boolean" ? { twoD: payload.two_d } : {}),
     ...(Array.isArray(payload.times) ? { times: payload.times.map(num).filter((t): t is number => t !== null) } : {}),
+    ...(payload.time_ranges === "ready" || payload.time_ranges === "computing" || payload.time_ranges === "none" ? { timeRanges: payload.time_ranges } : {}),
   };
 }
 

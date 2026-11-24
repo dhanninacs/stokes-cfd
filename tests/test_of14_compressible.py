@@ -67,7 +67,7 @@ def test_gas_solves_enthalpy_and_absolute_pressure() -> None:
     assert "Cp              1005.0;" in props
     assert "[1 -1 -2 0 0 0 0]" in files["0/p"]
     assert "uniform 101325.0" in files["0/p"]
-    assert "div(phi,h)" in files["system/fvSchemes"]
+    assert "div(phi,h)      bounded Gauss linearUpwind grad(h);" in files["system/fvSchemes"]
     assert "div(phi,e)" not in files["system/fvSchemes"]
     assert '"(U|h)"' in files["system/fvSolution"]
     assert "p_rgh" not in files["system/fvSolution"]

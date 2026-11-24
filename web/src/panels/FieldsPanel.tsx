@@ -41,11 +41,14 @@ import { showResults, useHasFinishedRun } from "./resultsControl";
 import FieldPicker from "./FieldPicker";
 import ColormapPicker from "./ColormapPicker";
 import { fitRange } from "../guided/fitRange";
+import TimeBlock from "../guided/TimeBlock";
 import { prettyUnits } from "./variablesModel";
 import SlicesSection from "./SlicesSection";
 import IsoSection from "./IsoSection";
 import { copyTableText, saveTextFile } from "./monitorsExport";
-import { FLOW_UNITS, csvFileName, dropSymbol, csvText, monitorRows, monitorsOf, pressureDrop, runForMonitors, tableText } from "./monitorsModel";
+import { FLOW_UNITS, atTimeText, csvFileName, dropSymbol, csvText, monitorRows, pressureDrop, runForMonitors, tableText } from "./monitorsModel";
+import { useMonitorsAt } from "./monitorsAt";
+import TimeScopeChoice from "./TimeScopeChoice";
 import ProbePanel from "./ProbePanel";
 import ArrowsSection from "./ArrowsSection";
 import ReportSection from "./ReportSection";
@@ -278,7 +281,10 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
   const shownRun = useMemo(() => runForMonitors(runs, results.run), [runs, results.run]);
   const newest = runs[0] ?? null;
   const plotRun = newest !== null && series !== null && seriesRun === newest.id ? newest : null;
-  const monitors = useMemo(() => monitorsOf(shownRun), [shownRun]);
+  // The openings at the time on screen: a transient run's follow the time slider (ADR-0022 addendum 2026-11-24).
+  const atTime = useMonitorsAt(shownRun);
+  const monitors = atTime.monitors;
+  const monitorsWhen = atTimeText(shownRun?.transient === true, atTime.at, atTime.last, shownRun?.endTime ?? null);
   const pUnits = fieldUnits(data, "p");
   const rows = useMemo(() => monitorRows(monitors), [monitors]);
   const drop = useMemo(() => pressureDrop(monitors, pUnits), [monitors, pUnits]);
@@ -325,6 +331,8 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
             )}
           </Button>
         </div>
+        {/* A transient run's times, as on the Guided card: Full mode steps and plays them here too. */}
+        <TimeBlock ws="results-time" />
       </section>
 
       {shown("field") && (
@@ -418,6 +426,7 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
               <ChevronsUpDown size={13} className="select-chevron" aria-hidden="true" />
             </div>
           </Tooltip>
+          <TimeScopeChoice />
           <div className="results-range">
             <RangeInput label="Min" value={range === null ? null : range.min} disabled={!locked || !colouring} why={!colouring ? "Turn on a field to colour the mesh with first." : "Pick Locked or Manual to type the ends"}
                 onCommit={(v) => update((live) => setView(live, setManualEnd(live.view, live.data, "min", v)))} />
@@ -447,10 +456,10 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
           {/* The chart is drawn only while the Results stage is in front: every tab of the slot is mounted, and the Solve panel and the drawer draw the same series. */}
           {stage === "Results" && plotRun !== null && series !== null && series.iterations.length > 0 ? (
             <>
-              <ResidualPlot series={series} target={residualTarget(settings)} />
+              <ResidualPlot series={series} target={residualTarget(settings)} transient={plotRun.transient === true} />
               <dl className="mesh-counts" aria-label="Final residuals" data-ws="results-final">
                 <div>
-                  <dt className="muted">Iterations</dt>
+                  <dt className="muted">{plotRun.transient === true ? "Time steps" : "Iterations"}</dt>
                   <dd>{plotRun.iterations > 0 ? plotRun.iterations : series.iterations[series.iterations.length - 1]}</dd>
                 </div>
                 {plotRun.last.map((f) => (
@@ -478,8 +487,8 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
                   <th scope="col" className="muted">
                     Patch
                   </th>
-                  <th scope="col" className="muted">
-                    Flow ({FLOW_UNITS})
+                  <th scope="col" className="muted" title={atTime.directed ? "Each opening's flow in its own direction: into the model at an inlet, out at an outlet. Negative is backflow." : "The solver's flow rate: positive out of the model, so an inlet's is negative."}>
+                    {atTime.directed ? "Flow in/out" : "Flow"} ({FLOW_UNITS})
                   </th>
                   <th scope="col" className="muted">
                     Mean {pressureLabel(pUnits)} ({pUnits})
@@ -498,6 +507,11 @@ export default function FieldsPanel({ section }: { section?: string } = {}) {
             </table>
           ) : (
             <Note className="mesh-hint" tip={shownRun === null ? "The flow rate and mean pressure of each patch appear here once a run has finished." : "This run reported no monitors."}>{shownRun === null ? "No run yet" : "No monitors"}</Note>
+          )}
+          {monitorsWhen !== "" && rows.length > 0 && (
+            <p className="muted monitors-when" data-ws="monitors-when">
+              {monitorsWhen.charAt(0).toUpperCase() + monitorsWhen.slice(1)}
+            </p>
           )}
           {drop !== null && (
             <p className="monitors-drop" data-ws="monitors-drop">

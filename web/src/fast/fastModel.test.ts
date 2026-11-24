@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUTOMATIC_PLANE, FAST_FIELDS, FIDELITIES, PLANES, TURBULENCE, fieldsFor, resolutionWarning, flowText, heatText, massFlowText, streamRows, zonesLine, frameKey, frameWarning, gridNotes, legendOf, planeOffset, planeShare, pressureText, previewRuns, readFrame, readStatus, statsLines } from "./fastModel";
+import { AUTOMATIC_PLANE, FAST_FIELDS, FIDELITIES, PLANES, STORAGES, TURBULENCE, fieldsFor, resolutionWarning, flowText, heatText, massFlowText, streamRows, zonesLine, frameKey, frameWarning, gridNotes, legendOf, planeOffset, planeShare, pressureText, previewRuns, readFrame, readStatus, statsLines } from "./fastModel";
 
 const FRAME = {
   step: 40000,
@@ -81,8 +81,8 @@ describe("the panel's words", () => {
   });
 
   it("says the lattice is building before the first frame", () => {
-    const lines = statsLines(readStatus({ state: "starting", grid: { fidelity: 2, cells: 500_000 } }));
-    expect(lines).toEqual(["Fidelity 2 · 500 k cells · laminar", "Building the lattice…"]);
+    const lines = statsLines(readStatus({ state: "starting", grid: { fidelity: 2, cells: 500_000, fluid_cells: 390_000 } }));
+    expect(lines).toEqual(["Fidelity 2 · 390 k cells · laminar", "Building the lattice…"]);
   });
 
   it("writes a pressure and a flow with the prefix that reads best", () => {
@@ -97,7 +97,10 @@ describe("the panel's words", () => {
   });
 
   it("warns when the numbers cannot be trusted, worst first", () => {
-    expect(frameWarning(readFrame({ ...FRAME, unstable: true, guard: 5 }))).toMatch(/unstable/);
+    expect(frameWarning(readFrame({ ...FRAME, unstable: true, guard: 5 }))).toMatch(/Unstable: these numbers are not valid/);
+    expect(frameWarning(readFrame({ ...FRAME, unstable: true, instability: "imbalance" }))).toMatch(/^Unstable \(the flow out and the flow in drifted apart\)/);
+    expect(readFrame({ ...FRAME, unstable: true, instability: "guard" }).instability).toBe("guard");
+    expect(readFrame(FRAME).instability).toBe("");
     expect(frameWarning(readFrame({ ...FRAME, guard: 12 }))).toMatch(/not reliable/);
     expect(frameWarning(readFrame({ ...FRAME, imbalance: -0.08 }))).toMatch(/flow out differs/);
     // While the flow settles the two flows differ by nature: no warning then.
@@ -215,9 +218,48 @@ describe("a preview of several bodies", () => {
     expect(legendOf({ field: "T", min: 300, max: 342.63 }, 998)).toEqual({ title: "Temperature, K", low: "300.0", high: "342.6" });
   });
 
-  it("says a steady preview is holding, and offers three closures", () => {
+  it("says a steady preview is holding, and offers the closures", () => {
     expect(statsLines(status).at(-1)).toBe("Steady · holding (edit to resume)");
-    expect(TURBULENCE.map((t) => t.value)).toEqual(["auto", "shear_improved", "smagorinsky"]);
+    expect(TURBULENCE.map((t) => t.value)).toEqual(["auto", "shear_improved", "smagorinsky", "wale", "vreman"]);
+  });
+});
+
+describe("round 4: storage and the warm start", () => {
+  it("offers 32-bit and 16-bit storage and reads what the run uses", () => {
+    expect(STORAGES.map((s) => s.value)).toEqual(["f32", "f16"]);
+    expect(readStatus({ state: "running" })).toMatchObject({ storage: "f32", warmStart: true, warming: false });
+    const half = readStatus({ state: "running", grid: GRID, storage: "f16", warm_start: false, frame: FRAME });
+    expect(half).toMatchObject({ storage: "f16", warmStart: false });
+    expect(statsLines(half)[0]).toContain("16-bit");
+  });
+
+  it("says a warm start is on its coarse lattice, and never calls that steady", () => {
+    const coarse = readStatus({ state: "running", grid: GRID, fidelity: 5, warming: true, frame: { ...FRAME, warming: true, steady: false } });
+    expect(coarse.warming).toBe(true);
+    expect(statsLines(coarse).at(-1)).toBe("Warm start · settling a coarse lattice first (then fidelity 5)…");
+  });
+
+  it("says a lattice took its flow from another until it is steady", () => {
+    const raised = readStatus({ state: "running", grid: GRID, frame: { ...FRAME, steady: false, warmed_from: 2 } });
+    expect(raised.frame?.warmedFrom).toBe(2);
+    expect(statsLines(raised).at(-1)).toBe("Warm start from fidelity 2 · settling…");
+    expect(statsLines(readStatus({ state: "running", grid: GRID, frame: { ...FRAME, steady: false } })).at(-1)).toBe("Settling…");
+    expect(statsLines(readStatus({ state: "running", grid: GRID, frame: { ...FRAME, steady: true, warmed_from: null } })).at(-1)).toBe("Steady");
+  });
+
+  it("heads the lines with the frame's grid, not a status a second old", () => {
+    // A fidelity raised to 4: the status still has grid 3 (987 k cells), the frame is the new grid's.
+    const uncounted = readStatus({ state: "running", grid: GRID, frame: { ...FRAME, steady: false, warmed_from: 3, fidelity: 4, fluid_cells: 0 } });
+    expect(statsLines(uncounted)[0]).toBe("Fidelity 4 · laminar");
+    const counted = readStatus({ state: "running", grid: GRID, frame: { ...FRAME, steady: false, warmed_from: 3, fidelity: 4, fluid_cells: 2_340_000 } });
+    expect(statsLines(counted)[0]).toBe("Fidelity 4 · 2.3 M cells · laminar");
+    expect(statsLines(counted).at(-1)).toBe("Warm start from fidelity 3 · settling…");
+  });
+
+  it("counts the fluid's cells, and says none before the lattice has counted them", () => {
+    expect(statsLines(readStatus({ state: "running", grid: GRID, frame: FRAME }))[0]).toContain("987 k cells");
+    const uncounted = readStatus({ state: "running", grid: { ...GRID, fluid_cells: 0 }, frame: FRAME });
+    expect(statsLines(uncounted)[0]).toBe("Fidelity 3 · laminar");
   });
 });
 

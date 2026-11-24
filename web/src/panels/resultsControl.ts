@@ -76,8 +76,50 @@ export function useHasFinishedRun(): boolean {
   return useStore((s) => s.run.runs.some(isFinalRun));
 }
 
+// ---------------------------------------------------------------------------------------------- the ranges over every time
+/** The runs whose all-times ranges were asked for, so a run is asked once a session. */
+const rangesAsked = new Set<string>();
+
+/**
+ * A transient run's results read with several times and no all-times range yet: ask the server to work it out
+ * (`run.time_ranges`, in the background); `run.ranges` then reads the results again, and the legend's Auto range
+ * spans every time (ADR-0022 addendum 2026-11-24).
+ */
+function askTimeRanges(live: ResultsLive): void {
+  const data = live.data;
+  const { client } = useStore.getState();
+  if (client === null || data === null || data.timeRanges === "ready" || data.timeRanges === undefined) return;
+  if ((data.times ?? []).filter((t) => t > 0).length < 2 || rangesAsked.has(data.run)) return;
+  rangesAsked.add(data.run);
+  client
+    .call<{ state?: string }>("run.time_ranges", { run: data.run })
+    .then((reply) => {
+      if (reply?.state !== "computing") return;
+      // Say it is on its way until `run.ranges` reads the results again.
+      setResults((now) => (now.data !== null && now.data.run === data.run && now.data.timeRanges !== "ready" ? { ...now, data: { ...now.data, timeRanges: "computing" } } : now));
+    })
+    .catch(() => rangesAsked.delete(data.run));
+}
+
+let rangesWired: unknown = null;
+
+function wireRangeEvents(): void {
+  const { client } = useStore.getState();
+  if (client === null || client === rangesWired) return;
+  rangesWired = client;
+  client.onEvent((event, data) => {
+    if (event !== "run.ranges") return;
+    const shown = useStore.getState().results.data;
+    if (shown !== null && data.run_id === shown.run) void loadResults();
+  });
+}
+
 // ---------------------------------------------------------------------------------------------- the wiring
 useStore.subscribe((state, previous) => {
+  if (state.results.data !== previous.results.data && state.results.data !== null) {
+    wireRangeEvents();
+    askTimeRanges(state.results);
+  }
   // A run's end: read its results now, whichever stage the window is in.
   const note = state.run.notice;
   if (note !== null && note !== previous.run.notice && (note.state === "done" || note.state === "done_unconverged")) {

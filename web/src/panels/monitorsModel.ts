@@ -122,3 +122,40 @@ export function runForMonitors<R extends Pick<RunSummary, "id" | "state">>(runs:
   if (held !== undefined && done(held)) return held;
   return runs.find(done) ?? null;
 }
+
+/** `run.monitors_at`'s answer: each opening's values at the written row nearest the time asked (`time`). */
+export interface MonitorsAt {
+  /** The time of the rows used, or null when the server found none. */
+  time: number | null;
+  /** In patch order; `flowRate` is the flow in the opening's own direction (into the domain at an inlet). */
+  monitors: MonitorValue[];
+}
+
+/** `run.monitors_at`'s reply, read defensively; null for a payload that is not one. */
+export function readMonitorsAt(raw: unknown): MonitorsAt | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const table = r.monitors;
+  if (typeof table !== "object" || table === null || Array.isArray(table)) return null;
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const monitors: MonitorValue[] = [];
+  for (const [patch, entry] of Object.entries(table as Record<string, unknown>)) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const e = entry as Record<string, unknown>;
+    monitors.push({ patch, flowRate: num(e.flow) ?? num(e.flow_rate), pMean: num(e.p_mean) });
+  }
+  monitors.sort((a, b) => a.patch.localeCompare(b.patch));
+  return { time: num(r.sampled), monitors };
+}
+
+/**
+ * Which time a transient run's numbers are at, in words: "at t = 0.25 s", "at t = 0.4 s (last)"; "" for a steady
+ * run, whose numbers are its end. `at` null (the record's numbers while the time's are on their way) says "last".
+ */
+export function atTimeText(transient: boolean, at: number | null, last: boolean, endTime: number | null = null): string {
+  if (!transient) return "";
+  const t = at ?? endTime;
+  if (t === null) return "at the last time";
+  const shown = Number(t.toPrecision(4));
+  return `at t = ${shown} s${last || at === null ? " (last)" : ""}`;
+}

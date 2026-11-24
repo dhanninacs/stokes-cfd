@@ -159,6 +159,7 @@ def _control_dict(snap: SolveSnapshot) -> Dict:
                     f"area-averaged p and T on {patch}",
                 )
             )
+            monitors.append(fluid_writer.bulk_temperature_function(patch, region.name))
     return Dict(
         (
             Entry("regionSolvers", solvers),

@@ -34,6 +34,7 @@ import { useStore } from "../state/store";
 import { kindState } from "./kindAvailability";
 import { Button } from "../components/ui";
 import { assignCommand, assignTarget } from "./assignTarget";
+import { droppedOf, toastChange } from "./droppedProfiles";
 import { groupKinds, defaultName, enterMayCommit, nameToSend, targetLine } from "./conditionPanelLogic";
 import { defaultValues, formFields, moreFields, submittedValues } from "./conditions";
 // The `.tsx` is REQUIRED: `./SchemaFields` would case-match the helpers' `schemaFields.ts` on Windows
@@ -150,6 +151,7 @@ export default function ConditionPanel({ kind, anchor, onClose }: ConditionPanel
       await useStore.getState().refresh();
       const shared = overlapAfterAssign(result?.boundary);
       if (shared !== null) useStore.getState().pushToast("info", shared);
+      if (droppedOf(result).length > 0) void toastChange(result, `${kind.label} assigned`);
       // The new boundary is selected, as the Assign menu does: the tree opens the rows on the way to it and Properties shows it.
       const id = result?.boundary?.id;
       if (id) useStore.getState().select(id, { keepPick: true });

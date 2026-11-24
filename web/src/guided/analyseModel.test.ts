@@ -5,6 +5,7 @@ import {
   defaultSurfaces,
   fieldChoices,
   formatValue,
+  historyCaption,
   functionNameProblem,
   histogramChart,
   linesFor,
@@ -224,5 +225,16 @@ describe("lines again over a hidden mid-plane slice", () => {
     const again = linesFor(hidden, true, { axis: "z", offset: 0.0051 }, true, 8);
     expect(again.slices.list).toHaveLength(1);
     expect(again.slices.list[0]!.visible).toBe(true);
+  });
+});
+
+describe("the history caption", () => {
+  it("is the whole text, max and last period's mean included, for the plot to wrap", () => {
+    // Checked by review: the transient caption was cut with an ellipsis at 1600 px, hiding the max.
+    const stats = { min: -1.867, mean: -0.08, max: 1.9, periodMean: -0.05 };
+    const text = historyCaption("Mean p, inlet", "m2/s2", null, stats, true);
+    expect(text).toBe(`Mean p, inlet (m2/s2): min ${formatValue(-1.867)} · mean ${formatValue(-0.08)} · max ${formatValue(1.9)} · last period's mean ${formatValue(-0.05)} (after the start-up)`);
+    expect(historyCaption("Residual", "", { last: 1e-5, change: 0.01 }, null, false)).toBe(`Residual: ${formatValue(1e-5)}, settled`);
+    expect(historyCaption("Residual", "", { last: 2, change: 3.25 }, null, false)).toContain("moved 3.3 % over the last tenth");
   });
 });
