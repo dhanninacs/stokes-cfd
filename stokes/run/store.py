@@ -89,6 +89,9 @@ RUN_TIMEOUT_S = 7200.0
 #: overnight, and the file on disk is authoritative past it.
 MAX_HISTORY = 200_000
 
+#: How many times the fields swap is tried while Windows refuses it (`_replace_with_retries`, waits
+#: growing by 0.05 s: about 4 s in all), before the refusal is reported as another program's.
+FIELDS_SWAP_TRIES = 12
 #: Where a run's fields live: `<cache>/results/<run id>.stkfld` (T-216), the mesh cache's sibling.
 RESULTS_FOLDER = "results"
 RESULTS_SUFFIX = ".stkfld"
@@ -1088,7 +1091,19 @@ class RunStore:
                     cached = self._field_views.pop(str(path), None)
                     if cached is not None:
                         self._close_view(cached[1])
-                    incoming.replace(path)
+                    # **Retried, not tried once** (2026-11-25): Windows refuses the rename while
+                    # any other handle has the old file open - a project copy, a virus scan, or
+                    # another Stokes process on this project mapping it - and a single refusal
+                    # left the time slider unable to move at all.
+                    _replace_with_retries(incoming, path, tries=FIELDS_SWAP_TRIES, wait=0.05)
+            except PermissionError as exc:
+                with contextlib.suppress(OSError):
+                    incoming.unlink()
+                raise RunError(
+                    "the run's fields file is held open by another program, so another time "
+                    "cannot be shown; close any other Stokes window or server using this project "
+                    f"and try again ({exc})"
+                ) from exc
             except OSError:
                 # **The old file is still whole**, so it is kept: `target` is set only once the
                 # new one is in place, and the handler below removes the cache only then.

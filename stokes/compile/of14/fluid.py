@@ -23,7 +23,12 @@ from stokes.compile.foam import (
     Word,
     render_file,
 )
-from stokes.compile.parallel import decompose_par_dict, decompose_step, reconstruct_fields_step
+from stokes.compile.parallel import (
+    decompose_par_dict,
+    decompose_step,
+    reconstruct_fields_step,
+    written_times,
+)
 from stokes.compile.snapshot import (
     CONSTRAINT_KINDS,
     THERMAL_KINDS,
@@ -118,7 +123,17 @@ def steps(snap: SolveSnapshot) -> list[dict[str, Any]]:
         }
     )
     if snap.cores > 1:
-        run.append(reconstruct_fields_step())
+        run.append(
+            reconstruct_fields_step(
+                written_times(
+                    transient=snap.transient,
+                    end_time=snap.end_time,
+                    write_time=snap.write_time,
+                    delta_t=snap.delta_t,
+                    write_interval=snap.write_interval,
+                )
+            )
+        )
     return run
 
 

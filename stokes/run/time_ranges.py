@@ -23,6 +23,7 @@ import contextlib
 import json
 import math
 import mmap
+import os
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -158,7 +159,12 @@ def _measure(store: RunStore, run_id: str, times: list[float]) -> dict[str, Any]
     spans: Spans = {}
     percentiles: Spans = {}
     volume: Spans = {}
-    scratch = ranges_path(store, run_id).with_name(f"{run_id}.ranges.stkfld")
+    # **One scratch file per process and worker**, not per run: two Stokes processes on one
+    # project (a second window, or a server left running) both work the ranges out, and a shared
+    # name made one fail with `WinError 32` while the other held the file (2026-11-25).
+    scratch = ranges_path(store, run_id).with_name(
+        f"{run_id}.ranges.{os.getpid()}.{threading.get_ident()}.stkfld"
+    )
     scratch.parent.mkdir(parents=True, exist_ok=True)
     for time in times:
         with store.extract_lock:

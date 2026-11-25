@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from stokes.compile.foam import Dict, Entry, Tuple_, Word, render_file
 from stokes.cores import core_count
 from stokes.errors import ValidationError
@@ -58,14 +60,47 @@ def reconstruct_mesh_step() -> dict[str, object]:
     }
 
 
-def reconstruct_fields_step() -> dict[str, object]:
+#: `reconstructPar`'s time limit: a floor, and what each written time adds, up to the agent's
+#: one-day ceiling. Measured 2026-11-25 on native Windows: a 336,723-cell transient run on 12 ranks
+#: reconstructed about 30 s a written time, so its 200 frames overran a flat 1800 s and the solved
+#: run was lost as failed. Twice that per time leaves room for a slower disk.
+RECONSTRUCT_FLOOR_S = 1800
+RECONSTRUCT_PER_TIME_S = 60
+RECONSTRUCT_CEILING_S = 86400
+
+
+def written_times(
+    *, transient: bool, end_time: float, write_time: float, delta_t: float, write_interval: int
+) -> int:
+    """How many time directories a run is expected to write (1 for a steady run).
+
+    A transient run writing every `write_time` seconds writes `end_time / write_time` times; one
+    writing every `write_interval` steps of `delta_t` writes at most that many over `end_time`
+    (an adaptive step only makes the steps longer, so this is an upper bound there).
+    """
+    if not transient or end_time <= 0:
+        return 1
+    if write_time > 0:
+        return max(1, math.ceil(end_time / write_time - 1e-9))
+    if delta_t > 0 and write_interval > 0:
+        return max(1, math.ceil(end_time / (delta_t * write_interval) - 1e-9))
+    return 1
+
+
+def reconstruct_fields_step(writes: int = 1) -> dict[str, object]:
     """Reassemble all solver time directories for the normal result readers.
 
     **No `-fields` list on purpose**: `reconstructPar` with no list reconstructs every field the
     processors hold, so an energy run's `T` and `p_rgh` come back with `U` and `p` without the step
     having to know the engine. `reconstruct_fields_check` is what says which ones must be there.
+    The time limit grows with `writes`, the number of times the run writes (`written_times`): a
+    transient run with many frames takes far longer to reconstruct than a steady one.
     """
-    return {"name": "reconstructPar", "argv": ["reconstructPar"], "timeout_s": 1800}
+    timeout = min(
+        RECONSTRUCT_CEILING_S,
+        max(RECONSTRUCT_FLOOR_S, RECONSTRUCT_FLOOR_S + RECONSTRUCT_PER_TIME_S * (writes - 1)),
+    )
+    return {"name": "reconstructPar", "argv": ["reconstructPar"], "timeout_s": timeout}
 
 
 #: The fields an energy (`of14.fluid`) run must have once reconstructed (ADR-0027 step 4): the

@@ -325,6 +325,82 @@ def test_working_out_the_ranges_extracts_every_time_and_writes_the_cache(
     assert time_ranges.start(store, "r_" + "d" * 12, [0.1]) == "none"
 
 
+def test_the_range_worker_uses_a_scratch_file_of_its_own_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Two Stokes processes on one project both work the ranges out; a scratch name shared by the
+    # run made one fail with WinError 32 while the other held the file (2026-11-25).
+    session = Session()
+    session.execute("project.new", name="duct")
+    store = RunStore.of(session)
+    record = store.add(RunRecord(id=store.new_id(), state="done", job="j_" + "c" * 12))
+    written: list[str] = []
+
+    class Runner:
+        def call(self, method: str, timeout: float = 60.0, **params: Any) -> Any:
+            return {"artifact": "fields.stkfld", "sha256": "x", "size": 1}
+
+    from stokes.run import artifacts, hosts
+
+    monkeypatch.setattr(hosts.HostRegistry, "runner", lambda self, name: Runner())
+
+    def fetch(r: Any, j: Any, n: Any, target: Any, s: Any, z: Any) -> None:
+        written.append(target.name)
+        target.write_bytes(b"x")
+
+    monkeypatch.setattr(artifacts, "fetch_artifact", fetch)
+    monkeypatch.setattr(time_ranges, "_header_of", lambda path: {"patches": []})
+    time_ranges._work(store, record.id, [0.1, 0.2])
+    assert written and all(f".{os.getpid()}." in name for name in written)
+
+
+def test_a_fields_swap_refused_by_another_handle_is_retried_then_explained(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Windows refuses to replace a file another handle holds (a second Stokes process mapping it);
+    # one refusal used to leave the time slider unable to move, with a bare WinError 5.
+    from pathlib import Path
+
+    from stokes.run import artifacts, hosts
+    from stokes.run import store as store_module
+
+    session = Session()
+    session.execute("project.new", name="duct")
+    store = RunStore.of(session)
+    record = store.add(RunRecord(id=store.new_id(), state="done", job="j_" + "c" * 12))
+
+    class Runner:
+        def call(self, method: str, timeout: float = 60.0, **params: Any) -> Any:
+            return {"artifact": "fields.stkfld", "sha256": "x", "size": 1}
+
+    monkeypatch.setattr(hosts.HostRegistry, "runner", lambda self, name: Runner())
+
+    def fetch(r: Any, j: Any, n: Any, target: Any, s: Any, z: Any) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"x")
+
+    monkeypatch.setattr(artifacts, "fetch_artifact", fetch)
+    tries: list[str] = []
+    real_replace = Path.replace
+
+    def refuse(self: Path, target: Any) -> Any:
+        if self.name.endswith(".stkfld.next"):
+            tries.append(self.name)
+            raise PermissionError(5, "Access is denied")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", refuse)
+    monkeypatch.setattr(store_module.time, "sleep", lambda seconds: None)
+    error = store.fetch_fields(record.id, time=0.2)
+    assert len(tries) == store_module.FIELDS_SWAP_TRIES
+    assert "held open by another program" in error
+    assert (
+        not store.fields_path(record.id)
+        .with_name(store.fields_path(record.id).name + ".next")
+        .exists()
+    )
+
+
 def test_the_bulk_temperature_tables_are_read_at_a_time_too() -> None:
     texts = {
         "bulkT_outlet/0/surfaceFieldValue.dat": _table("Time weightedAverage(T)", [(0.001, 305.0)]),

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
+import sys
 import threading
 import time
 
@@ -15,6 +17,19 @@ log = get_logger(__name__)
 
 
 class ServerThread:
+    """The API server on a loopback socket, served from a daemon thread.
+
+    **On Windows it runs on a selector loop, not the proactor loop** uvicorn would pick there.
+    CPython's proactor accept loop closes the listening socket on any `OSError` from an accept, and
+    a client that resets its connection before the accept completes raises `WinError 64` ("the
+    specified network name is no longer available"). The server then ran on with no port: every
+    request was refused while the process looked alive (measured 2026-11-25, twice in an hour, when
+    a browser driving the page was stopped mid-request). The selector loop's accept drops such a
+    connection and keeps listening. The server needs no asyncio subprocesses (the WSL runner runs
+    its own loop in its own thread), and select's 512-socket limit is far above a loopback server's
+    clients.
+    """
+
     def __init__(self, app: FastAPI, host: str = "127.0.0.1", port: int = 0) -> None:
         import uvicorn
 
@@ -38,7 +53,12 @@ class ServerThread:
         self._thread = threading.Thread(target=self._run, name="stokes-server", daemon=True)
 
     def _run(self) -> None:
-        self._server.run(sockets=[self._sock])
+        if sys.platform == "win32":
+            asyncio.run(
+                self._server.serve(sockets=[self._sock]), loop_factory=asyncio.SelectorEventLoop
+            )
+        else:
+            self._server.run(sockets=[self._sock])
 
     def start(self, timeout: float = 15.0) -> str:
         self._thread.start()
