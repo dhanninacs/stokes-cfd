@@ -128,6 +128,12 @@ The ball in the duct again, run transient with the inlet pulsing at
 The time slider and Play drive the picture, the pressure drop, the Monitors
 table and the Streams.
 
+**[docs/video/ball-wake-shedding.mp4](docs/video/ball-wake-shedding.mp4)** (8 s,
+no sound): vortex shedding behind an 8 mm ball in air at 1 m/s (Reynolds number
+about 530), the speed in the middle plane over 0.4 s played through the time
+slider. The wake sheds at about 23 Hz (Strouhal number 0.18); 336,723 cells,
+3,703 adaptive steps in 15 minutes on 12 cores.
+
 ## What you get
 
 - **A guided path and a full tree.** *Guided* mode walks Geometry → Fluid →
