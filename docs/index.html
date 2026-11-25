@@ -98,6 +98,17 @@ description: Stokes is a desktop CFD workbench for OpenFOAM Foundation 14. Impor
         <figcaption><strong>t = 0.88&nbsp;s, near its trough.</strong> Up to 0.28&nbsp;m/s. Same colour scale: the range spans every saved time, so frames compare.</figcaption>
       </figure>
     </div>
+  </div>
+  <figure class="film">
+    <video controls playsinline loop muted preload="none" width="1600" height="900" poster="{{ '/images/ball-wake-shedding-poster.jpg' | relative_url }}">
+      <source src="{{ '/video/ball-wake-shedding.mp4' | relative_url }}" type="video/mp4">
+      Your browser can’t play this video. <a href="{{ '/video/ball-wake-shedding.mp4' | relative_url }}" data-track="video_download_wake" data-track-label="Download the wake video">Download it</a>.
+    </video>
+    <figcaption>Vortex shedding behind the ball: air at 1&nbsp;m/s past an 8&nbsp;mm ball, Reynolds number about 530,
+    speed in the middle plane over 0.4&nbsp;s, played through the time slider. The wake sheds at about 23&nbsp;Hz
+    (Strouhal number 0.18). 336,723 cells with Fast meshing; 3,703 adaptive steps in 15&nbsp;minutes on 12 cores.</figcaption>
+  </figure>
+  <div class="wrap">
     <div class="tiles">
       <article class="tile wide">
         <div class="copy">

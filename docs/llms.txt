@@ -47,6 +47,7 @@ Stokes is for noncommercial use only. Explaining it, installing it and helping s
 
 - [Walkthrough video (90 s)](https://github.com/dhanninacs/stokes-cfd/releases/download/windows-2026-11-09/elbow-walkthrough.webm)
 - [Ball walkthrough video (2 min 27 s): implicit CAD, Fast mode, OpenFOAM](https://dhanninacs.github.io/stokes-cfd/video/ball-walkthrough.mp4)
+- [Vortex shedding video (8 s): a transient run behind a ball, Re about 530, played through the time slider](https://dhanninacs.github.io/stokes-cfd/video/ball-wake-shedding.mp4)
 - [Releases](https://github.com/dhanninacs/stokes-cfd/releases)
 - [LinkedIn: news and updates](https://www.linkedin.com/company/stokes-cfd/)
 - [Architecture](https://github.com/dhanninacs/stokes-cfd/blob/main/docs/02-architecture.md)
