@@ -21,6 +21,7 @@ import pytest
 
 from stokes.compile.errors import CompileInvalid, CompileUnsupported
 from stokes.compile.of14 import DIALECT, ENGINES, WRITER_VERSION, basis, steps, write
+from stokes.compile.parallel import written_times
 from stokes.compile.snapshot import PatchCondition, SolveSnapshot
 
 GOLDEN = Path(__file__).parent / "golden" / "compile" / "of14" / "duct"
@@ -509,6 +510,45 @@ def test_mpi_solver_case_decomposes_runs_and_reconstructs() -> None:
         },
         {"name": "reconstructPar", "argv": ["reconstructPar"], "timeout_s": 1800},
     ]
+
+
+def test_a_transient_run_with_many_frames_gets_longer_to_reconstruct() -> None:
+    # 200 frames of a 336,723-cell run on 12 ranks took about 30 s each to reconstruct on Windows,
+    # past the flat 1800 s; the limit now grows by 60 s a written time (and stays 1800 s steady).
+    snap = dataclasses.replace(
+        duct(),
+        cores=12,
+        transient=True,
+        end_time=0.5,
+        write_time=0.0025,
+        delta_t=1e-4,
+        max_courant=1.0,
+    )
+    assert (
+        written_times(
+            transient=True, end_time=0.5, write_time=0.0025, delta_t=1e-4, write_interval=1
+        )
+        == 200
+    )
+    assert steps(snap)[-1] == {
+        "name": "reconstructPar",
+        "argv": ["reconstructPar"],
+        "timeout_s": 1800 + 60 * 199,
+    }
+    assert (
+        written_times(
+            transient=False, end_time=1.0, write_time=0.0, delta_t=1.0, write_interval=100
+        )
+        == 1
+    )
+    assert (
+        written_times(
+            transient=True, end_time=1.0, write_time=0.0, delta_t=0.001, write_interval=50
+        )
+        == 20
+    )
+    huge = dataclasses.replace(snap, end_time=1000.0, write_time=0.001)
+    assert steps(huge)[-1]["timeout_s"] == 86400
 
 
 @pytest.mark.parametrize("cores", [0, -1, 257, True, 1.5])
